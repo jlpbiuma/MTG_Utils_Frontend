@@ -177,7 +177,7 @@ export function AuthForm() {
         <div className="text-center pt-2">
           <p className="text-xs text-slate-500 flex items-center justify-center gap-1">
             <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
-            Conectado de forma segura a Supabase PostgreSQL
+            Conectado de forma segura con FastAPI Backend
           </p>
         </div>
       </CardContent>

@@ -27,6 +27,26 @@ export async function backendFetch<T = any>(
     requestHeaders["X-User-Id"] = userId;
   }
 
+  // If executing on the server, automatically inject session token from cookies
+  if (typeof window === "undefined" && !requestHeaders["Authorization"]) {
+    try {
+      const { cookies } = await import("next/headers");
+      const cookieStore = await cookies();
+      const token = cookieStore.get("mtg_token")?.value;
+      if (token) {
+        requestHeaders["Authorization"] = `Bearer ${token}`;
+      }
+      if (!requestHeaders["X-User-Id"]) {
+        const uid = cookieStore.get("mtg_user_id")?.value;
+        if (uid) {
+          requestHeaders["X-User-Id"] = uid;
+        }
+      }
+    } catch {
+      // Called outside Next.js request scope
+    }
+  }
+
   try {
     const res = await fetch(url, {
       ...rest,
