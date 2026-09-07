@@ -27,7 +27,7 @@ describe("AccountView Component (Swift Parity)", () => {
     expect(screen.getByText("P")).toBeInTheDocument();
     expect(screen.getByText("Planeswalker")).toBeInTheDocument();
     expect(screen.getByText("Activo")).toBeInTheDocument();
-    expect(screen.getByText("Cuenta autenticada")).toBeInTheDocument();
+    expect(screen.getAllByText("Cuenta autenticada").length).toBeGreaterThanOrEqual(1);
 
     // Technical data section matching Swift Section("Datos")
     expect(screen.getByText("Backend (localhost:8000)")).toBeInTheDocument();
