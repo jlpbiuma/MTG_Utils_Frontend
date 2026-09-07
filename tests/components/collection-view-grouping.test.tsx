@@ -13,6 +13,11 @@ vi.mock("@/actions/collection", () => ({
   deleteCollectionCard: vi.fn(),
 }));
 
+global.fetch = vi.fn().mockResolvedValue({
+  ok: true,
+  json: async () => ({ prices: {} }),
+}) as any;
+
 describe("CollectionView Grouping & KPIs (Swift Parity)", () => {
   const sampleCards = [
     {

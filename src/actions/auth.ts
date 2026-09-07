@@ -205,6 +205,8 @@ export async function signUpWithEmail(
   } catch (err: any) {
     return { error: err?.message || "Error inesperado al registrar usuario." };
   }
+}
+
 /**
  * Signs in using the demo/guest account (mirrors Swift LoginView signInAsGuest).
  */

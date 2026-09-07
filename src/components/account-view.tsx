@@ -29,10 +29,9 @@ export function AccountView({ user }: AccountViewProps) {
 
   const isDemo =
     user.mode === "demo" ||
-    user.email === "demo@magic.io" ||
-    user.email === "planeswalker@magic.io" ||
-    user.id === "00000000-0000-0000-0000-000000000001" ||
-    user.id === "00000000-0000-0000-0000-000000000000";
+    (user.mode !== "authenticated" &&
+      (user.email === "demo@magic.io" ||
+        user.id === "00000000-0000-0000-0000-000000000000"));
 
   const sessionLabel = isDemo ? "Invitado / demo" : "Cuenta autenticada";
   const initialLetter = (user.name || user.email || "J").charAt(0).toUpperCase();
