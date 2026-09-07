@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sparkles, Layers, Library, LogIn, LogOut } from "lucide-react";
+import { Sparkles, Layers, Library, User, LogIn, LogOut } from "lucide-react";
 import { getCurrentUser, signOutUser } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 
@@ -39,17 +39,28 @@ export async function Navbar() {
               <Library className="h-4 w-4 text-sky-400" />
               Mi Colección
             </Link>
+            <Link
+              href="/account"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-900 transition-colors"
+            >
+              <User className="h-4 w-4 text-purple-400" />
+              Mi Cuenta
+            </Link>
           </nav>
         </div>
 
         <div className="flex items-center gap-3">
           {user.isAuthenticated ? (
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-slate-800 bg-slate-900/60 text-xs text-slate-300">
-                <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <Link
+                href="/account"
+                className="flex items-center gap-2 px-3 py-1 rounded-full border border-slate-800 bg-slate-900/60 hover:bg-slate-800/80 hover:border-slate-700 transition-colors text-xs text-slate-300"
+                title="Ver detalles de mi cuenta"
+              >
+                <div className={`h-2 w-2 rounded-full ${user.mode === "demo" ? "bg-amber-400" : "bg-emerald-400"} animate-pulse`} />
                 <span className="hidden sm:inline font-mono">{user.email}</span>
                 <span className="sm:hidden font-mono">{user.name}</span>
-              </div>
+              </Link>
 
               <form action={signOutUser}>
                 <Button

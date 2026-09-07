@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { parseDecklistText } from "@/lib/parser";
+import {
+  parseDecklistText,
+  parseCollectionText,
+  ImportError,
+} from "@/lib/parser";
 
-describe("Decklist & Collection Text Parser", () => {
+describe("Decklist & Collection Text Parser (Swift Parity Suite)", () => {
   it("should parse standard plaintext lines with quantities", () => {
     const text = `
       4 Lightning Bolt
@@ -118,5 +122,67 @@ describe("Decklist & Collection Text Parser", () => {
     expect(parsed[1].isSideboard).toBe(true);
     expect(parsed[1].name).toBe("Smash to Smithereens");
     expect(parsed[1].quantity).toBe(2);
+  });
+
+  it("should parse alphanumeric collector numbers (e.g. 191p, 360s *F*, E02-3)", () => {
+    const text = `
+      1 Annie Joins Up (LCC) 191p
+      1 Sea of Clouds (PCLB) 360s *F*
+      1 Path to Exile (PLST) E02-3
+    `;
+
+    const parsed = parseDecklistText(text);
+
+    expect(parsed).toHaveLength(3);
+    expect(parsed[0].name).toBe("Annie Joins Up");
+    expect(parsed[0].set).toBe("lcc");
+    expect(parsed[0].collectorNumber).toBe("191p");
+
+    expect(parsed[1].name).toBe("Sea of Clouds");
+    expect(parsed[1].set).toBe("pclb");
+    expect(parsed[1].collectorNumber).toBe("360s");
+
+    expect(parsed[2].name).toBe("Path to Exile");
+    expect(parsed[2].set).toBe("plst");
+    expect(parsed[2].collectorNumber).toBe("E02-3");
+  });
+
+  it("should support bracket set tag format like [ANA:1]", () => {
+    const text = `
+      1 Island [ANA:1]
+      2 Mountain (MKM) 283
+    `;
+
+    const parsed = parseDecklistText(text);
+
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].name).toBe("Island");
+    expect(parsed[0].set).toBe("ana");
+    expect(parsed[0].collectorNumber).toBe("1");
+
+    expect(parsed[1].name).toBe("Mountain");
+    expect(parsed[1].set).toBe("mkm");
+    expect(parsed[1].collectorNumber).toBe("283");
+  });
+
+  it("should throw on empty input", () => {
+    expect(() => parseDecklistText("   ")).toThrow(ImportError);
+  });
+
+  it("should throw when no cards are detected", () => {
+    expect(() => parseDecklistText("// Comentario\n# otro\n")).toThrow(ImportError);
+  });
+
+  it("should parse collection text grouping quantities by normalized name", () => {
+    const text = `
+      2 Sol Ring (C21) 263
+      1 Sol Ring (CMR) 36x
+    `;
+
+    const collection = parseCollectionText(text);
+
+    expect(collection).toHaveLength(1);
+    expect(collection[0].name).toBe("Sol Ring");
+    expect(collection[0].quantity).toBe(3);
   });
 });

@@ -10,6 +10,8 @@ import {
   Sparkles,
   Layers,
   Image as ImageIcon,
+  FolderTree,
+  LayoutGrid,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,8 +34,7 @@ import {
   triggerWeeklyCollectionPricing,
   getCollectionPricesLastUpdated,
 } from "@/actions/pricing";
-import { normalizeCardName } from "@/lib/card-utils";
-
+import { normalizeCardName, groupCardsByType } from "@/lib/card-utils";
 
 interface CollectionItem {
   id: string;
@@ -50,12 +51,15 @@ interface CollectionItem {
 
 interface CollectionViewProps {
   initialCards: CollectionItem[];
-  initialStats: { uniqueCards: number; totalCards: number };
+  initialStats: { uniqueCards: number; totalCards: number; decksCount?: number };
 }
 
 export function CollectionView({ initialCards, initialStats }: CollectionViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // View mode state: Grouped by category vs Flat grid
+  const [isGroupedByType, setIsGroupedByType] = useState(true);
 
   // Sorting state
   const [sortField, setSortField] = useState<SortField>("name");
@@ -194,19 +198,26 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
         </div>
       </div>
 
-      {/* KPI Stats */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* KPI Stats matching Swift KPIStripView */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-900/40 backdrop-blur-md">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Cartas Únicas</p>
-          <p className="text-3xl font-black text-sky-300 font-mono mt-1">
+          <p className="text-2xl sm:text-3xl font-black text-sky-300 font-mono mt-1">
             {initialStats.uniqueCards}
           </p>
         </div>
 
         <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-900/40 backdrop-blur-md">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Copias Físicas</p>
-          <p className="text-3xl font-black text-amber-300 font-mono mt-1">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Copias</p>
+          <p className="text-2xl sm:text-3xl font-black text-amber-300 font-mono mt-1">
             {initialStats.totalCards}
+          </p>
+        </div>
+
+        <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-900/40 backdrop-blur-md col-span-2 sm:col-span-1">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mazos</p>
+          <p className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono mt-1">
+            {initialStats.decksCount ?? 0}
           </p>
         </div>
       </div>
@@ -276,15 +287,50 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
         </div>
 
         {filteredCards.length > 0 && (
-          <CardSortingBar
-            currentField={sortField}
-            currentDirection={sortDirection}
-            onSortChange={(f, d) => {
-              setSortField(f);
-              setSortDirection(d);
-            }}
-            showStatusOption={false}
-          />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <CardSortingBar
+              currentField={sortField}
+              currentDirection={sortDirection}
+              onSortChange={(f, d) => {
+                setSortField(f);
+                setSortDirection(d);
+              }}
+              showStatusOption={false}
+            />
+
+            {!searchQuery && (
+              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 self-start sm:self-auto">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setIsGroupedByType(true)}
+                  className={`h-7 px-2.5 text-xs gap-1.5 ${
+                    isGroupedByType
+                      ? "bg-amber-500/20 text-amber-300 font-semibold"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                  title="Agrupar por categoría MTG (Criaturas, Tierras, etc.)"
+                >
+                  <FolderTree className="h-3.5 w-3.5" />
+                  <span>Por Categoría</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setIsGroupedByType(false)}
+                  className={`h-7 px-2.5 text-xs gap-1.5 ${
+                    !isGroupedByType
+                      ? "bg-amber-500/20 text-amber-300 font-semibold"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                  title="Ver cuadrícula continua sin agrupar"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span>Cuadrícula</span>
+                </Button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -313,112 +359,140 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
             </div>
           )}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {sortedCards.map((card) => {
-
-            const isBusy = busyId === card.id;
-
-            return (
-              <div
-                key={card.id}
-                className="group relative rounded-xl border border-slate-800/80 bg-slate-900/50 hover:border-slate-700 transition-all p-3 flex flex-col justify-between shadow-md hover:shadow-xl hover:shadow-sky-500/5"
-              >
-                <div>
-                  <div className="relative aspect-[5/7] rounded-lg overflow-hidden bg-slate-950 border border-slate-800 mb-3 foil-card-effect">
-                    {card.imageUri ? (
-                      <img
-                        src={card.imageUri}
-                        alt={card.cardName}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-slate-600">
-                        <ImageIcon className="h-8 w-8 mb-1" />
-                        <span className="text-xs">Sin imagen</span>
-                      </div>
-                    )}
-
-                    <div className="absolute top-2 right-2">
-                      <span className="bg-slate-950/90 text-amber-300 font-mono font-black text-xs px-2 py-0.5 rounded-full border border-amber-500/40 shadow-lg">
-                        x{card.quantity}
-                      </span>
-                    </div>
-                  </div>
-
-                  <CardPreviewHover
-                    cardName={card.cardName}
-                    imageUri={card.imageUri}
-                  >
-                    <h3 className="font-bold text-sm text-slate-100 group-hover:text-amber-300 transition-colors line-clamp-1 cursor-pointer">
-                      {card.cardName}
-                    </h3>
-                  </CardPreviewHover>
-
-                  <div className="flex items-center justify-between mt-1 text-xs">
-                    <span className="text-slate-400 truncate max-w-[120px]">
-                      {card.typeLine || "Card"}
-                    </span>
-                    <ManaCost manaCost={card.manaCost} />
-                  </div>
-
-                  {/* Price breakdown badge */}
-                  <div className="mt-3 pt-2 border-t border-slate-800/40 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400 font-medium">Cotización:</span>
-                    <PriceBadge
-                      quote={
-                        priceSummary?.quotes[card.cardScryfallId] ||
-                        priceSummary?.quotes[normalizeCardName(card.cardName)]
-                      }
-                      showSubtotal={card.quantity > 1}
-                    />
-                  </div>
+      ) : isGroupedByType && !searchQuery.trim() ? (
+        /* Categorized sections matching Swift CollectionView */
+        <div className="space-y-8">
+          {groupCardsByType(sortedCards, priceSummary).map((section) => (
+            <div key={section.key} className="space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-amber-400" />
+                  <h2 className="text-lg font-bold text-slate-200">{section.label}</h2>
+                  <span className="text-xs font-mono font-medium text-slate-400 bg-slate-900/80 px-2 py-0.5 rounded-full border border-slate-800">
+                    {section.totalCards} {section.totalCards === 1 ? "carta" : "cartas"} ({section.uniqueCards} únicas)
+                  </span>
                 </div>
-
-                {/* Quantity Controls & Delete */}
-                <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-800/80">
-                  <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6 text-slate-400 hover:text-white"
-                      disabled={isBusy}
-                      onClick={() => handleUpdateQty(card.id, card.quantity, -1)}
-                    >
-                      <Minus className="h-3 w-3" />
-                    </Button>
-
-                    <span className="font-mono font-bold text-xs px-2 text-slate-200">
-                      {card.quantity}
-                    </span>
-
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6 text-slate-400 hover:text-white"
-                      disabled={isBusy}
-                      onClick={() => handleUpdateQty(card.id, card.quantity, 1)}
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                  </div>
-
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 text-slate-500 hover:text-rose-400 hover:bg-rose-950/30"
-                    disabled={isBusy}
-                    onClick={() => handleDelete(card.id, card.cardName)}
-                    title="Eliminar de colección"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                {section.sectionTotalPrice > 0 && (
+                  <span className="text-xs font-mono font-semibold text-amber-300">
+                    {section.sectionTotalPrice.toFixed(2)} {section.currencySymbol}
+                  </span>
+                )}
               </div>
-            );
-          })}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {section.cards.map((card) => renderCard(card))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        /* Flat grid mode */
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {sortedCards.map((card) => renderCard(card))}
         </div>
       )}
     </div>
   );
+
+  function renderCard(card: CollectionItem) {
+    const isBusy = busyId === card.id;
+
+    return (
+      <div
+        key={card.id}
+        className="group relative rounded-xl border border-slate-800/80 bg-slate-900/50 hover:border-slate-700 transition-all p-3 flex flex-col justify-between shadow-md hover:shadow-xl hover:shadow-sky-500/5"
+      >
+        <div>
+          <div className="relative aspect-[5/7] rounded-lg overflow-hidden bg-slate-950 border border-slate-800 mb-3 foil-card-effect">
+            {card.imageUri ? (
+              <img
+                src={card.imageUri}
+                alt={card.cardName}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-slate-600">
+                <ImageIcon className="h-8 w-8 mb-1" />
+                <span className="text-xs">Sin imagen</span>
+              </div>
+            )}
+
+            <div className="absolute top-2 right-2">
+              <span className="bg-slate-950/90 text-amber-300 font-mono font-black text-xs px-2 py-0.5 rounded-full border border-amber-500/40 shadow-lg">
+                x{card.quantity}
+              </span>
+            </div>
+          </div>
+
+          <CardPreviewHover
+            cardName={card.cardName}
+            imageUri={card.imageUri}
+          >
+            <h3 className="font-bold text-sm text-slate-100 group-hover:text-amber-300 transition-colors line-clamp-1 cursor-pointer">
+              {card.cardName}
+            </h3>
+          </CardPreviewHover>
+
+          <div className="flex items-center justify-between mt-1 text-xs">
+            <span className="text-slate-400 truncate max-w-[120px]">
+              {card.typeLine || "Card"}
+            </span>
+            <ManaCost manaCost={card.manaCost} />
+          </div>
+
+          {/* Price breakdown badge */}
+          <div className="mt-3 pt-2 border-t border-slate-800/40 flex items-center justify-between">
+            <span className="text-[10px] text-slate-400 font-medium">Cotización:</span>
+            <PriceBadge
+              quote={
+                priceSummary?.quotes[card.cardScryfallId] ||
+                priceSummary?.quotes[normalizeCardName(card.cardName)]
+              }
+              showSubtotal={card.quantity > 1}
+            />
+          </div>
+        </div>
+
+        {/* Quantity Controls & Delete */}
+        <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-800/80">
+          <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 text-slate-400 hover:text-white"
+              disabled={isBusy}
+              onClick={() => handleUpdateQty(card.id, card.quantity, -1)}
+            >
+              <Minus className="h-3 w-3" />
+            </Button>
+
+            <span className="font-mono font-bold text-xs px-2 text-slate-200">
+              {card.quantity}
+            </span>
+
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 text-slate-400 hover:text-white"
+              disabled={isBusy}
+              onClick={() => handleUpdateQty(card.id, card.quantity, 1)}
+            >
+              <Plus className="h-3 w-3" />
+            </Button>
+          </div>
+
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-slate-500 hover:text-rose-400 hover:bg-rose-950/30"
+            disabled={isBusy}
+            onClick={() => handleDelete(card.id, card.cardName)}
+            title="Eliminar de colección"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
 }

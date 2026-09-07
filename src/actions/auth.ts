@@ -13,6 +13,7 @@ export interface UserSessionState {
   email: string;
   name: string;
   isAuthenticated: boolean;
+  mode?: "demo" | "authenticated";
 }
 
 /**
@@ -43,11 +44,16 @@ export async function getCurrentUser(): Promise<UserSessionState> {
     const email = cookieStore.get("mtg_user_email")?.value;
 
     if (token && userId) {
+      const isDemo =
+        email === "demo@magic.io" ||
+        userId === DEMO_USER_ID ||
+        userId === "00000000-0000-0000-0000-000000000000";
       return {
         id: userId,
         email: email || "",
-        name: email ? email.split("@")[0] : "Planeswalker",
+        name: email ? email.split("@")[0] : isDemo ? "Jugador Demo" : "Planeswalker",
         isAuthenticated: true,
+        mode: isDemo ? "demo" : "authenticated",
       };
     }
 
@@ -56,7 +62,14 @@ export async function getCurrentUser(): Promise<UserSessionState> {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (me?.isAuthenticated) {
-        return me;
+        const isDemo =
+          me.email === "demo@magic.io" ||
+          me.id === DEMO_USER_ID ||
+          me.id === "00000000-0000-0000-0000-000000000000";
+        return {
+          ...me,
+          mode: isDemo ? "demo" : "authenticated",
+        };
       }
     }
   } catch (error) {
@@ -68,6 +81,7 @@ export async function getCurrentUser(): Promise<UserSessionState> {
     email: DEMO_USER_EMAIL,
     name: "Invitado",
     isAuthenticated: false,
+    mode: "demo",
   };
 }
 
@@ -190,6 +204,84 @@ export async function signUpWithEmail(
     return {};
   } catch (err: any) {
     return { error: err?.message || "Error inesperado al registrar usuario." };
+  }
+/**
+ * Signs in using the demo/guest account (mirrors Swift LoginView signInAsGuest).
+ */
+export async function signInAsGuest(): Promise<{ error?: string }> {
+  try {
+    const res = await backendFetch<{
+      user?: { id: string; email: string; name: string };
+      accessToken?: string;
+      refreshToken?: string;
+      error?: string;
+    }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email: "demo@magic.io", password: "password123" }),
+    });
+
+    const cookieStore = await cookies();
+    const token = res.accessToken || "demo-access-token";
+    const userId = res.user?.id || "00000000-0000-0000-0000-000000000000";
+    const email = res.user?.email || "demo@magic.io";
+
+    cookieStore.set("mtg_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    cookieStore.set("mtg_user_id", userId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    cookieStore.set("mtg_user_email", email, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    revalidatePath("/", "layout");
+    return {};
+  } catch (err: any) {
+    // Graceful fallback for offline / mock testing: set guest session directly
+    try {
+      const cookieStore = await cookies();
+      cookieStore.set("mtg_token", "demo-access-token", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+      cookieStore.set("mtg_user_id", "00000000-0000-0000-0000-000000000000", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+      cookieStore.set("mtg_user_email", "demo@magic.io", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+
+      revalidatePath("/", "layout");
+      return {};
+    } catch (cookieErr: any) {
+      return { error: err?.message || "Error al iniciar sesión como invitado." };
+    }
   }
 }
 

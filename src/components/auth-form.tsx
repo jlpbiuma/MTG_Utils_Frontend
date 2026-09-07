@@ -6,7 +6,7 @@ import { Sparkles, Mail, Lock, Loader2, CheckCircle2, AlertCircle, ShieldCheck }
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { signInWithEmail, signUpWithEmail } from "@/actions/auth";
+import { signInWithEmail, signUpWithEmail, signInAsGuest } from "@/actions/auth";
 
 export function AuthForm() {
   const router = useRouter();
@@ -14,6 +14,7 @@ export function AuthForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmationNotice, setConfirmationNotice] = useState(false);
 
@@ -49,6 +50,25 @@ export function AuthForm() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGuestSignIn = async () => {
+    setError(null);
+    setGuestLoading(true);
+    try {
+      const result = await signInAsGuest();
+      if (result.error) {
+        setError(result.error);
+      } else {
+        router.push("/decks");
+        router.refresh();
+      }
+    } catch (err) {
+      setError("Ocurrió un error inesperado al acceder como invitado.");
+      console.error(err);
+    } finally {
+      setGuestLoading(false);
     }
   };
 
@@ -173,6 +193,32 @@ export function AuthForm() {
             )}
           </Button>
         </form>
+
+        {/* Separator "o" */}
+        <div className="relative my-2">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-800" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-slate-900 px-3 text-slate-400 font-mono">o</span>
+          </div>
+        </div>
+
+        {/* Guest / Demo button */}
+        <Button
+          type="button"
+          variant="outline"
+          disabled={loading || guestLoading}
+          onClick={handleGuestSignIn}
+          className="w-full h-11 border-amber-500/30 text-amber-300 hover:bg-amber-500/10 hover:border-amber-400 font-semibold transition-all shadow-sm"
+        >
+          {guestLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <Sparkles className="h-4 w-4 mr-2 text-amber-400" />
+          )}
+          Entrar como invitado (demo)
+        </Button>
 
         <div className="text-center pt-2">
           <p className="text-xs text-slate-500 flex items-center justify-center gap-1">

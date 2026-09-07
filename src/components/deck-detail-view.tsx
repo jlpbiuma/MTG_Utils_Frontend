@@ -41,6 +41,7 @@ import {
   unassignCardFromDeck,
   reassignCardToDeck,
   deleteDeck,
+  addMissingCardsToCollection,
 } from "@/actions/decks";
 import { addOrIncrementCard } from "@/actions/collection";
 import { PriceProvider, PriceSummary } from "@/lib/pricing";
@@ -90,6 +91,28 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
   const [filterMode, setFilterMode] = useState<"all" | "missing" | "owned">("all");
   const [activeBoard, setActiveBoard] = useState<"mainboard" | "sideboard">("mainboard");
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
+  const [isTransferringMissing, setIsTransferringMissing] = useState(false);
+
+  const handleTransferAllMissing = async () => {
+    if (
+      !confirm(
+        `¿Marcar y añadir todas las ${initialDeck.missingCardsCount} cartas faltantes como poseídas a tu colección física?`
+      )
+    ) {
+      return;
+    }
+    setIsTransferringMissing(true);
+    try {
+      const res = await addMissingCardsToCollection(initialDeck.id);
+      if (res.success) {
+        router.refresh();
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Error al transferir cartas faltantes");
+    } finally {
+      setIsTransferringMissing(false);
+    }
+  };
 
   // View mode: Grouped by card type vs Continuous flat list
   const [isGroupedByType, setIsGroupedByType] = useState(true);
@@ -613,6 +636,29 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                 <span className="text-emerald-400 font-medium">100% en mano</span>
               )}
             </div>
+
+            {initialDeck.missingCardsCount > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleTransferAllMissing}
+                disabled={isTransferringMissing}
+                className="w-full mt-2.5 text-xs font-semibold bg-emerald-950/40 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 hover:border-emerald-400 gap-1.5 h-8 transition-all shadow-sm"
+                title="Añade todas las cartas faltantes de este mazo a tu inventario físico (como en la app Swift)"
+              >
+                {isTransferringMissing ? (
+                  <>
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-300 border-t-transparent" />
+                    <span>Transfiriendo...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Tengo las faltantes (marcarlas como poseídas)</span>
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>

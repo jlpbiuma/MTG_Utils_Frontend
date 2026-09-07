@@ -52,8 +52,11 @@ function calculateCrossMatching(
   };
 }
 
-const deckFilePath = path.join(process.cwd(), "data/mazos/test.txt");
-const collectionDir = path.join(process.cwd(), "data/coleciones");
+const rootDataDir = fs.existsSync(path.join(process.cwd(), "data"))
+  ? path.join(process.cwd(), "data")
+  : path.resolve(process.cwd(), "../data");
+const deckFilePath = path.join(rootDataDir, "mazos/test.txt");
+const collectionDir = path.join(rootDataDir, "coleciones");
 const hasData = fs.existsSync(deckFilePath) && fs.existsSync(collectionDir);
 
 describe.skipIf(!hasData)("Local Data Cross-Matching (data/mazos vs data/coleciones)", () => {
