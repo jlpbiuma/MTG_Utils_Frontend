@@ -66,7 +66,7 @@ export function AuthForm() {
         </CardTitle>
         <CardDescription className="text-slate-400 text-sm">
           {mode === "login"
-            ? "Inicia sesión para sincronizar tus mazos y colección con Supabase"
+            ? "Inicia sesión para sincronizar tus mazos y colección"
             : "Regístrate para guardar tu inventario y calcular qué cartas te faltan"}
         </CardDescription>
       </CardHeader>
