@@ -604,9 +604,19 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                 </div>
 
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-400 uppercase tracking-wider">
-                    <Crown className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Comandante</span>
+                  <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                    <div className="flex items-center gap-1.5">
+                      <Crown className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Comandante</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowCommanderModal(true)}
+                      className="text-[11px] text-amber-400/80 hover:text-amber-300 underline font-medium cursor-pointer transition-colors"
+                      title="Cambiar el comandante de este mazo"
+                    >
+                      (Cambiar)
+                    </button>
                   </div>
                   <div
                     onClick={() =>

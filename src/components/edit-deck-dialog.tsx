@@ -41,6 +41,7 @@ interface EditDeckDialogProps {
     format: string;
     description: string | null;
     commander?: string | null;
+    commanderImageUri?: string | null;
   }) => void;
   trigger?: React.ReactNode;
 }
@@ -79,22 +80,19 @@ export function EditDeckDialog({ deck, deckCards, onUpdated, trigger }: EditDeck
       const trimmedDesc = description.trim() || null;
       const trimmedCommander = commander.trim() || null;
 
-      await updateDeck(deck.id, {
+      const updatedDeck = await updateDeck(deck.id, {
         name: trimmedName,
         format,
         description: trimmedDesc || undefined,
-        commander: trimmedCommander || undefined,
+        commander: trimmedCommander !== null ? trimmedCommander : "",
       });
-
-      if (trimmedCommander && trimmedCommander !== deck.commander) {
-        await setDeckCommander(deck.id, trimmedCommander);
-      }
 
       onUpdated?.({
         name: trimmedName,
         format,
         description: trimmedDesc,
-        commander: trimmedCommander,
+        commander: updatedDeck?.commander ?? trimmedCommander,
+        commanderImageUri: updatedDeck?.commanderImageUri,
       });
 
       setOpen(false);
