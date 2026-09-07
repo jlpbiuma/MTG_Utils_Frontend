@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ManaCost } from "@/components/mana-cost";
 import { searchCards, ScryfallCardResult } from "@/actions/scryfall";
+import { CardDetailDialog } from "@/components/card-detail-dialog";
 
 interface CardSearchDialogProps {
   onAddCard: (card: {
@@ -43,6 +44,7 @@ export function CardSearchDialog({
   const [addingId, setAddingId] = useState<string | null>(null);
   const [isSideboard, setIsSideboard] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [previewCard, setPreviewCard] = useState<ScryfallCardResult | null>(null);
 
   useEffect(() => {
     if (!query || query.trim().length < 2) {
@@ -183,12 +185,16 @@ export function CardSearchDialog({
                   key={card.id}
                   className="flex items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-slate-700 transition-all gap-3"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    onClick={() => setPreviewCard(card)}
+                    className="flex items-center gap-3 min-w-0 cursor-pointer flex-1 group"
+                    title="Ver ficha completa en español"
+                  >
                     {imgUri ? (
                       <img
                         src={imgUri}
                         alt={card.name}
-                        className="w-10 h-14 object-cover rounded shadow-xs"
+                        className="w-10 h-14 object-cover rounded shadow-xs group-hover:opacity-90 transition-opacity"
                       />
                     ) : (
                       <div className="w-10 h-14 bg-slate-800 rounded flex items-center justify-center text-slate-500">
@@ -198,7 +204,7 @@ export function CardSearchDialog({
 
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-slate-100 text-sm truncate">
+                        <span className="font-semibold text-slate-100 group-hover:text-amber-300 transition-colors text-sm truncate">
                           {card.name}
                         </span>
                         <ManaCost
@@ -231,6 +237,22 @@ export function CardSearchDialog({
               );
             })}
         </div>
+
+        {previewCard && (
+          <CardDetailDialog
+            isOpen={Boolean(previewCard)}
+            onOpenChange={(open) => !open && setPreviewCard(null)}
+            cardId={previewCard.id}
+            cardName={previewCard.name}
+            imageUri={
+              previewCard.image_uris?.normal ||
+              previewCard.image_uris?.small ||
+              previewCard.card_faces?.[0]?.image_uris?.normal
+            }
+            manaCost={previewCard.mana_cost || previewCard.card_faces?.[0]?.mana_cost}
+            typeLine={previewCard.type_line}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

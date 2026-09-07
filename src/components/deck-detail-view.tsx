@@ -32,6 +32,7 @@ import { CardPreviewHover } from "@/components/card-preview-hover";
 import { CardSearchDialog } from "@/components/card-search-dialog";
 import { EdhrecRecommendations } from "@/components/edhrec-recommendations";
 import { SelectCommanderDialog } from "@/components/select-commander-dialog";
+import { CardDetailDialog } from "@/components/card-detail-dialog";
 import { DeckDetailWithStats, DeckCardWithOwnership } from "@/lib/schemas";
 import {
   addCardToDeck,
@@ -92,6 +93,17 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
   const [activeBoard, setActiveBoard] = useState<"mainboard" | "sideboard">("mainboard");
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
   const [isTransferringMissing, setIsTransferringMissing] = useState(false);
+  const [selectedCardForDetail, setSelectedCardForDetail] = useState<{
+    cardScryfallId?: string;
+    cardName: string;
+    imageUri?: string | null;
+    manaCost?: string | null;
+    typeLine?: string | null;
+    quantity?: number;
+    ownedInCollection?: number;
+    missingCount?: number;
+    assignedQuantity?: number;
+  } | null>(null);
 
   const handleTransferAllMissing = async () => {
     if (
@@ -295,34 +307,46 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
       >
         {/* Left: Card art hover + Name + Types + Mana Cost */}
         <div className="flex items-center gap-3 min-w-0">
-          <CardPreviewHover
-            cardName={card.cardName}
-            imageUri={card.imageUri}
-            className="shrink-0"
+          <div
+            onClick={() => setSelectedCardForDetail(card)}
+            className="cursor-pointer"
+            title="Ver todos los datos en español"
           >
-            {card.imageUri ? (
-              <img
-                src={card.imageUri}
-                alt={card.cardName}
-                className="w-11 h-16 object-cover rounded-md border border-slate-700 hover:border-amber-400 transition-colors shadow-sm"
-              />
-            ) : (
-              <div className="w-11 h-16 rounded-md bg-slate-800 border border-slate-700 flex items-center justify-center text-xs text-slate-500">
-                MTG
-              </div>
-            )}
-          </CardPreviewHover>
+            <CardPreviewHover
+              cardName={card.cardName}
+              imageUri={card.imageUri}
+              className="shrink-0"
+            >
+              {card.imageUri ? (
+                <img
+                  src={card.imageUri}
+                  alt={card.cardName}
+                  className="w-11 h-16 object-cover rounded-md border border-slate-700 hover:border-amber-400 transition-colors shadow-sm"
+                />
+              ) : (
+                <div className="w-11 h-16 rounded-md bg-slate-800 border border-slate-700 flex items-center justify-center text-xs text-slate-500">
+                  MTG
+                </div>
+              )}
+            </CardPreviewHover>
+          </div>
 
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <CardPreviewHover
-                cardName={card.cardName}
-                imageUri={card.imageUri}
+              <div
+                onClick={() => setSelectedCardForDetail(card)}
+                className="cursor-pointer"
+                title="Ver todos los datos en español"
               >
-                <span className="font-bold text-slate-100 hover:text-amber-300 transition-colors cursor-pointer text-base">
-                  {card.cardName}
-                </span>
-              </CardPreviewHover>
+                <CardPreviewHover
+                  cardName={card.cardName}
+                  imageUri={card.imageUri}
+                >
+                  <span className="font-bold text-slate-100 hover:text-amber-300 transition-colors cursor-pointer text-base">
+                    {card.cardName}
+                  </span>
+                </CardPreviewHover>
+              </div>
 
               <ManaCost manaCost={card.manaCost} />
             </div>
@@ -554,30 +578,52 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
             {/* Designated Commander Header Display */}
             {deckInfo.commander ? (
               <div className="flex items-center gap-3 pt-3 border-t border-slate-800/80">
-                <CardPreviewHover cardName={deckInfo.commander} imageUri={deckInfo.commanderImageUri}>
-                  {deckInfo.commanderImageUri ? (
-                    <img
-                      src={deckInfo.commanderImageUri}
-                      alt={deckInfo.commander}
-                      className="w-10 h-14 object-cover rounded-md border-2 border-amber-500/60 shadow-md shrink-0 cursor-pointer hover:border-amber-400 transition-colors"
-                    />
-                  ) : (
-                    <div className="w-10 h-14 rounded-md bg-slate-800 border-2 border-amber-500/40 flex items-center justify-center text-amber-400 text-xs shrink-0">
-                      <Crown className="w-5 h-5" />
-                    </div>
-                  )}
-                </CardPreviewHover>
+                <div
+                  onClick={() =>
+                    setSelectedCardForDetail({
+                      cardName: deckInfo.commander!,
+                      imageUri: deckInfo.commanderImageUri,
+                    })
+                  }
+                  className="cursor-pointer"
+                  title="Ver todos los datos del comandante en español"
+                >
+                  <CardPreviewHover cardName={deckInfo.commander} imageUri={deckInfo.commanderImageUri}>
+                    {deckInfo.commanderImageUri ? (
+                      <img
+                        src={deckInfo.commanderImageUri}
+                        alt={deckInfo.commander}
+                        className="w-10 h-14 object-cover rounded-md border-2 border-amber-500/60 shadow-md shrink-0 hover:border-amber-400 transition-colors"
+                      />
+                    ) : (
+                      <div className="w-10 h-14 rounded-md bg-slate-800 border-2 border-amber-500/40 flex items-center justify-center text-amber-400 text-xs shrink-0">
+                        <Crown className="w-5 h-5" />
+                      </div>
+                    )}
+                  </CardPreviewHover>
+                </div>
 
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-400 uppercase tracking-wider">
                     <Crown className="w-3.5 h-3.5 text-amber-400" />
                     <span>Comandante</span>
                   </div>
-                  <CardPreviewHover cardName={deckInfo.commander} imageUri={deckInfo.commanderImageUri}>
-                    <span className="font-bold text-white hover:text-amber-300 transition-colors cursor-pointer text-base truncate block">
-                      {deckInfo.commander}
-                    </span>
-                  </CardPreviewHover>
+                  <div
+                    onClick={() =>
+                      setSelectedCardForDetail({
+                        cardName: deckInfo.commander!,
+                        imageUri: deckInfo.commanderImageUri,
+                      })
+                    }
+                    className="cursor-pointer"
+                    title="Ver todos los datos del comandante en español"
+                  >
+                    <CardPreviewHover cardName={deckInfo.commander} imageUri={deckInfo.commanderImageUri}>
+                      <span className="font-bold text-white hover:text-amber-300 transition-colors cursor-pointer text-base truncate block">
+                        {deckInfo.commander}
+                      </span>
+                    </CardPreviewHover>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -1058,6 +1104,22 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
         />
       )}
         </>
+      )}
+
+      {selectedCardForDetail && (
+        <CardDetailDialog
+          isOpen={Boolean(selectedCardForDetail)}
+          onOpenChange={(open) => !open && setSelectedCardForDetail(null)}
+          cardId={selectedCardForDetail.cardScryfallId}
+          cardName={selectedCardForDetail.cardName}
+          imageUri={selectedCardForDetail.imageUri}
+          manaCost={selectedCardForDetail.manaCost}
+          typeLine={selectedCardForDetail.typeLine}
+          quantity={selectedCardForDetail.quantity}
+          ownedInCollection={selectedCardForDetail.ownedInCollection}
+          missingCount={selectedCardForDetail.missingCount}
+          assignedQuantity={selectedCardForDetail.assignedQuantity}
+        />
       )}
     </div>
   );

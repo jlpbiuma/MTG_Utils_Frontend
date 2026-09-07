@@ -35,6 +35,7 @@ import {
   getCollectionPricesLastUpdated,
 } from "@/actions/pricing";
 import { normalizeCardName, groupCardsByType } from "@/lib/card-utils";
+import { CardDetailDialog } from "@/components/card-detail-dialog";
 
 interface CollectionItem {
   id: string;
@@ -57,6 +58,7 @@ interface CollectionViewProps {
 export function CollectionView({ initialCards, initialStats }: CollectionViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedCardForDetail, setSelectedCardForDetail] = useState<CollectionItem | null>(null);
 
   // View mode state: Grouped by category vs Flat grid
   const [isGroupedByType, setIsGroupedByType] = useState(true);
@@ -391,6 +393,20 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
           {sortedCards.map((card) => renderCard(card))}
         </div>
       )}
+
+      {selectedCardForDetail && (
+        <CardDetailDialog
+          isOpen={Boolean(selectedCardForDetail)}
+          onOpenChange={(open) => !open && setSelectedCardForDetail(null)}
+          cardId={selectedCardForDetail.cardScryfallId}
+          cardName={selectedCardForDetail.cardName}
+          imageUri={selectedCardForDetail.imageUri}
+          manaCost={selectedCardForDetail.manaCost}
+          typeLine={selectedCardForDetail.typeLine}
+          quantity={selectedCardForDetail.quantity}
+          ownedInCollection={selectedCardForDetail.quantity}
+        />
+      )}
     </div>
   );
 
@@ -403,7 +419,11 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
         className="group relative rounded-xl border border-slate-800/80 bg-slate-900/50 hover:border-slate-700 transition-all p-3 flex flex-col justify-between shadow-md hover:shadow-xl hover:shadow-sky-500/5"
       >
         <div>
-          <div className="relative aspect-[5/7] rounded-lg overflow-hidden bg-slate-950 border border-slate-800 mb-3 foil-card-effect">
+          <div
+            onClick={() => setSelectedCardForDetail(card)}
+            className="relative aspect-[5/7] rounded-lg overflow-hidden bg-slate-950 border border-slate-800 mb-3 foil-card-effect cursor-pointer hover:border-amber-400/60 transition-colors"
+            title="Ver todos los datos en español"
+          >
             {card.imageUri ? (
               <img
                 src={card.imageUri}
@@ -424,14 +444,16 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
             </div>
           </div>
 
-          <CardPreviewHover
-            cardName={card.cardName}
-            imageUri={card.imageUri}
-          >
-            <h3 className="font-bold text-sm text-slate-100 group-hover:text-amber-300 transition-colors line-clamp-1 cursor-pointer">
-              {card.cardName}
-            </h3>
-          </CardPreviewHover>
+          <div onClick={() => setSelectedCardForDetail(card)}>
+            <CardPreviewHover
+              cardName={card.cardName}
+              imageUri={card.imageUri}
+            >
+              <h3 className="font-bold text-sm text-slate-100 group-hover:text-amber-300 transition-colors line-clamp-1 cursor-pointer">
+                {card.cardName}
+              </h3>
+            </CardPreviewHover>
+          </div>
 
           <div className="flex items-center justify-between mt-1 text-xs">
             <span className="text-slate-400 truncate max-w-[120px]">

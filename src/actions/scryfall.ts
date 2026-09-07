@@ -98,3 +98,140 @@ export async function resolveCardsInBulk(
     return [];
   }
 }
+
+export interface SpanishCardLegality {
+  format: string;
+  format_name: string;
+  status: string;
+  status_es: string;
+}
+
+export interface SpanishCardFace {
+  name: string;
+  name_es: string;
+  mana_cost?: string;
+  type_line?: string;
+  type_line_es?: string;
+  oracle_text?: string;
+  oracle_text_es?: string;
+  flavor_text_es?: string;
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+  defense?: string;
+  image_uris?: {
+    small?: string;
+    normal?: string;
+    large?: string;
+    png?: string;
+    art_crop?: string;
+  };
+}
+
+export interface SpanishCardDetails {
+  id: string;
+  name: string;
+  name_es: string;
+  mana_cost?: string;
+  cmc?: number;
+  type_line?: string;
+  type_line_es?: string;
+  oracle_text?: string;
+  oracle_text_es?: string;
+  flavor_text?: string;
+  flavor_text_es?: string;
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+  defense?: string;
+  rarity?: string;
+  rarity_es: string;
+  set: string;
+  set_name?: string;
+  collector_number?: string;
+  artist?: string;
+  has_spanish_print: boolean;
+  image_uris?: {
+    small?: string;
+    normal?: string;
+    large?: string;
+    png?: string;
+    art_crop?: string;
+  };
+  card_faces?: SpanishCardFace[];
+  legalities?: SpanishCardLegality[];
+  prices?: {
+    eur?: string | null;
+    eur_foil?: string | null;
+    usd?: string | null;
+    usd_foil?: string | null;
+  };
+}
+
+export async function getCardDetails(params: {
+  id?: string;
+  name?: string;
+  set?: string;
+  collector_number?: string;
+}): Promise<SpanishCardDetails | null> {
+  const query = new URLSearchParams();
+  if (params.id) query.set("id", params.id);
+  if (params.name) query.set("name", params.name);
+  if (params.set) query.set("set", params.set);
+  if (params.collector_number) query.set("collector_number", params.collector_number);
+
+  if (!query.toString()) return null;
+
+  try {
+    const data = await backendFetch(`/api/scryfall/card?${query.toString()}`);
+    if (data && data.id) {
+      return data as SpanishCardDetails;
+    }
+  } catch (error) {
+    console.error("Error fetching Spanish card details from backend:", error);
+  }
+
+  // Fallback directly to Scryfall with local Spanish mapping
+  try {
+    const fallbackUrl = params.id
+      ? `https://api.scryfall.com/cards/${params.id}`
+      : `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(params.name || "")}`;
+    const res = await fetch(fallbackUrl, {
+      headers: { "User-Agent": "MTGUtils/2.0", Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const raw = await res.json();
+    return {
+      id: raw.id,
+      name: raw.name,
+      name_es: raw.printed_name || raw.name,
+      mana_cost: raw.mana_cost,
+      cmc: raw.cmc,
+      type_line: raw.type_line,
+      type_line_es: raw.printed_type_line || raw.type_line,
+      oracle_text: raw.oracle_text,
+      oracle_text_es: raw.printed_text || raw.oracle_text,
+      flavor_text: raw.flavor_text,
+      flavor_text_es: raw.flavor_text,
+      power: raw.power,
+      toughness: raw.toughness,
+      loyalty: raw.loyalty,
+      defense: raw.defense,
+      rarity: raw.rarity,
+      rarity_es: raw.rarity || "Común",
+      set: (raw.set || "").toUpperCase(),
+      set_name: raw.set_name,
+      collector_number: raw.collector_number,
+      artist: raw.artist,
+      has_spanish_print: raw.lang === "es",
+      image_uris: raw.image_uris,
+      card_faces: [],
+      legalities: [],
+      prices: raw.prices || {},
+    };
+  } catch (err) {
+    console.error("Direct fallback card resolution failed:", err);
+    return null;
+  }
+}
+
