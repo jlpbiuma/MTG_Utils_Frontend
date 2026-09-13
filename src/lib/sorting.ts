@@ -2,7 +2,7 @@ import { normalizeCardName } from "@/lib/card-utils";
 import { PriceSummary } from "@/lib/pricing";
 
 
-export type SortField = "name" | "price_trend" | "price_subtotal" | "cmc" | "type" | "quantity" | "status";
+export type SortField = "name" | "price_trend" | "price_subtotal" | "cmc" | "type" | "quantity" | "status" | "requested_decks";
 export type SortDirection = "asc" | "desc";
 
 /**
@@ -35,6 +35,7 @@ export interface SortableCard {
   assignedQuantity?: number;
   ownedInCollection?: number;
   missingCount?: number;
+  requestedInDecksCount?: number;
 }
 
 /**
@@ -114,6 +115,13 @@ export function sortCards<T extends SortableCard>(
         const assignedB = b.assignedQuantity ?? 0;
         if (assignedA !== assignedB) return multiplier * (assignedB - assignedA);
 
+        return a.cardName.localeCompare(b.cardName);
+      }
+
+      case "requested_decks": {
+        const reqA = a.requestedInDecksCount ?? 0;
+        const reqB = b.requestedInDecksCount ?? 0;
+        if (reqA !== reqB) return multiplier * (reqA - reqB);
         return a.cardName.localeCompare(b.cardName);
       }
 

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CollectionPage() {
   const [cards, stats, decks] = await Promise.all([
-    getUserCollection(),
+    getUserCollection({ limit: 9, offset: 0 }),
     getCollectionStats(),
     getUserDecks().catch(() => []),
   ]);

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
+import { CardImage as Image } from "@/components/card-image";
 import {
   Sparkles,
   Search,
@@ -349,9 +350,12 @@ export function EdhrecRecommendations({
             {commander && (
               <CardPreviewHover cardName={commander} imageUri={commanderImageUri}>
                 {commanderImageUri ? (
-                  <img
+                  <Image
                     src={commanderImageUri}
                     alt={commander}
+                    width={80}
+                    height={112}
+                    sizes="80px"
                     className="w-16 h-22 sm:w-20 sm:h-28 object-cover rounded-lg border-2 border-amber-500/60 shadow-lg shrink-0 cursor-pointer hover:border-amber-400 transition-all hover:scale-105"
                   />
                 ) : (
@@ -660,10 +664,12 @@ export function EdhrecRecommendations({
                   <div className="flex items-start gap-3">
                     <CardPreviewHover cardName={card.name} imageUri={card.imageUri}>
                       {card.imageUri ? (
-                        <img
+                        <Image
                           src={card.imageUri}
                           alt={card.name}
-                          loading="lazy"
+                          width={48}
+                          height={64}
+                          sizes="48px"
                           className="w-12 h-16 object-cover rounded-md border border-slate-700 hover:border-amber-400 shadow-sm shrink-0 cursor-pointer transition-colors"
                         />
                       ) : (

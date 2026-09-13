@@ -79,7 +79,8 @@ export async function setDeckCommander(
   deckId: string,
   commander: string,
   commanderScryfallId?: string | null,
-  commanderImageUri?: string | null
+  commanderImageUri?: string | null,
+  partner?: { name: string; scryfallId?: string | null; imageUri?: string | null }
 ): Promise<{ success: boolean; commander: string; commanderScryfallId?: string | null; commanderImageUri?: string | null }> {
   const userId = await getCurrentUserId();
   await backendFetch(`/api/decks/${deckId}/commander`, {
@@ -88,6 +89,9 @@ export async function setDeckCommander(
       commander,
       commanderScryfallId: commanderScryfallId || null,
       commanderImageUri: commanderImageUri || null,
+      partner: partner?.name || null,
+      partnerScryfallId: partner?.scryfallId || null,
+      partnerImageUri: partner?.imageUri || null,
     }),
     userId,
   });
@@ -129,6 +133,28 @@ export async function updateDeckCardQuantity(
   });
 
   revalidatePath("/decks");
+  return { success: true };
+}
+
+export async function updateDeckCardVersion(
+  deckId: string,
+  deckCardId: string,
+  data: {
+    cardScryfallId: string;
+    imageUri?: string | null;
+    setCode?: string | null;
+    isCommander?: boolean;
+  }
+): Promise<{ success: boolean }> {
+  const userId = await getCurrentUserId();
+  await backendFetch(`/api/decks/cards/${deckCardId}/version`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+    userId,
+  });
+
+  revalidatePath("/decks");
+  revalidatePath(`/decks/${deckId}`);
   return { success: true };
 }
 
@@ -208,4 +234,3 @@ export async function addMissingCardsToCollection(
 export const assignCardToDeck = assignCollectionCardToDeck;
 export const unassignCardFromDeck = releaseCollectionCardFromDeck;
 export const reassignCardToDeck = reassignCardFromOtherDeck;
-

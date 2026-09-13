@@ -25,6 +25,8 @@ export interface CardToPrice {
   scryfallId?: string;
   quantity?: number;
   isMissing?: boolean;
+  ownedQuantity?: number;
+  missingQuantity?: number;
 }
 
 /**
@@ -138,26 +140,44 @@ export async function getPriceSummary(
     const norm = normalizeCardName(card.name);
     const q = quotes[norm] || quotes[card.scryfallId || ""];
     const qty = card.quantity ?? 1;
-    const subtotal = q ? q.subtotal : 0;
+    const unitPrice = q?.unitPrice?.trend ?? 0;
+    const subtotal = q ? q.subtotal : Math.round(unitPrice * qty * 100) / 100;
 
     totalCards += qty;
     totalNetValue += subtotal;
 
-    if (card.isMissing) {
-      totalMissingValue += subtotal;
+    let ownedQty: number;
+    let missingQty: number;
+    if (card.ownedQuantity !== undefined) {
+      ownedQty = Math.max(0, Math.min(qty, card.ownedQuantity));
+      missingQty = Math.max(0, qty - ownedQty);
+    } else if (card.missingQuantity !== undefined) {
+      missingQty = Math.max(0, Math.min(qty, card.missingQuantity));
+      ownedQty = Math.max(0, qty - missingQty);
+    } else if (card.isMissing) {
+      ownedQty = 0;
+      missingQty = qty;
     } else {
-      totalOwnedValue += subtotal;
+      ownedQty = qty;
+      missingQty = 0;
     }
+
+    totalMissingValue += unitPrice * missingQty;
+    totalOwnedValue += unitPrice * ownedQty;
   }
+
+  const net = Math.round(totalNetValue * 100) / 100;
+  const missing = Math.round(totalMissingValue * 100) / 100;
+  const owned = Math.round((net - missing) * 100) / 100;
 
   return {
     provider,
     currency: config.currency,
     currencySymbol: config.currencySymbol,
     totalCards,
-    totalNetValue: Math.round(totalNetValue * 100) / 100,
-    totalOwnedValue: Math.round(totalOwnedValue * 100) / 100,
-    totalMissingValue: Math.round(totalMissingValue * 100) / 100,
+    totalNetValue: net,
+    totalOwnedValue: owned,
+    totalMissingValue: missing,
     quotes,
   };
 }

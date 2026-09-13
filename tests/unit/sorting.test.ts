@@ -165,4 +165,29 @@ describe("Card Sorting Engine", () => {
     const sorted = sortCards(sampleCards, "status", "asc");
     expect(sorted[0].missingCount).toBeGreaterThan(0);
   });
+
+  it("should sort cards by requested decks count (most requested first)", () => {
+    const cardsWithRequests: SortableCard[] = [
+      { ...sampleCards[0], cardName: "Sol Ring", requestedInDecksCount: 2 },
+      { ...sampleCards[1], cardName: "Lightning Bolt", requestedInDecksCount: 1 },
+      { ...sampleCards[2], cardName: "Arcane Signet", requestedInDecksCount: 7 },
+      { ...sampleCards[3], cardName: "Counterspell", requestedInDecksCount: 0 },
+    ];
+
+    const desc = sortCards(cardsWithRequests, "requested_decks", "desc");
+    expect(desc.map((c) => c.cardName)).toEqual([
+      "Arcane Signet",
+      "Sol Ring",
+      "Lightning Bolt",
+      "Counterspell",
+    ]);
+
+    const asc = sortCards(cardsWithRequests, "requested_decks", "asc");
+    expect(asc.map((c) => c.cardName)).toEqual([
+      "Counterspell",
+      "Lightning Bolt",
+      "Sol Ring",
+      "Arcane Signet",
+    ]);
+  });
 });

@@ -81,12 +81,13 @@ export async function importDeckFromMoxfieldUrl(
 }
 
 export async function importCollectionFromText(
-  rawText: string
-): Promise<{ success: boolean; totalImported: number; uniqueImported: number }> {
+  rawText: string,
+  requestKey: string
+): Promise<{ success: boolean; totalImported: number; uniqueImported: number; importId: string }> {
   const userId = await getCurrentUserId();
-  const res = await backendFetch<{ status: string; importedCount: number; uniqueCards: number }>("/api/import/collection", {
+  const res = await backendFetch<{ status: string; importedCount: number; uniqueCards: number; importId: string }>("/api/import/collection", {
     method: "POST",
-    body: JSON.stringify({ text: rawText }),
+    body: JSON.stringify({ text: rawText, requestKey }),
     userId,
   });
 
@@ -94,7 +95,21 @@ export async function importCollectionFromText(
   revalidatePath("/decks");
   return {
     success: true,
+    importId: res.importId,
     totalImported: res.importedCount,
     uniqueImported: res.uniqueCards,
   };
+}
+
+export async function getCollectionImportProgress(importId: string) {
+  const userId = await getCurrentUserId();
+  return backendFetch<{ importId: string; completed: number; pending: number; notFound: number; failed: number; ambiguous: number; enriching: number }>(
+    `/api/import/collection/${encodeURIComponent(importId)}`, { userId }
+  );
+}
+
+export async function retryCollectionImport(importId: string) {
+  const userId = await getCurrentUserId();
+  await backendFetch(`/api/import/collection/${encodeURIComponent(importId)}/retry`, { userId, method: "POST" });
+  return getCollectionImportProgress(importId);
 }

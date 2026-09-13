@@ -3,6 +3,7 @@
 import { getCurrentUserId } from "./auth";
 import { backendFetch } from "@/lib/api-client";
 import { PriceProvider, PriceSummary } from "@/lib/pricing/types";
+import { CardToPrice } from "@/lib/pricing";
 
 /**
  * Calculates or retrieves cached prices for all cards in a deck via FastAPI backend.
@@ -13,14 +14,22 @@ export async function getDeckPriceSummary(
   forceRefresh: boolean = false
 ): Promise<PriceSummary> {
   const userId = await getCurrentUserId();
-  return await backendFetch<PriceSummary>("/api/pricing", {
+  return await backendFetch<PriceSummary>(`/api/pricing/decks/${encodeURIComponent(deckId)}?provider=${provider}&forceRefresh=${forceRefresh}`, {
     method: "POST",
-    body: JSON.stringify({
-      deckId,
-      provider,
-      forceRefresh,
-    }),
+    body: JSON.stringify({}),
     userId,
+  });
+}
+
+export async function getCardsPriceSummary(
+  cards: CardToPrice[],
+  provider: PriceProvider = "cardmarket",
+  forceRefresh = false
+): Promise<PriceSummary> {
+  return await backendFetch<PriceSummary>("/api/pricing/cards", {
+    method: "POST",
+    body: JSON.stringify({ cards, provider, forceRefresh }),
+    userId: await getCurrentUserId(),
   });
 }
 
@@ -72,4 +81,3 @@ export async function triggerWeeklyCollectionPricing(): Promise<{
 export async function getCollectionPricesLastUpdated(): Promise<string | null> {
   return new Date().toISOString();
 }
-

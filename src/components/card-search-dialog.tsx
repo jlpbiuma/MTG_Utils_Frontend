@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { CardImage as Image } from "@/components/card-image";
 import { Search, Plus, Loader2, Image as ImageIcon } from "lucide-react";
 import {
   Dialog,
@@ -191,9 +192,12 @@ export function CardSearchDialog({
                     title="Ver ficha completa en español"
                   >
                     {imgUri ? (
-                      <img
+                      <Image
                         src={imgUri}
                         alt={card.name}
+                        width={40}
+                        height={56}
+                        sizes="40px"
                         className="w-10 h-14 object-cover rounded shadow-xs group-hover:opacity-90 transition-opacity"
                       />
                     ) : (

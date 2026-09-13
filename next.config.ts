@@ -1,17 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
+  experimental: { serverActions: { bodySizeLimit: "3mb" } },
+  async rewrites() {
+    const imageServiceUrl = (process.env.IMAGE_SERVICE_URL ?? "http://localhost:8080").replace(/\/$/, "");
+    return [
       {
-        protocol: "https",
-        hostname: "cards.scryfall.io",
+        source: "/images/:path*",
+        destination: `${imageServiceUrl}/images/:path*`,
       },
-      {
-        protocol: "https",
-        hostname: "svgs.scryfall.io",
-      },
-    ],
+    ];
   },
 };
 

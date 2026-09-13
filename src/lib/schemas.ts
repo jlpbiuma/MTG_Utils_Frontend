@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Currency } from "@/lib/pricing/types";
 
 export const DeckCreateSchema = z.object({
   name: z.string().min(1, "El nombre del mazo es obligatorio").max(100),
@@ -30,6 +31,7 @@ export const DeckCardCreateSchema = z.object({
 });
 
 export const CollectionCardCreateSchema = z.object({
+  isFoil: z.boolean().default(false),
   cardScryfallId: z.string().min(1),
   cardName: z.string().min(1),
   quantity: z.number().int().min(1).default(1),
@@ -61,12 +63,25 @@ export interface DeckWithCompletion {
   ownedCards: number;
   missingCardsCount: number;
   completionPercentage: number;
+  colors?: string[];
+  colorIdentity?: string;
+  totalValue?: number | null;
+  missingValue?: number | null;
+  ownedValue?: number | null;
+  currency?: Currency;
+  currencySymbol?: string;
 }
 
 export type DeckSummary = DeckWithCompletion;
 
 
 export interface OtherDeckAssignment {
+  deckId: string;
+  deckName: string;
+  quantity: number;
+}
+
+export interface DeckRequirement {
   deckId: string;
   deckName: string;
   quantity: number;
@@ -87,7 +102,11 @@ export interface DeckCardWithOwnership {
   ownedInCollection: number;
   availableToAssign: number;
   assignedInOtherDecks: OtherDeckAssignment[];
+  requestedInDecks?: DeckRequirement[];
+  requestedInDecksCount?: number;
   missingCount: number;
+  canBeCommander?: boolean;
+  setCode?: string | null;
 }
 
 export interface DeckDetailWithStats extends DeckWithCompletion {

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { CardImage as Image } from "@/components/card-image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EditDeckDialog } from "@/components/edit-deck-dialog";
@@ -22,6 +23,7 @@ import {
   FolderTree,
   AlignJustify,
   Crown,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +35,11 @@ import { CardSearchDialog } from "@/components/card-search-dialog";
 import { EdhrecRecommendations } from "@/components/edhrec-recommendations";
 import { SelectCommanderDialog } from "@/components/select-commander-dialog";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
-import { DeckDetailWithStats, DeckCardWithOwnership } from "@/lib/schemas";
+import { CardPrintingDetail } from "@/actions/scryfall";
+import { ConfirmDeleteDeckDialog } from "@/components/confirm-delete-deck-dialog";
+import { ColorIdentityPips } from "@/components/color-identity-pips";
+import { extractColorsFromManaCost, buildColorIdentity } from "@/lib/deck-colors";
+import { DeckDetailWithStats, DeckCardWithOwnership, DeckRequirement } from "@/lib/schemas";
 import {
   addCardToDeck,
   updateDeckCardQuantity,
@@ -50,7 +56,7 @@ import { PricingProviderSelector } from "@/components/pricing-provider-selector"
 import { PriceBadge } from "@/components/price-badge";
 import { CardSortingBar } from "@/components/card-sorting-bar";
 import { SortField, SortDirection, sortCards } from "@/lib/sorting";
-import { normalizeCardName, groupCardsByType } from "@/lib/card-utils";
+import { normalizeCardName, groupCardsByType, isBasicLand } from "@/lib/card-utils";
 
 interface DeckDetailViewProps {
   initialDeck: DeckDetailWithStats;
@@ -68,32 +74,38 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
   });
   const [activeTab, setActiveTab] = useState<"cards" | "edhrec">("cards");
   const [showCommanderModal, setShowCommanderModal] = useState(!initialDeck.commander);
-  const [isDeletingDeck, setIsDeletingDeck] = useState(false);
+  const [showDeleteDeckDialog, setShowDeleteDeckDialog] = useState(false);
 
-  const handleDeleteDeck = async () => {
-    if (
-      !confirm(
-        `¿Eliminar permanentemente el mazo "${deckInfo.name}"? Esta acción no se puede deshacer.`
-      )
-    ) {
-      return;
-    }
+  const [cards, setCards] = useState<DeckCardWithOwnership[]>(initialDeck.cards);
 
-    setIsDeletingDeck(true);
-    try {
-      await deleteDeck(initialDeck.id);
-      router.push("/decks");
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Error al eliminar el mazo");
-      setIsDeletingDeck(false);
+  useEffect(() => {
+    setCards(initialDeck.cards);
+  }, [initialDeck.cards]);
+
+  const deckColors = React.useMemo(() => {
+    if (initialDeck.colors && initialDeck.colors.length > 0) {
+      return initialDeck.colors;
     }
+    const colorSet = new Set<string>();
+    (cards || []).forEach((c) => {
+      extractColorsFromManaCost(c.manaCost).forEach((col) => colorSet.add(col));
+    });
+    return Array.from(colorSet);
+  }, [initialDeck.colors, cards]);
+
+  const handleConfirmDeleteDeck = async () => {
+    await deleteDeck(initialDeck.id);
+    router.push("/decks");
   };
 
   const [filterMode, setFilterMode] = useState<"all" | "missing" | "owned">("all");
+  const [cardSearch, setCardSearch] = useState("");
   const [activeBoard, setActiveBoard] = useState<"mainboard" | "sideboard">("mainboard");
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
   const [isTransferringMissing, setIsTransferringMissing] = useState(false);
   const [selectedCardForDetail, setSelectedCardForDetail] = useState<{
+    id?: string;
+    deckCardId?: string;
     cardScryfallId?: string;
     cardName: string;
     imageUri?: string | null;
@@ -103,7 +115,90 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
     ownedInCollection?: number;
     missingCount?: number;
     assignedQuantity?: number;
+    requestedInDecks?: DeckRequirement[];
+    requestedInDecksCount?: number;
+    isCommander?: boolean;
   } | null>(null);
+
+  const handleVersionSelect = (version: CardPrintingDetail) => {
+    const newImageUri: string | null = (version.image_uri || version.image_uri_large || version.image_uri_small || null) as (string | null);
+    const newSetCode: string | null = (version.set_code || null) as (string | null);
+    const targetCardId = selectedCardForDetail?.deckCardId || selectedCardForDetail?.id;
+
+    if (targetCardId) {
+      setCards((prev) =>
+        prev.map((c) =>
+          c.id === targetCardId
+            ? {
+                ...c,
+                cardScryfallId: version.id,
+                imageUri: newImageUri,
+                setCode: newSetCode,
+              }
+            : c
+        )
+      );
+    } else if (selectedCardForDetail?.cardName) {
+      setCards((prev) =>
+        prev.map((c) =>
+          c.cardName.toLowerCase() === selectedCardForDetail.cardName.toLowerCase()
+            ? {
+                ...c,
+                cardScryfallId: version.id,
+                imageUri: newImageUri,
+                setCode: newSetCode,
+              }
+            : c
+        )
+      );
+    }
+
+    if (
+      selectedCardForDetail?.isCommander ||
+      selectedCardForDetail?.cardName?.toLowerCase() === deckInfo.commander?.toLowerCase()
+    ) {
+      setDeckInfo((prev) => ({
+        ...prev,
+        commanderScryfallId: version.id,
+        commanderImageUri: newImageUri,
+      }));
+    }
+
+    setSelectedCardForDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            cardScryfallId: version.id,
+            imageUri: newImageUri,
+            setCode: newSetCode,
+          }
+        : null
+    );
+
+    router.refresh();
+  };
+
+  const handleOpenCommanderDetail = () => {
+    const commanderCard = cards.find(
+      (c) => c.isCommander || c.cardName.toLowerCase() === deckInfo.commander?.toLowerCase()
+    );
+    setSelectedCardForDetail({
+      id: commanderCard?.id,
+      deckCardId: commanderCard?.id,
+      cardScryfallId: deckInfo.commanderScryfallId || commanderCard?.cardScryfallId,
+      cardName: deckInfo.commander!,
+      imageUri: deckInfo.commanderImageUri || commanderCard?.imageUri,
+      manaCost: commanderCard?.manaCost,
+      typeLine: commanderCard?.typeLine,
+      quantity: commanderCard?.quantity,
+      ownedInCollection: commanderCard?.ownedInCollection,
+      missingCount: commanderCard?.missingCount,
+      assignedQuantity: commanderCard?.assignedQuantity,
+      requestedInDecks: commanderCard?.requestedInDecks,
+      requestedInDecksCount: commanderCard?.requestedInDecksCount,
+      isCommander: true,
+    });
+  };
 
   const handleTransferAllMissing = async () => {
     if (
@@ -142,7 +237,26 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
 
   // Dynamic pricing state
   const [priceProvider, setPriceProvider] = useState<PriceProvider>("cardmarket");
-  const [priceSummary, setPriceSummary] = useState<PriceSummary | null>(null);
+  const [priceSummary, setPriceSummary] = useState<PriceSummary | null>(() => {
+    if (initialDeck.totalValue != null) {
+      const net = initialDeck.totalValue;
+      const missing = initialDeck.missingValue ?? 0;
+      const owned =
+        initialDeck.ownedValue ??
+        Math.max(0, Math.round((net - missing) * 100) / 100);
+      return {
+        provider: "cardmarket",
+        currency: initialDeck.currency || "EUR",
+        currencySymbol: initialDeck.currencySymbol || "€",
+        totalCards: initialDeck.totalCards,
+        totalNetValue: net,
+        totalMissingValue: missing,
+        totalOwnedValue: owned,
+        quotes: {},
+      };
+    }
+    return null;
+  });
   const [isLoadingPrices, setIsLoadingPrices] = useState(false);
 
   const loadPrices = useCallback(
@@ -177,12 +291,15 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
     loadPrices(priceProvider, false);
   }, [priceProvider, loadPrices]);
 
-  const mainboardCards = initialDeck.cards.filter((c) => !c.isSideboard);
-  const sideboardCards = initialDeck.cards.filter((c) => c.isSideboard);
+  const mainboardCards = cards.filter((c) => !c.isSideboard);
+  const sideboardCards = cards.filter((c) => c.isSideboard);
 
   const activeCards = activeBoard === "mainboard" ? mainboardCards : sideboardCards;
 
   const filteredCards = activeCards.filter((c) => {
+    if (cardSearch.trim() && !c.cardName.toLowerCase().includes(cardSearch.trim().toLowerCase())) {
+      return false;
+    }
     if (filterMode === "missing") return c.missingCount > 0;
     if (filterMode === "owned") return c.ownedInCollection >= c.quantity;
     return true;
@@ -278,7 +395,7 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
   };
 
   const sortedCards = sortCards(filteredCards, sortField, sortDirection, priceSummary);
-  const groupedSections = groupCardsByType(sortedCards, priceSummary);
+  const groupedSections = groupCardsByType(sortedCards, priceSummary, { excludeBasicLands: true });
 
   const collapseAll = () => {
     const allCollapsed: Record<string, boolean> = {};
@@ -295,15 +412,36 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
   const isComplete = initialDeck.totalCards > 0 && initialDeck.missingCardsCount === 0;
 
   const renderCardRow = (card: DeckCardWithOwnership) => {
+    const isBasic = isBasicLand(card.typeLine, card.cardName);
     const isCardComplete = card.ownedInCollection >= card.quantity;
     const isBusy = loadingCardId === card.id;
 
     return (
       <div
         key={card.id}
+        onClick={(event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest("button, a, input, select, textarea")) {
+            return;
+          }
+          setSelectedCardForDetail(card);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setSelectedCardForDetail(card);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={`Ver detalles de ${card.cardName}`}
         className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-4 transition-colors hover:bg-slate-800/30 ${
-          !isCardComplete ? "border-l-4 border-l-amber-500/80" : "border-l-4 border-l-emerald-500/80"
-        }`}
+          isBasic
+            ? "border-l-4 border-l-slate-700/60"
+            : !isCardComplete
+            ? "border-l-4 border-l-amber-500/80"
+            : "border-l-4 border-l-emerald-500/80"
+        } cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70`}
       >
         {/* Left: Card art hover + Name + Types + Mana Cost */}
         <div className="flex items-center gap-3 min-w-0">
@@ -318,9 +456,12 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
               className="shrink-0"
             >
               {card.imageUri ? (
-                <img
+                <Image
                   src={card.imageUri}
                   alt={card.cardName}
+                  width={44}
+                  height={64}
+                  sizes="44px"
                   className="w-11 h-16 object-cover rounded-md border border-slate-700 hover:border-amber-400 transition-colors shadow-sm"
                 />
               ) : (
@@ -357,7 +498,12 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
 
             {/* Collection status pill */}
             <div className="mt-2 flex items-center gap-2 flex-wrap">
-              {isCardComplete ? (
+              {isBasic ? (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700/60">
+                  <Layers className="h-3 w-3" />
+                  Tierra básica · no cuenta para la completitud
+                </span>
+              ) : isCardComplete ? (
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">
                   <CheckCircle2 className="h-3 w-3" />
                   Tienes {card.ownedInCollection} de {card.quantity}
@@ -369,7 +515,7 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                 </span>
               )}
 
-              {!isCardComplete && (
+              {!isBasic && !isCardComplete && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -454,6 +600,32 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                 </>
               )}
             </div>
+
+            {/* Global Deck Demand / Priority for missing cards */}
+            {card.missingCount > 0 && card.requestedInDecks && card.requestedInDecks.length > 0 && (
+              <div className="mt-2 flex items-center gap-1.5 flex-wrap text-xs text-indigo-300 bg-indigo-950/60 px-2.5 py-1 rounded border border-indigo-800/60">
+                <span className="font-semibold text-indigo-400 flex items-center gap-1">
+                  <Layers className="h-3.5 w-3.5 text-indigo-400" />
+                  Se pide en {card.requestedInDecksCount || card.requestedInDecks.length}{" "}
+                  {(card.requestedInDecksCount || card.requestedInDecks.length) === 1 ? "mazo" : "mazos"}:
+                </span>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {card.requestedInDecks.map((req) => (
+                    <span
+                      key={req.deckId}
+                      className={`px-1.5 py-0.5 rounded border text-[11px] font-medium ${
+                        req.deckId === initialDeck.id
+                          ? "bg-indigo-900/60 border-indigo-700/60 text-indigo-200"
+                          : "bg-slate-900/70 border-slate-700/50 text-slate-300"
+                      }`}
+                      title={`En ${req.deckName}: se piden ${req.quantity} ${req.quantity === 1 ? "copia" : "copias"}`}
+                    >
+                      {req.deckName} ({req.quantity})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -524,10 +696,18 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
       <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 p-6 sm:p-8 backdrop-blur-md shadow-2xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <Badge variant="outline" className="bg-amber-500/10 text-amber-300 border-amber-500/30 font-mono">
                 {deckInfo.format}
               </Badge>
+              {deckColors.length > 0 && (
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-950/70 border border-slate-800 text-xs shadow-xs">
+                  <ColorIdentityPips colors={deckColors} size="xs" />
+                  <span className="font-mono text-[11px] font-bold text-slate-400">
+                    {initialDeck.colorIdentity || buildColorIdentity(deckColors)}
+                  </span>
+                </div>
+              )}
               {isComplete && (
                 <Badge variant="success" className="gap-1 font-semibold">
                   <CheckCircle2 className="h-3 w-3" />
@@ -560,8 +740,7 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={handleDeleteDeck}
-                  disabled={isDeletingDeck}
+                  onClick={() => setShowDeleteDeckDialog(true)}
                   className="h-8 px-2.5 text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 border border-slate-800 hover:border-rose-800/50"
                   title="Eliminar este mazo permanentemente"
                 >
@@ -579,20 +758,18 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
             {deckInfo.commander ? (
               <div className="flex items-center gap-3 pt-3 border-t border-slate-800/80">
                 <div
-                  onClick={() =>
-                    setSelectedCardForDetail({
-                      cardName: deckInfo.commander!,
-                      imageUri: deckInfo.commanderImageUri,
-                    })
-                  }
+                  onClick={handleOpenCommanderDetail}
                   className="cursor-pointer"
                   title="Ver todos los datos del comandante en español"
                 >
                   <CardPreviewHover cardName={deckInfo.commander} imageUri={deckInfo.commanderImageUri}>
                     {deckInfo.commanderImageUri ? (
-                      <img
+                      <Image
                         src={deckInfo.commanderImageUri}
                         alt={deckInfo.commander}
+                        width={40}
+                        height={56}
+                        sizes="40px"
                         className="w-10 h-14 object-cover rounded-md border-2 border-amber-500/60 shadow-md shrink-0 hover:border-amber-400 transition-colors"
                       />
                     ) : (
@@ -619,12 +796,7 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                     </button>
                   </div>
                   <div
-                    onClick={() =>
-                      setSelectedCardForDetail({
-                        cardName: deckInfo.commander!,
-                        imageUri: deckInfo.commanderImageUri,
-                      })
-                    }
+                    onClick={handleOpenCommanderDetail}
                     className="cursor-pointer"
                     title="Ver todos los datos del comandante en español"
                   >
@@ -859,6 +1031,17 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
 
         {/* Filters and Add Card */}
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+          <div className="relative w-full sm:w-56">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+            <input
+              type="search"
+              value={cardSearch}
+              onChange={(event) => setCardSearch(event.target.value)}
+              placeholder="Buscar carta en el mazo..."
+              aria-label="Buscar carta en el mazo"
+              className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 pl-9 pr-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition-colors focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+            />
+          </div>
           <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-lg border border-slate-800 text-xs">
             <button
               onClick={() => setFilterMode("all")}
@@ -987,6 +1170,8 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
           <p className="text-slate-400">
             {filterMode === "missing"
               ? "¡Excelente! No tienes cartas faltantes bajo este filtro."
+              : cardSearch.trim()
+              ? `No se encontraron cartas que coincidan con «${cardSearch.trim()}».`
               : "No hay cartas en esta sección aún."}
           </p>
           <div className="mt-4">
@@ -1067,6 +1252,11 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                         <span className="font-bold text-amber-300">
                           {section.sectionTotalPrice.toFixed(2)} {section.currencySymbol}
                         </span>
+                        {section.ownedCards > 0 && section.sectionOwnedPrice > 0 && (
+                          <span className="text-emerald-300/90 pl-1 border-l border-slate-700">
+                            (En posesión: {section.sectionOwnedPrice.toFixed(2)} {section.currencySymbol})
+                          </span>
+                        )}
                         {section.missingCards > 0 && section.sectionMissingPrice > 0 && (
                           <span className="text-rose-300/90 pl-1 border-l border-slate-700">
                             (Faltan: {section.sectionMissingPrice.toFixed(2)} {section.currencySymbol})
@@ -1129,8 +1319,24 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
           ownedInCollection={selectedCardForDetail.ownedInCollection}
           missingCount={selectedCardForDetail.missingCount}
           assignedQuantity={selectedCardForDetail.assignedQuantity}
+          requestedInDecks={selectedCardForDetail.requestedInDecks}
+          requestedInDecksCount={selectedCardForDetail.requestedInDecksCount}
+          deckId={initialDeck.id}
+          deckCardId={selectedCardForDetail.deckCardId || selectedCardForDetail.id}
+          isCommander={
+            selectedCardForDetail.isCommander ||
+            selectedCardForDetail.cardName?.toLowerCase() === deckInfo.commander?.toLowerCase()
+          }
+          onVersionSelect={handleVersionSelect}
         />
       )}
+
+      <ConfirmDeleteDeckDialog
+        open={showDeleteDeckDialog}
+        onOpenChange={setShowDeleteDeckDialog}
+        deckName={deckInfo.name}
+        onConfirm={handleConfirmDeleteDeck}
+      />
     </div>
   );
 }

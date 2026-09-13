@@ -100,4 +100,19 @@ describe("Pricing Engine - Cardmarket, Card Trader & MTGGoldfish", () => {
     expect(PRICE_PROVIDERS.mtggoldfish.name).toContain("MTGGoldfish");
     expect(PRICE_PROVIDERS.mtggoldfish.currencySymbol).toBe("$");
   });
+
+  it("should calculate exact owned and missing totals with partial card quantities", async () => {
+    const cards = [
+      { name: "Sol Ring", quantity: 4, ownedQuantity: 3, missingQuantity: 1 },
+    ];
+
+    const summary = await getPriceSummary(cards, "cardmarket", true);
+    expect(summary.totalCards).toBe(4);
+    expect(summary.totalNetValue).toBeGreaterThan(0);
+    expect(summary.totalOwnedValue).toBeGreaterThan(0);
+    expect(summary.totalMissingValue).toBeGreaterThan(0);
+    expect(Math.round((summary.totalNetValue - summary.totalMissingValue!) * 100) / 100).toBe(
+      summary.totalOwnedValue
+    );
+  });
 });

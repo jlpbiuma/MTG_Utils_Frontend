@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { CardImage as Image } from "@/components/card-image";
 import {
   Library,
   Search,
@@ -24,6 +25,7 @@ import {
   addOrIncrementCard,
   updateCollectionQuantity,
   deleteCollectionCard,
+  getUserCollection,
 } from "@/actions/collection";
 import { PriceProvider, PriceSummary } from "@/lib/pricing";
 import { PricingProviderSelector } from "@/components/pricing-provider-selector";
@@ -37,12 +39,15 @@ import {
 import { normalizeCardName, groupCardsByType } from "@/lib/card-utils";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 
+const PAGE_SIZE = 9;
+
 interface CollectionItem {
   id: string;
   userId: string;
   cardScryfallId: string;
   cardName: string;
   quantity: number;
+  isFoil?: boolean;
   setCode?: string | null;
   collectorNumber?: string | null;
   manaCost?: string | null;
@@ -56,9 +61,26 @@ interface CollectionViewProps {
 }
 
 export function CollectionView({ initialCards, initialStats }: CollectionViewProps) {
+  const [cards, setCards] = useState<CollectionItem[]>(initialCards || []);
+  const [hasMore, setHasMore] = useState(
+    (initialCards?.length ?? 0) >= PAGE_SIZE &&
+      (initialStats.uniqueCards > (initialCards?.length ?? 0) || !initialStats.uniqueCards)
+  );
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const sentinelRef = React.useRef<HTMLDivElement | null>(null);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedCardForDetail, setSelectedCardForDetail] = useState<CollectionItem | null>(null);
+
+  // Sync when initialCards changes
+  useEffect(() => {
+    setCards(initialCards || []);
+    setHasMore(
+      (initialCards?.length ?? 0) >= PAGE_SIZE &&
+        (initialStats.uniqueCards > (initialCards?.length ?? 0) || !initialStats.uniqueCards)
+    );
+  }, [initialCards, initialStats.uniqueCards]);
 
   // View mode state: Grouped by category vs Flat grid
   const [isGroupedByType, setIsGroupedByType] = useState(true);
@@ -67,7 +89,7 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
-  // Weekly pricing worker state
+  // Weekly pricing refresh state
   const [isUpdatingWeeklyPrices, setIsUpdatingWeeklyPrices] = useState(false);
   const [lastPricesUpdate, setLastPricesUpdate] = useState<string | null>(null);
 
@@ -79,7 +101,6 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
   const [priceProvider, setPriceProvider] = useState<PriceProvider>("cardmarket");
   const [priceSummary, setPriceSummary] = useState<PriceSummary | null>(null);
   const [isLoadingPrices, setIsLoadingPrices] = useState(false);
-
 
   const loadPrices = useCallback(
     async (providerToLoad = priceProvider, bypassCache = false) => {
@@ -113,19 +134,129 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
     loadPrices(priceProvider, false);
   }, [priceProvider, loadPrices]);
 
-  const filteredCards = initialCards.filter((c) =>
+  // Load more cards on scroll (next 9 cards)
+  const loadMoreCards = useCallback(async () => {
+    if (isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    try {
+      const nextOffset = cards.length;
+      const res = await getUserCollection({
+        searchQuery: searchQuery.trim() || undefined,
+        limit: PAGE_SIZE,
+        offset: nextOffset,
+      });
+
+      const newCards = (res || []) as CollectionItem[];
+      if (newCards.length === 0) {
+        setHasMore(false);
+      } else {
+        setCards((prev) => {
+          const seen = new Set(prev.map((c) => c.id));
+          const uniqueNew = newCards.filter((c) => !seen.has(c.id));
+          return [...prev, ...uniqueNew];
+        });
+        if (newCards.length < PAGE_SIZE) {
+          setHasMore(false);
+        }
+      }
+    } catch (err) {
+      console.error("Error cargando más cartas de la colección:", err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [cards.length, hasMore, isLoadingMore, searchQuery]);
+
+  // IntersectionObserver trigger
+  useEffect(() => {
+    if (!hasMore || isLoadingMore) return;
+
+    if (typeof IntersectionObserver !== "undefined") {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting) {
+            loadMoreCards();
+          }
+        },
+        { rootMargin: "300px" }
+      );
+
+      const el = sentinelRef.current;
+      if (el) observer.observe(el);
+
+      return () => {
+        if (el) observer.unobserve(el);
+      };
+    }
+  }, [hasMore, isLoadingMore, loadMoreCards]);
+
+  // Window scroll listener fallback
+  useEffect(() => {
+    if (!hasMore || isLoadingMore) return;
+
+    const onScroll = () => {
+      const scrollHeight = document.documentElement.scrollHeight;
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      const clientHeight = window.innerHeight;
+      if (scrollHeight - scrollTop - clientHeight < 350) {
+        loadMoreCards();
+      }
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [hasMore, isLoadingMore, loadMoreCards]);
+
+  // Synchronous filtering on currently loaded cards
+  const filteredCards = cards.filter((c) =>
     c.cardName.toLowerCase().includes(searchQuery.toLowerCase().trim())
   );
+
+  // Debounced search query against backend for cards not yet loaded
+  const prevQueryRef = React.useRef(searchQuery);
+  useEffect(() => {
+    if (prevQueryRef.current.trim() && !searchQuery.trim()) {
+      // User cleared search query, restore initial cards
+      setCards(initialCards || []);
+      setHasMore(
+        (initialCards?.length ?? 0) >= PAGE_SIZE &&
+          (initialStats.uniqueCards > (initialCards?.length ?? 0) || !initialStats.uniqueCards)
+      );
+    } else if (searchQuery.trim()) {
+      const timer = setTimeout(async () => {
+        setIsLoadingMore(true);
+        try {
+          const res = (await getUserCollection({
+            searchQuery: searchQuery.trim(),
+            limit: PAGE_SIZE,
+            offset: 0,
+          })) as CollectionItem[];
+
+          if (res) {
+            setCards(res);
+            setHasMore(res.length >= PAGE_SIZE);
+          }
+        } catch (err) {
+          console.error("Error en búsqueda remota de colección:", err);
+        } finally {
+          setIsLoadingMore(false);
+        }
+      }, 400);
+
+      return () => clearTimeout(timer);
+    }
+    prevQueryRef.current = searchQuery;
+  }, [searchQuery, initialCards, initialStats.uniqueCards]);
 
   const handleAddCard = async (cardData: {
     cardScryfallId: string;
     cardName: string;
     quantity: number;
+    isFoil?: boolean;
     manaCost?: string | null;
     typeLine?: string | null;
     imageUri?: string | null;
   }) => {
-    await addOrIncrementCard({
+    const res = await addOrIncrementCard({
       cardScryfallId: cardData.cardScryfallId,
       cardName: cardData.cardName,
       quantity: cardData.quantity,
@@ -133,12 +264,31 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
       typeLine: cardData.typeLine,
       imageUri: cardData.imageUri,
     });
+    if (res && (res as CollectionItem).id) {
+      setCards((prev) => {
+        const idx = prev.findIndex((c) => c.id === (res as CollectionItem).id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = res as CollectionItem;
+          return next;
+        }
+        return [res as CollectionItem, ...prev];
+      });
+    }
   };
 
   const handleUpdateQty = async (cardId: string, currentQty: number, delta: number) => {
     setBusyId(cardId);
     try {
-      await updateCollectionQuantity(cardId, currentQty + delta);
+      const newQty = currentQty + delta;
+      await updateCollectionQuantity(cardId, newQty);
+      if (newQty <= 0) {
+        setCards((prev) => prev.filter((c) => c.id !== cardId));
+      } else {
+        setCards((prev) =>
+          prev.map((c) => (c.id === cardId ? { ...c, quantity: newQty } : c))
+        );
+      }
     } finally {
       setBusyId(null);
     }
@@ -149,6 +299,7 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
     setBusyId(cardId);
     try {
       await deleteCollectionCard(cardId);
+      setCards((prev) => prev.filter((c) => c.id !== cardId));
     } finally {
       setBusyId(null);
     }
@@ -394,6 +545,36 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
         </div>
       )}
 
+      {/* Scroll sentinel for infinite pagination */}
+      {hasMore && (
+        <div
+          ref={sentinelRef}
+          className="py-8 flex flex-col items-center justify-center text-slate-400 text-sm gap-2"
+          data-testid="collection-scroll-sentinel"
+        >
+          {isLoadingMore ? (
+            <div className="flex items-center gap-2 text-amber-400 font-medium">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+              <span>Cargando más cartas...</span>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadMoreCards()}
+              className="text-xs border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800"
+            >
+              Cargar más cartas ({cards.length} de {initialStats.uniqueCards || "..."})
+            </Button>
+          )}
+        </div>
+      )}
+      {!hasMore && cards.length >= PAGE_SIZE && (
+        <p className="text-center py-6 text-xs text-slate-500 font-mono">
+          Has cargado todas las cartas de tu colección ({cards.length} únicas).
+        </p>
+      )}
+
       {selectedCardForDetail && (
         <CardDetailDialog
           isOpen={Boolean(selectedCardForDetail)}
@@ -425,10 +606,12 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
             title="Ver todos los datos en español"
           >
             {card.imageUri ? (
-              <img
+              <Image
                 src={card.imageUri}
                 alt={card.cardName}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                fill
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 240px"
+                className="object-cover group-hover:scale-105 transition-transform duration-300"
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center text-slate-600">
@@ -451,6 +634,7 @@ export function CollectionView({ initialCards, initialStats }: CollectionViewPro
             >
               <h3 className="font-bold text-sm text-slate-100 group-hover:text-amber-300 transition-colors line-clamp-1 cursor-pointer">
                 {card.cardName}
+                {card.isFoil && <span className="ml-1 text-xs text-amber-300">Foil</span>}
               </h3>
             </CardPreviewHover>
           </div>

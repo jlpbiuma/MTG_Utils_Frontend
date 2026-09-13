@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import * as scryfallActions from "@/actions/scryfall";
+import * as deckActions from "@/actions/decks";
 
 vi.mock("@/actions/scryfall", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/actions/scryfall")>();
@@ -10,6 +11,10 @@ vi.mock("@/actions/scryfall", async (importOriginal) => {
     getCardDetails: vi.fn(),
   };
 });
+
+vi.mock("@/actions/decks", () => ({
+  updateDeckCardVersion: vi.fn().mockResolvedValue({ success: true }),
+}));
 
 describe("CardDetailDialog Component (Spanish MTG Details)", () => {
   const singleFacedCard: scryfallActions.SpanishCardDetails = {
@@ -36,6 +41,30 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
     image_uris: {
       normal: "https://example.com/bolt.jpg",
     },
+    printings: [
+      {
+        id: "bolt-123",
+        set_code: "m10",
+        set_name: "Magic 2010",
+        collector_number: "146",
+        rarity: "uncommon",
+        image_uri: "https://example.com/bolt-m10.jpg",
+        image_uri_small: "https://example.com/bolt-m10-small.jpg",
+        image_uri_large: "https://example.com/bolt-m10-large.jpg",
+        trend: 2.1,
+      },
+      {
+        id: "bolt-2ba",
+        set_code: "2ba",
+        set_name: "Masters 25",
+        collector_number: "77",
+        rarity: "uncommon",
+        image_uri: "https://example.com/bolt-2ba.jpg",
+        image_uri_small: "https://example.com/bolt-2ba-small.jpg",
+        image_uri_large: "https://example.com/bolt-2ba-large.jpg",
+        trend: 2.5,
+      },
+    ],
     card_faces: [],
     legalities: [
       { format: "commander", format_name: "Commander / EDH", status: "legal", status_es: "Legal" },
@@ -98,7 +127,7 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
     prices: { eur: "1.20" },
   };
 
-  it("should render complete card details in Spanish for single-faced card", async () => {
+  it("should render complete card details in Spanish with Versiones as the default tab", async () => {
     vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
 
     render(
@@ -125,17 +154,67 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/«Un rayo en cielo sereno.»/i)).toBeInTheDocument();
 
-    // Rarity and set metadata in Spanish
-    expect(screen.getByText("Infrecuente")).toBeInTheDocument();
-    expect(screen.getByText(/Magic 2010/i)).toBeInTheDocument();
-    expect(screen.getByText("#146")).toBeInTheDocument();
-    expect(screen.getByText("Christopher Moeller")).toBeInTheDocument();
+    // Versiones tab is active by default with thumbnails visible
+    expect(screen.getByText("Masters 25")).toBeInTheDocument();
+    expect(screen.getByText("#77")).toBeInTheDocument();
+    expect(screen.getByText("Estándar en mazo")).toBeInTheDocument();
+
+    // Switch to Legalidades tab
+    const legalitiesTab = screen.getByRole("tab", { name: /Legalidad/i });
+    fireEvent.mouseDown(legalitiesTab);
 
     // Legalities in Spanish
-    expect(screen.getByText("Commander / EDH")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Commander / EDH")).toBeInTheDocument();
+    });
     expect(screen.getAllByText("Legal").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Estándar")).toBeInTheDocument();
     expect(screen.getByText("No legal")).toBeInTheDocument();
+  });
+
+  it("should automatically select clicked version as standard and call onVersionSelect", async () => {
+    vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
+    const onVersionSelect = vi.fn();
+
+    render(
+      <CardDetailDialog
+        isOpen={true}
+        cardName="Lightning Bolt"
+        cardId="bolt-123"
+        deckId="deck-abc"
+        deckCardId="dc-123"
+        onVersionSelect={onVersionSelect}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Masters 25")).toBeInTheDocument();
+    });
+
+    // Click on Masters 25 version
+    const masters25Button = screen.getByText("Masters 25").closest("button");
+    expect(masters25Button).toBeInTheDocument();
+    fireEvent.click(masters25Button!);
+
+    // Should call updateDeckCardVersion action
+    await waitFor(() => {
+      expect(deckActions.updateDeckCardVersion).toHaveBeenCalledWith("deck-abc", "dc-123", {
+        cardScryfallId: "bolt-2ba",
+        imageUri: "https://example.com/bolt-2ba.jpg",
+        setCode: "2ba",
+        isCommander: undefined,
+      });
+    });
+
+    // Should call onVersionSelect callback
+    expect(onVersionSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "bolt-2ba", set_code: "2ba" })
+    );
+
+    // Feedback displayed
+    expect(
+      screen.getByText(/seleccionada como estándar del mazo/i)
+    ).toBeInTheDocument();
   });
 
   it("should toggle faces for double-faced cards (Transform / MDFC)", async () => {
@@ -169,5 +248,50 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
     expect(screen.getByText("Aberración insectil")).toBeInTheDocument();
     expect(screen.getByText("3/2")).toBeInTheDocument();
     expect(screen.getByText("Vuela.")).toBeInTheDocument();
+  });
+
+  it("should keep selected version and image active without glitching or reverting to initial version", async () => {
+    vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
+    const onVersionSelect = vi.fn();
+
+    render(
+      <CardDetailDialog
+        isOpen={true}
+        cardName="Lightning Bolt"
+        cardId="bolt-123"
+        imageUri="https://example.com/bolt-m10.jpg"
+        deckId="deck-abc"
+        deckCardId="dc-123"
+        onVersionSelect={onVersionSelect}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Masters 25")).toBeInTheDocument();
+    });
+
+    // Initial getCardDetails called once
+    expect(scryfallActions.getCardDetails).toHaveBeenCalledTimes(1);
+
+    // Main preview initially displays m10 image
+    const mainImage = screen.getByRole("img", { name: "Relámpago" });
+    expect(mainImage).toHaveAttribute("src", expect.stringContaining("bolt-m10"));
+
+    // Click Masters 25 version
+    const masters25Button = screen.getByText("Masters 25").closest("button");
+    expect(masters25Button).toBeInTheDocument();
+    fireEvent.click(masters25Button!);
+
+    // Should immediately switch to the new version's image
+    await waitFor(() => {
+      expect(mainImage).toHaveAttribute("src", expect.stringContaining("bolt-2ba"));
+    });
+
+    // Crucial: getCardDetails must not have been called a second time
+    expect(scryfallActions.getCardDetails).toHaveBeenCalledTimes(1);
+
+    // Image stays on the selected version and does not revert
+    expect(mainImage).toHaveAttribute("src", expect.stringContaining("bolt-2ba"));
+    expect(mainImage).not.toHaveAttribute("src", expect.stringContaining("bolt-m10"));
   });
 });

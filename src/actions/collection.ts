@@ -5,10 +5,35 @@ import { getCurrentUserId } from "./auth";
 import { backendFetch } from "@/lib/api-client";
 import { CollectionCardCreateInput, CollectionCardCreateSchema } from "@/lib/schemas";
 
-export async function getUserCollection(searchQuery?: string) {
+export interface GetUserCollectionOptions {
+  searchQuery?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function getUserCollection(
+  optionsOrQuery?: string | GetUserCollectionOptions
+) {
   const userId = await getCurrentUserId();
-  const queryParam = searchQuery ? `?query=${encodeURIComponent(searchQuery)}` : "";
-  return await backendFetch(`/api/collection${queryParam}`, { userId });
+  let query = "";
+  let limit: number | undefined;
+  let offset: number | undefined;
+
+  if (typeof optionsOrQuery === "string") {
+    query = optionsOrQuery;
+  } else if (optionsOrQuery) {
+    query = optionsOrQuery.searchQuery || "";
+    limit = optionsOrQuery.limit;
+    offset = optionsOrQuery.offset;
+  }
+
+  const params = new URLSearchParams();
+  if (query.trim()) params.set("query", query.trim());
+  if (limit !== undefined && limit !== null) params.set("limit", limit.toString());
+  if (offset !== undefined && offset !== null) params.set("offset", offset.toString());
+
+  const queryString = params.toString() ? `?${params.toString()}` : "";
+  return await backendFetch<any[]>(`/api/collection${queryString}`, { userId });
 }
 
 export async function getCollectionStats() {

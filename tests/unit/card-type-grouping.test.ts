@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   getCardCategory,
   groupCardsByType,
+  isBasicLand,
   CARD_TYPE_GROUPS,
 } from "@/lib/card-utils";
 import { PriceSummary } from "@/lib/pricing/types";
@@ -166,6 +167,7 @@ describe("Card Type Categorization & Grouping", () => {
       expect(creatureSection.completionPercentage).toBe(50); // 2/4 = 50%
       expect(creatureSection.sectionTotalPrice).toBe(60); // 15.0 * 4 = 60
       expect(creatureSection.sectionMissingPrice).toBe(30); // 15.0 * 2 = 30
+      expect(creatureSection.sectionOwnedPrice).toBe(30); // 15.0 * 2 = 30
       expect(creatureSection.currencySymbol).toBe("€");
     });
 
@@ -188,6 +190,7 @@ describe("Card Type Categorization & Grouping", () => {
       expect(instantSection.missingCards).toBe(0);
       expect(instantSection.sectionMissingPrice).toBe(0);
       expect(instantSection.sectionTotalPrice).toBe(10); // 2.5 * 4 = 10
+      expect(instantSection.sectionOwnedPrice).toBe(10); // 100% owned -> 10
     });
 
     it("groups lands using cardName heuristics when typeLine is missing/null", () => {
@@ -216,6 +219,144 @@ describe("Card Type Categorization & Grouping", () => {
       expect(sections[0].label).toBe("Tierras");
       expect(sections[0].totalCards).toBe(11);
       expect(sections[0].uniqueCards).toBe(2);
+    });
+
+    it("excludes basic lands from completion stats when option is enabled", () => {
+      const cards = [
+        {
+          cardName: "Mountain",
+          cardScryfallId: "scry-mountain",
+          typeLine: "Basic Land — Mountain",
+          quantity: 30,
+          ownedInCollection: 30,
+          missingCount: 0,
+        },
+        {
+          cardName: "Island",
+          cardScryfallId: "pending:island",
+          typeLine: "Basic Land — Island",
+          quantity: 20,
+          ownedInCollection: 0,
+          missingCount: 20,
+        },
+        {
+          cardName: "Command Tower",
+          cardScryfallId: "pending:command-tower",
+          typeLine: "Land",
+          quantity: 1,
+          ownedInCollection: 1,
+          missingCount: 0,
+        },
+        {
+          cardName: "Tarmogoyf",
+          cardScryfallId: "scry-goyf",
+          typeLine: "Creature — Lhurgoyf",
+          quantity: 4,
+          ownedInCollection: 2,
+          missingCount: 2,
+        },
+      ];
+
+      const sections = groupCardsByType(cards, mockPriceSummary, { excludeBasicLands: true });
+
+      const lands = sections.find((s) => s.key === "lands")!;
+      // Only Command Tower counts toward completion; basics never count
+      // in the numerator nor the denominator.
+      expect(lands.totalCards).toBe(1);
+      expect(lands.ownedCards).toBe(1);
+      expect(lands.missingCards).toBe(0);
+      expect(lands.completionPercentage).toBe(100);
+      // Basics remain visible in the section card list
+      expect(lands.cards.map((c) => c.cardName)).toEqual([
+        "Mountain",
+        "Island",
+        "Command Tower",
+      ]);
+      // Prices still include basic lands (Mountain 0.10 * 30 = 3.00)
+      expect(lands.sectionTotalPrice).toBe(3);
+
+      const creatures = sections.find((s) => s.key === "creatures")!;
+      expect(creatures.totalCards).toBe(4);
+      expect(creatures.missingCards).toBe(2);
+    });
+
+    it("keeps basic lands in completion stats when option is disabled", () => {
+      const cards = [
+        {
+          cardName: "Island",
+          cardScryfallId: "pending:island",
+          typeLine: "Basic Land — Island",
+          quantity: 20,
+          ownedInCollection: 0,
+          missingCount: 20,
+        },
+        {
+          cardName: "Command Tower",
+          cardScryfallId: "pending:command-tower",
+          typeLine: "Land",
+          quantity: 1,
+          ownedInCollection: 1,
+          missingCount: 0,
+        },
+      ];
+
+      const sections = groupCardsByType(cards, mockPriceSummary);
+      const lands = sections[0];
+      expect(lands.totalCards).toBe(21);
+      expect(lands.missingCards).toBe(20);
+      expect(lands.completionPercentage).toBe(4.8); // 1/21
+    });
+
+    it("treats sections made only of basic lands as fully complete", () => {
+      const cards = [
+        {
+          cardName: "Mountain",
+          cardScryfallId: "scry-mountain",
+          typeLine: "Basic Land — Mountain",
+          quantity: 30,
+          ownedInCollection: 0,
+          missingCount: 0,
+        },
+      ];
+
+      const sections = groupCardsByType(cards, mockPriceSummary, { excludeBasicLands: true });
+      const lands = sections[0];
+      expect(lands.totalCards).toBe(0);
+      expect(lands.completionPercentage).toBe(100);
+    });
+  });
+
+  describe("isBasicLand", () => {
+    it("detects basic lands via type line", () => {
+      expect(isBasicLand("Basic Land — Island", "Island")).toBe(true);
+      expect(isBasicLand("Basic Land — Snow-Covered Forest", "Snow-Covered Forest")).toBe(true);
+      expect(isBasicLand("Basic Land", "Wastes")).toBe(true);
+      // Names of the five basics are always basic lands regardless of type line
+      expect(isBasicLand("Land — Island", "Island")).toBe(true);
+      expect(isBasicLand("Land", "Command Tower")).toBe(false);
+      expect(isBasicLand("Creature — Merfolk", "Spellskite")).toBe(false);
+    });
+
+    it("detects basic lands by name when type line is missing", () => {
+      for (const name of [
+        "Plains",
+        "Island",
+        "Swamp",
+        "Mountain",
+        "Forest",
+        "Wastes",
+        "Snow-Covered Plains",
+        "Snow-Covered Island",
+        "Snow-Covered Swamp",
+        "Snow-Covered Mountain",
+        "Snow-Covered Forest",
+      ]) {
+        expect(isBasicLand(null, name)).toBe(true);
+        expect(isBasicLand("", name)).toBe(true);
+      }
+      expect(isBasicLand(null, "Command Tower")).toBe(false);
+      expect(isBasicLand(null, "Evolving Wilds")).toBe(false);
+      expect(isBasicLand(null, "Sol Ring")).toBe(false);
     });
   });
 });

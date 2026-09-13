@@ -1,49 +1,54 @@
 import React from "react";
 import { cn } from "@/lib/utils";
+import { ManaSymbol, isStandardManaColor } from "@/components/mana-symbol";
 
 interface ManaCostProps {
   manaCost?: string | null;
   className?: string;
+  size?: "xs" | "sm" | "md";
 }
 
-export function ManaCost({ manaCost, className }: ManaCostProps) {
+const SIZE_CONTAINER = {
+  xs: "h-3.5 min-w-[14px] text-[9px]",
+  sm: "h-4 min-w-[16px] text-[10px]",
+  md: "h-5 min-w-[20px] text-[11px]",
+};
+
+export function ManaCost({ manaCost, className, size = "md" }: ManaCostProps) {
   if (!manaCost) return null;
 
   // Extract all symbols like {3}, {W}, {U}, {B}, {R}, {G}, {W/P}, etc.
   const symbols = manaCost.match(/\{([^}]+)\}/g) || [];
 
-  const getSymbolStyle = (sym: string) => {
-    const clean = sym.replace(/[{}]/g, "").toUpperCase();
-
-    switch (clean) {
-      case "W":
-        return "bg-amber-100 text-amber-900 border-amber-300 font-black";
-      case "U":
-        return "bg-sky-500 text-slate-950 border-sky-300 font-black";
-      case "B":
-        return "bg-purple-900 text-purple-100 border-purple-700 font-black";
-      case "R":
-        return "bg-rose-600 text-white border-rose-400 font-black";
-      case "G":
-        return "bg-emerald-600 text-emerald-950 border-emerald-400 font-black";
-      case "C":
-        return "bg-slate-500 text-slate-950 border-slate-400 font-black";
-      default:
-        // Numeric or generic mana {1}, {2}, {X}, etc.
-        return "bg-slate-700 text-slate-200 border-slate-600 font-bold";
-    }
-  };
-
   return (
-    <div className={cn("inline-flex items-center gap-1 flex-wrap", className)}>
+    <span className={cn("inline-flex items-center gap-1 flex-wrap", className)}>
       {symbols.map((sym, idx) => {
         const text = sym.replace(/[{}]/g, "");
+        const clean = text.toUpperCase();
+
+        if (isStandardManaColor(clean)) {
+          return (
+            <span
+              key={idx}
+              className={cn(
+                "inline-flex items-center justify-center rounded-full shrink-0 shadow-xs select-none ring-1 ring-black/20",
+                size === "xs" ? "h-3.5 w-3.5" : size === "sm" ? "h-4 w-4" : "h-5 w-5"
+              )}
+              title={`Mana: ${text}`}
+              data-testid={`mana-symbol-${clean}`}
+            >
+              <ManaSymbol symbol={clean} className="h-full w-full" />
+              <span className="sr-only">{text}</span>
+            </span>
+          );
+        }
+
         return (
           <span
             key={idx}
             className={cn(
-              "inline-flex items-center justify-center h-5 min-w-[20px] px-1 rounded-full text-[11px] border shadow-xs leading-none select-none",
-              getSymbolStyle(sym)
+              "inline-flex items-center justify-center rounded-full px-1 font-black bg-[#CAC5C0] text-[#0D0F0F] ring-1 ring-black/20 shadow-xs leading-none select-none shrink-0",
+              SIZE_CONTAINER[size]
             )}
             title={`Mana: ${text}`}
           >
@@ -51,6 +56,7 @@ export function ManaCost({ manaCost, className }: ManaCostProps) {
           </span>
         );
       })}
-    </div>
+    </span>
   );
 }
+

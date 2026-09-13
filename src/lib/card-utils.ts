@@ -43,6 +43,40 @@ export const CARD_TYPE_GROUPS: Record<CardTypeCategory, CardTypeGroupInfo> = {
   other: { key: "other", label: "Otras Cartas", order: 9 },
 };
 
+const BASIC_LAND_NAMES = new Set([
+  "plains",
+  "island",
+  "swamp",
+  "mountain",
+  "forest",
+  "wastes",
+  "snow-covered plains",
+  "snow-covered island",
+  "snow-covered swamp",
+  "snow-covered mountain",
+  "snow-covered forest",
+]);
+
+/**
+ * Returns whether a card is one of the generic basic lands (Plains, Island,
+ * Swamp, Mountain, Forest, Wastes and their snow-covered forms). Basic lands
+ * are excluded from deck completion metrics: they don't count in the
+ * numerator (owned) nor the denominator (total).
+ */
+export function isBasicLand(
+  typeLine?: string | null,
+  cardName?: string | null
+): boolean {
+  if (typeLine) {
+    const lower = typeLine.toLowerCase();
+    if (lower.includes("basic land") || lower.includes("tierra básica")) return true;
+  }
+  if (cardName) {
+    return BASIC_LAND_NAMES.has(normalizeCardName(cardName));
+  }
+  return false;
+}
+
 /**
  * Categorizes an MTG card based on its type_line, with intelligent fallback
  * heuristics based on card name for basic and common lands when type_line is missing.
@@ -71,15 +105,7 @@ export function getCardCategory(
     const lowerName = cardName.toLowerCase().trim();
 
     // Basic lands
-    if (
-      lowerName === "plains" ||
-      lowerName === "island" ||
-      lowerName === "swamp" ||
-      lowerName === "mountain" ||
-      lowerName === "forest" ||
-      lowerName === "wastes" ||
-      lowerName.startsWith("snow-covered ")
-    ) {
+    if (isBasicLand(typeLine, cardName)) {
       return "lands";
     }
 
@@ -120,7 +146,17 @@ export interface GroupedCardSection<T> {
   completionPercentage: number;
   sectionTotalPrice: number;
   sectionMissingPrice: number;
+  sectionOwnedPrice: number;
   currencySymbol: string;
+}
+
+export interface GroupCardsOptions {
+  /**
+   * When true, basic lands are excluded from the section's completion stats
+   * (totalCards, ownedCards, missingCards, completionPercentage). They are
+   * still included in the cards list and in the price totals.
+   */
+  excludeBasicLands?: boolean;
 }
 
 /**
@@ -136,7 +172,8 @@ export function groupCardsByType<
     ownedInCollection?: number;
     missingCount?: number;
   }
->(cards: T[], priceSummary?: PriceSummary | null): GroupedCardSection<T>[] {
+>(cards: T[], priceSummary?: PriceSummary | null, options?: GroupCardsOptions): GroupedCardSection<T>[] {
+  const excludeBasicLands = options?.excludeBasicLands ?? false;
   const buckets = new Map<CardTypeCategory, T[]>();
 
   for (const card of cards) {
@@ -161,12 +198,18 @@ export function groupCardsByType<
     let sectionMissingPrice = 0;
 
     for (const card of catCards) {
-      totalCards += card.quantity;
+      const isBasic = excludeBasicLands && isBasicLand(card.typeLine, card.cardName);
       const owned = card.ownedInCollection ?? 0;
       const effectiveOwned = Math.min(owned, card.quantity);
-      ownedCards += effectiveOwned;
       const missing = card.missingCount ?? Math.max(0, card.quantity - owned);
-      missingCards += missing;
+
+      // Basic lands don't count toward completion: excluded from the
+      // numerator (owned) and the denominator (total).
+      if (!isBasic) {
+        totalCards += card.quantity;
+        ownedCards += effectiveOwned;
+        missingCards += missing;
+      }
 
       // Price calculation
       const norm = normalizeCardName(card.cardName);
@@ -179,8 +222,13 @@ export function groupCardsByType<
       sectionMissingPrice += trend * missing;
     }
 
+    // A section made only of basic lands has nothing left to complete.
     const completionPercentage =
-      totalCards > 0 ? Math.round((ownedCards / totalCards) * 1000) / 10 : 0;
+      totalCards > 0 ? Math.round((ownedCards / totalCards) * 1000) / 10 : 100;
+
+    const totalP = Math.round(sectionTotalPrice * 100) / 100;
+    const missP = Math.round(sectionMissingPrice * 100) / 100;
+    const ownedP = Math.round((totalP - missP) * 100) / 100;
 
     sections.push({
       key: cat,
@@ -192,8 +240,9 @@ export function groupCardsByType<
       ownedCards,
       missingCards,
       completionPercentage,
-      sectionTotalPrice: Math.round(sectionTotalPrice * 100) / 100,
-      sectionMissingPrice: Math.round(sectionMissingPrice * 100) / 100,
+      sectionTotalPrice: totalP,
+      sectionMissingPrice: missP,
+      sectionOwnedPrice: ownedP,
       currencySymbol,
     });
   }

@@ -25,7 +25,12 @@ export function CardSortingBar({
     { field: "cmc", label: "Coste / CMC" },
     { field: "type", label: "Tipo" },
     { field: "quantity", label: "Cantidad" },
-    ...(showStatusOption ? [{ field: "status" as SortField, label: "Estado / Asignación" }] : []),
+    ...(showStatusOption
+      ? [
+          { field: "status" as SortField, label: "Estado / Asignación" },
+          { field: "requested_decks" as SortField, label: "Más solicitada" },
+        ]
+      : []),
   ];
 
   const handleFieldClick = (field: SortField) => {
@@ -33,8 +38,8 @@ export function CardSortingBar({
       // Toggle direction
       onSortChange(field, currentDirection === "asc" ? "desc" : "asc");
     } else {
-      // Default to asc for name/cmc/type, desc for price/quantity
-      const defaultDesc = field.startsWith("price") || field === "quantity";
+      // Default to asc for name/cmc/type, desc for price/quantity/requested_decks
+      const defaultDesc = field.startsWith("price") || field === "quantity" || field === "requested_decks";
       onSortChange(field, defaultDesc ? "desc" : "asc");
     }
   };

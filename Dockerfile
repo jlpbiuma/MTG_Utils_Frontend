@@ -16,28 +16,14 @@ COPY prisma ./prisma/
 RUN npm ci
 
 # -----------------------------------------------------------------------------
-# Development Runner Stage (for active local development with hot-reload)
-# -----------------------------------------------------------------------------
-FROM base AS dev
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN npx prisma generate
-
-EXPOSE 3000
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-CMD ["npm", "run", "dev"]
-
-# -----------------------------------------------------------------------------
 # Production Builder & Runner Stage
 # -----------------------------------------------------------------------------
 FROM base AS builder
 WORKDIR /app
+ARG IMAGE_SERVICE_URL
+ENV IMAGE_SERVICE_URL=${IMAGE_SERVICE_URL}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate
 RUN npm run build
 
 FROM base AS runner

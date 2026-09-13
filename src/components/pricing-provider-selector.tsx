@@ -114,7 +114,12 @@ export function PricingProviderSelector({
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
             <span className="text-xl font-black font-mono text-emerald-400">
-              {summary ? (summary.totalOwnedValue ?? 0).toFixed(2) : "..."}
+              {summary
+                ? (
+                    summary.totalOwnedValue ??
+                    Math.max(0, summary.totalNetValue - (summary.totalMissingValue ?? 0))
+                  ).toFixed(2)
+                : "..."}
             </span>
             <span className="text-xs font-mono text-emerald-500">{currencySymbol}</span>
           </div>

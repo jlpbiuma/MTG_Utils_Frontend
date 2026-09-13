@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPriceSummary, PriceProvider } from "@/lib/pricing";
-import { getDeckPriceSummary, getCollectionPriceSummary } from "@/actions/pricing";
+import { getDeckPriceSummary, getCollectionPriceSummary, getCardsPriceSummary } from "@/actions/pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     }
 
     if (Array.isArray(body.cards)) {
-      const summary = await getPriceSummary(body.cards, provider, bypassCache);
+      const summary = await getCardsPriceSummary(body.cards, provider, bypassCache);
       return NextResponse.json({ success: true, summary });
     }
 

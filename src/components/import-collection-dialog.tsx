@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   UploadCloud,
   FileText,
@@ -18,10 +18,33 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { importCollectionFromText } from "@/actions/import";
+import { importCollectionFromText, getCollectionImportProgress, retryCollectionImport } from "@/actions/import";
 
 export function ImportCollectionDialog() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [retryVersion, setRetryVersion] = useState(0);
+  const attemptRef = useRef<{ text: string; key: string } | null>(null);
+  const [importId, setImportId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<Awaited<ReturnType<typeof getCollectionImportProgress>> | null>(null);
+  useEffect(() => {
+    if (!importId) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const value = await getCollectionImportProgress(importId);
+        if (cancelled) return;
+        setProgress(value);
+        if (value.pending === 0) return;
+      } catch {
+        // Poll errors do not imply the durable import failed.
+      }
+      if (!cancelled) timer = setTimeout(poll, 3000);
+    };
+    void poll();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [importId, retryVersion]);
 
   const [open, setOpen] = useState(false);
   const [collectionText, setCollectionText] = useState("");
@@ -58,7 +81,22 @@ export function ImportCollectionDialog() {
     setSuccessResult(null);
 
     try {
-      const res = await importCollectionFromText(collectionText);
+      const hash = crypto.subtle ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(collectionText))))
+        .map((byte) => byte.toString(16).padStart(2, "0")).join("") : null;
+      let attempt: { hash: string; key: string } | null = null;
+      try { attempt = JSON.parse(localStorage.getItem("mtg-collection-import-attempt") ?? "null"); } catch { /* storage unavailable */ }
+      const key = hash && attempt?.hash === hash && typeof attempt.key === "string" ? attempt.key
+        : attemptRef.current?.text === collectionText ? attemptRef.current.key
+        : Array.from(crypto.getRandomValues(new Uint8Array(16))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+      attemptRef.current = { text: collectionText, key };
+      if (hash) {
+        try { localStorage.setItem("mtg-collection-import-attempt", JSON.stringify({ hash, key })); } catch { /* retain memory key */ }
+      }
+      const res = await importCollectionFromText(collectionText, key);
+      try { localStorage.removeItem("mtg-collection-import-attempt"); } catch { /* storage unavailable */ }
+      attemptRef.current = null;
+      setProgress(null);
+      setImportId(res.importId);
       setSuccessResult(res);
       setCollectionText("");
     } catch (err: unknown) {
@@ -99,7 +137,22 @@ export function ImportCollectionDialog() {
           <div className="p-3.5 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs flex items-start gap-2 mt-2">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
             <div>
-              <strong>¡Importación completada!</strong> Se añadieron {successResult.totalImported} copias ({successResult.uniqueImported} cartas únicas) a tu inventario.
+              <strong>Colección guardada.</strong> Se añadieron {successResult.totalImported} copias ({successResult.uniqueImported} variantes) a tu inventario.
+              {progress ? (
+                <p className="mt-2" aria-live="polite">
+                  {progress.completed} resueltas · {progress.pending} pendientes
+                  {progress.notFound > 0 && ` · ${progress.notFound} no encontradas`}
+                  {progress.ambiguous > 0 && ` · ${progress.ambiguous} necesitan edición y número`}
+                  {progress.failed > 0 && ` · ${progress.failed} con error`}
+                  {progress.enriching > 0 && ` (${progress.enriching} completando imágenes y detalles)`}
+                </p>
+              ) : <p className="mt-2">Comprobando el enriquecimiento de las cartas…</p>}
+              {importId && progress && progress.failed + progress.notFound > 0 && (
+                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={async () => {
+                  try { setProgress(await retryCollectionImport(importId)); setRetryVersion((value) => value + 1); }
+                  catch { setError("No se pudo solicitar el reintento. Tu colección sigue guardada."); }
+                }}>Reintentar pendientes con error</Button>
+              )}
             </div>
           </div>
         )}

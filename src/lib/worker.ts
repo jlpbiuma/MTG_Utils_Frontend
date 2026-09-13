@@ -71,7 +71,7 @@ export async function processPendingCardsWorker(options?: {
           ],
         },
         take: maxTotal,
-        select: { id: true, cardName: true, userId: true, quantity: true },
+        select: { id: true, cardName: true, userId: true, quantity: true, isFoil: true, enrichmentKey: true },
       }),
     ]);
 
@@ -173,6 +173,7 @@ export async function processPendingCardsWorker(options?: {
       }
 
       for (const collCard of pendingCollectionCards) {
+        if (collCard.enrichmentKey) continue;
         const cached = cacheMap.get(normalizeCardName(collCard.cardName));
         if (cached) {
           try {
@@ -180,6 +181,7 @@ export async function processPendingCardsWorker(options?: {
               where: {
                 userId_cardScryfallId: {
                   userId: collCard.userId,
+                  isFoil: collCard.isFoil,
                   cardScryfallId: cached.id,
                 },
               },
@@ -244,6 +246,8 @@ export async function processPendingCardsWorker(options?: {
           const foundCards: Array<{
             id: string;
             name: string;
+            layout?: string;
+            set_type?: string;
             mana_cost?: string;
             type_line?: string;
             image_uris?: { normal?: string; small?: string };
@@ -262,6 +266,19 @@ export async function processPendingCardsWorker(options?: {
 
           // Process and persist newly resolved cards
           for (const card of foundCards) {
+            // Guard: Never process or store art series / memorabilia cards
+            if (
+              card.layout === "art_series" ||
+              card.layout === "front_card" ||
+              card.layout === "token" ||
+              card.set_type === "memorabilia" ||
+              card.type_line === "Card" ||
+              card.type_line === "Card // Card" ||
+              (card.set && card.set.length === 4 && card.set.startsWith("a"))
+            ) {
+              continue;
+            }
+
             const imageUri =
               card.image_uris?.normal ||
               card.image_uris?.small ||
@@ -363,11 +380,13 @@ export async function processPendingCardsWorker(options?: {
               });
 
               for (const cc of pendingCcs) {
+                if (cc.enrichmentKey) continue;
                 try {
                   const existing = await prisma.collectionCard.findUnique({
                     where: {
                       userId_cardScryfallId: {
                         userId: cc.userId,
+                        isFoil: cc.isFoil,
                         cardScryfallId: card.id,
                       },
                     },

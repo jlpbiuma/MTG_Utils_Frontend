@@ -45,13 +45,14 @@ describe("EditDeckDialog Component", () => {
       format: "Commander / EDH",
       description: "Angels and Demons combo",
       commander: "Avacyn, Angel of Hope",
+      commanderScryfallId: null,
       commanderImageUri: "https://cards.scryfall.io/avacyn.jpg",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
       totalCards: 100,
       uniqueCards: 100,
       ownedCards: 90,
-      missingCards: 10,
+      missingCardsCount: 10,
       completionPercentage: 90,
     });
 

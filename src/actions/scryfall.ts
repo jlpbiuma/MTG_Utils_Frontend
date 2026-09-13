@@ -106,6 +106,35 @@ export interface SpanishCardLegality {
   status_es: string;
 }
 
+export interface CardPrintingDetail {
+  id: string;
+  set_code: string;
+  set_name?: string | null;
+  collector_number: string;
+  rarity?: string | null;
+  name_es?: string | null;
+  image_uri?: string | null;
+  image_uri_small?: string | null;
+  image_uri_large?: string | null;
+  trend?: number | null;
+  min?: number | null;
+  max?: number | null;
+  cardtrader_trend?: number | null;
+  cardtrader_min?: number | null;
+  cardtrader_max?: number | null;
+  price_eur?: number | null;
+  price_eur_foil?: number | null;
+  price_usd?: number | null;
+  price_usd_foil?: number | null;
+  released_at?: string | null;
+}
+
+export interface CardRulingDetail {
+  date: string;
+  text: string;
+  source?: string;
+}
+
 export interface SpanishCardFace {
   name: string;
   name_es: string;
@@ -166,6 +195,8 @@ export interface SpanishCardDetails {
     usd?: string | null;
     usd_foil?: string | null;
   };
+  printings?: CardPrintingDetail[];
+  rulings?: CardRulingDetail[];
 }
 
 export async function getCardDetails(params: {
