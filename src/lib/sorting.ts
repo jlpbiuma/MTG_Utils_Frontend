@@ -130,3 +130,30 @@ export function sortCards<T extends SortableCard>(
     }
   });
 }
+
+/**
+ * Checks if a card passes the min/max price filter.
+ * Returns true if it passes, false if excluded.
+ */
+export function matchesPriceFilter(
+  cardName: string,
+  cardScryfallId: string | undefined,
+  minPrice: number | null,
+  maxPrice: number | null,
+  priceQuotes?: Record<string, any> | null
+): boolean {
+  if (minPrice == null && maxPrice == null) return true;
+
+  const quote =
+    (cardScryfallId ? priceQuotes?.[cardScryfallId] : undefined) ||
+    priceQuotes?.[normalizeCardName(cardName)];
+
+  const price = quote?.unitPrice?.trend ?? quote?.subtotal;
+  if (price == null || isNaN(price)) return false;
+
+  if (minPrice != null && price < minPrice) return false;
+  if (maxPrice != null && price > maxPrice) return false;
+
+  return true;
+}
+

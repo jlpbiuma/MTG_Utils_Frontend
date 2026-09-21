@@ -3,13 +3,14 @@
 import React from "react";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { SortField, SortDirection } from "@/lib/sorting";
-import { Button } from "@/components/ui/button";
 
 interface CardSortingBarProps {
   currentField: SortField;
   currentDirection: SortDirection;
   onSortChange: (field: SortField, direction: SortDirection) => void;
   showStatusOption?: boolean;
+  showRequestedDecksOption?: boolean;
+  requestedDecksLabel?: string;
 }
 
 export function CardSortingBar({
@@ -17,6 +18,8 @@ export function CardSortingBar({
   currentDirection,
   onSortChange,
   showStatusOption = false,
+  showRequestedDecksOption = false,
+  requestedDecksLabel = "Se pide en",
 }: CardSortingBarProps) {
   const sortOptions: Array<{ field: SortField; label: string }> = [
     { field: "name", label: "Nombre" },
@@ -30,6 +33,9 @@ export function CardSortingBar({
           { field: "status" as SortField, label: "Estado / Asignación" },
           { field: "requested_decks" as SortField, label: "Más solicitada" },
         ]
+      : []),
+    ...(showRequestedDecksOption && !showStatusOption
+      ? [{ field: "requested_decks" as SortField, label: requestedDecksLabel }]
       : []),
   ];
 
@@ -45,9 +51,9 @@ export function CardSortingBar({
   };
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-400 py-2">
-      <span className="flex items-center gap-1 text-slate-400 font-medium mr-1">
-        <ArrowUpDown className="h-3.5 w-3.5 text-amber-400" />
+    <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground py-2">
+      <span className="flex items-center gap-1 text-muted-foreground font-medium mr-1">
+        <ArrowUpDown className="h-3.5 w-3.5 text-primary" />
         Ordenar por:
       </span>
 
@@ -60,13 +66,13 @@ export function CardSortingBar({
               onClick={() => handleFieldClick(opt.field)}
               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md transition-all font-medium border text-xs ${
                 isActive
-                  ? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm shadow-amber-500/10"
-                  : "bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700"
+                  ? "bg-primary/20 text-primary border-primary/30"
+                  : "bg-secondary text-muted-foreground border-border hover:text-foreground hover:border-border"
               }`}
             >
               <span>{opt.label}</span>
               {isActive && (
-                <span className="text-amber-400 font-bold">
+                <span className="text-primary font-bold">
                   {currentDirection === "asc" ? (
                     <ArrowUp className="h-3 w-3" />
                   ) : (

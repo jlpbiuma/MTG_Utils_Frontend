@@ -1,65 +1,61 @@
 import Link from "next/link";
-import { Sparkles, Layers, Library, User, LogIn, LogOut } from "lucide-react";
+import { LogIn, LogOut } from "lucide-react";
 import { getCurrentUser, signOutUser } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
+
+const navLinks = [
+  { href: "/decks", label: "Mazos" },
+  { href: "/collection", label: "Colección" },
+  { href: "/priorities", label: "Prioridades" },
+  { href: "/wants", label: "Wants" },
+  { href: "/prices", label: "Precios" },
+  { href: "/account", label: "Cuenta" },
+] as const;
 
 export async function Navbar() {
   const user = await getCurrentUser();
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/75 backdrop-blur-md">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+    <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
+      <div className="container mx-auto px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-8">
-          <Link href="/decks" className="flex items-center gap-2 group">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-500 via-amber-600 to-amber-700 flex items-center justify-center text-slate-950 shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-amber-300 via-amber-200 to-white bg-clip-text text-transparent">
-                MTG Utils
-              </span>
-              <span className="text-[10px] block font-mono text-amber-500/80 -mt-1 tracking-widest uppercase">
-                Deck & Collection
-              </span>
-            </div>
+          <Link
+            href="/decks"
+            className="flex items-center gap-2 text-foreground hover:opacity-80 transition-opacity"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-background text-[11px] font-semibold tracking-tight">
+              M
+            </span>
+            <span className="font-medium text-sm tracking-tight">MTG Utils</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">
-            <Link
-              href="/decks"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-900 transition-colors"
-            >
-              <Layers className="h-4 w-4 text-amber-400" />
-              Mis Mazos
-            </Link>
-            <Link
-              href="/collection"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-900 transition-colors"
-            >
-              <Library className="h-4 w-4 text-sky-400" />
-              Mi Colección
-            </Link>
-            <Link
-              href="/account"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-900 transition-colors"
-            >
-              <User className="h-4 w-4 text-purple-400" />
-              Mi Cuenta
-            </Link>
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {link.label}
+              </Link>
+            ))}
           </nav>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {user.isAuthenticated ? (
-            <div className="flex items-center gap-3">
+            <>
               <Link
                 href="/account"
-                className="flex items-center gap-2 px-3 py-1 rounded-full border border-slate-800 bg-slate-900/60 hover:bg-slate-800/80 hover:border-slate-700 transition-colors text-xs text-slate-300"
+                className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#333] transition-colors"
                 title="Ver detalles de mi cuenta"
               >
-                <div className={`h-2 w-2 rounded-full ${user.mode === "demo" ? "bg-amber-400" : "bg-emerald-400"} animate-pulse`} />
-                <span className="hidden sm:inline font-mono">{user.email}</span>
-                <span className="sm:hidden font-mono">{user.name}</span>
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    user.mode === "demo" ? "bg-muted-foreground" : "bg-success"
+                  }`}
+                />
+                <span className="font-mono max-w-[140px] truncate">{user.email}</span>
               </Link>
 
               <form action={signOutUser}>
@@ -67,19 +63,19 @@ export async function Navbar() {
                   type="submit"
                   variant="ghost"
                   size="sm"
-                  className="h-8 px-2.5 text-xs text-slate-400 hover:text-rose-300 hover:bg-rose-950/20 gap-1.5"
+                  className="h-8 px-2.5 text-xs gap-1.5"
                   title="Cerrar sesión"
                 >
                   <LogOut className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Cerrar Sesión</span>
+                  <span className="hidden sm:inline">Salir</span>
                 </Button>
               </form>
-            </div>
+            </>
           ) : (
-            <Button asChild variant="mana" size="sm" className="gap-1.5">
+            <Button asChild size="sm" className="gap-1.5 h-8">
               <Link href="/login">
                 <LogIn className="h-3.5 w-3.5" />
-                Iniciar Sesión
+                Iniciar sesión
               </Link>
             </Button>
           )}

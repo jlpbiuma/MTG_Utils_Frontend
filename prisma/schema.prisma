@@ -17,6 +17,7 @@ model Deck {
   commander           String?
   commanderScryfallId String?    @map("commander_scryfall_id")
   commanderImageUri   String?    @map("commander_image_uri")
+  isArchived          Boolean    @default(false) @map("is_archived")
   createdAt           DateTime   @default(now()) @map("created_at")
   updatedAt           DateTime   @updatedAt @map("updated_at")
   cards               DeckCard[]
@@ -64,6 +65,24 @@ model CollectionCard {
   @@index([enrichmentKey])
   @@index([userId])
   @@map("user_collections")
+}
+
+model WantCard {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  cardScryfallId  String   @map("card_scryfall_id")
+  cardName        String   @map("card_name")
+  quantity        Int      @default(1)
+  setCode         String?  @map("set_code")
+  collectorNumber String?  @map("collector_number")
+  manaCost        String?  @map("mana_cost")
+  typeLine        String?  @map("type_line")
+  imageUri        String?  @map("image_uri")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([userId, cardScryfallId], name: "userId_cardScryfallId_want")
+  @@index([userId])
+  @@map("user_wants")
 }
 
 model CardCatalog {
@@ -275,3 +294,35 @@ model ScryfallBulkState {
   updatedAt DateTime @default(now()) @map("updated_at")
   @@map("scryfall_bulk_state")
 }
+
+model SimulatedCollection {
+  id          String          @id @default(uuid())
+  userId      String          @map("user_id")
+  name        String
+  description String?
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @default(now()) @updatedAt @map("updated_at")
+  cards       SimulatedCard[]
+
+  @@index([userId])
+  @@map("simulated_collections")
+}
+
+model SimulatedCard {
+  id                    String              @id @default(uuid())
+  simulatedCollectionId String              @map("simulated_collection_id")
+  cardScryfallId        String?             @map("card_scryfall_id")
+  cardName              String              @map("card_name")
+  quantity              Int                 @default(1)
+  setCode               String?             @map("set_code")
+  collectorNumber       String?             @map("collector_number")
+  manaCost              String?             @map("mana_cost")
+  typeLine              String?             @map("type_line")
+  imageUri              String?             @map("image_uri")
+  price                 Float?              @map("price")
+  simulatedCollection   SimulatedCollection @relation(fields: [simulatedCollectionId], references: [id], onDelete: Cascade)
+
+  @@index([simulatedCollectionId])
+  @@map("simulated_cards")
+}
+

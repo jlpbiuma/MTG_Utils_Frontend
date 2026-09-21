@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
+import { EnrichmentProgressBanner } from "@/components/enrichment-progress-banner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,13 +30,14 @@ export default function RootLayout({
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} dark antialiased`}
     >
-      <body className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-amber-500/30 selection:text-amber-200">
+      <body className="min-h-screen flex flex-col bg-background text-foreground font-sans selection:bg-foreground/15 selection:text-foreground">
         <Navbar />
+        <EnrichmentProgressBanner />
         <main className="flex-1">{children}</main>
-        <footer className="border-t border-slate-900 bg-slate-950/80 py-6 text-center text-xs text-slate-500">
-          <div className="container mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-            <p>MTG Utils © 2026. Datos de cartas provistos por la API de Scryfall.</p>
-            <p className="text-slate-600">
+        <footer className="border-t border-border py-8 mt-auto">
+          <div className="container mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+            <p>MTG Utils © 2026 · Datos de Scryfall</p>
+            <p className="text-muted-foreground/60">
               Magic: The Gathering es marca registrada de Wizards of the Coast.
             </p>
           </div>

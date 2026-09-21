@@ -9,13 +9,17 @@ const BACKEND_URL =
 
 interface BackendFetchOptions extends RequestInit {
   userId?: string;
+  next?: {
+    revalidate?: number | false;
+    tags?: string[];
+  };
 }
 
 export async function backendFetch<T = any>(
   path: string,
   options: BackendFetchOptions = {}
 ): Promise<T> {
-  const { userId, headers = {}, ...rest } = options;
+  const { userId, headers = {}, cache, next, ...rest } = options;
   const url = `${BACKEND_URL}${path}`;
 
   const requestHeaders: Record<string, string> = {
@@ -48,11 +52,22 @@ export async function backendFetch<T = any>(
   }
 
   try {
-    const res = await fetch(url, {
+    const fetchOptions: RequestInit = {
       ...rest,
       headers: requestHeaders,
-      cache: "no-store",
-    });
+    };
+
+    if (cache) {
+      fetchOptions.cache = cache;
+    } else if (!next?.revalidate) {
+      fetchOptions.cache = "no-store";
+    }
+
+    if (next) {
+      (fetchOptions as any).next = next;
+    }
+
+    const res = await fetch(url, fetchOptions);
 
     if (!res.ok) {
       const errorText = typeof res.text === "function" ? await res.text().catch(() => "") : "";

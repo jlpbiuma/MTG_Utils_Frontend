@@ -280,7 +280,7 @@ describe("Card Type Categorization & Grouping", () => {
       expect(creatures.missingCards).toBe(2);
     });
 
-    it("keeps basic lands in completion stats when option is disabled", () => {
+    it("counts basic lands in completion stats as 100% owned without needing collection assignment", () => {
       const cards = [
         {
           cardName: "Island",
@@ -288,23 +288,25 @@ describe("Card Type Categorization & Grouping", () => {
           typeLine: "Basic Land — Island",
           quantity: 20,
           ownedInCollection: 0,
-          missingCount: 20,
+          missingCount: 0,
         },
         {
           cardName: "Command Tower",
           cardScryfallId: "pending:command-tower",
           typeLine: "Land",
           quantity: 1,
-          ownedInCollection: 1,
-          missingCount: 0,
+          ownedInCollection: 0,
+          missingCount: 1,
         },
       ];
 
       const sections = groupCardsByType(cards, mockPriceSummary);
       const lands = sections[0];
       expect(lands.totalCards).toBe(21);
-      expect(lands.missingCards).toBe(20);
-      expect(lands.completionPercentage).toBe(4.8); // 1/21
+      // Basics are always owned (20), only Command Tower is missing (1)
+      expect(lands.missingCards).toBe(1);
+      expect(lands.ownedCards).toBe(20);
+      expect(lands.completionPercentage).toBe(95.2); // 20/21 = 95.2%
     });
 
     it("treats sections made only of basic lands as fully complete", () => {

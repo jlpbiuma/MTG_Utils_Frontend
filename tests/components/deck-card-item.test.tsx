@@ -99,7 +99,24 @@ describe("DeckCardItem Component", () => {
     expect(screen.getByText("Neto Total")).toBeInTheDocument();
     expect(screen.getByText("Faltantes")).toBeInTheDocument();
     expect(screen.getByText("Posesión")).toBeInTheDocument();
-    expect(screen.getByText("WU")).toBeInTheDocument();
+    // Color text string (e.g. "WU") should no longer be rendered
+    expect(screen.queryByText("WU")).not.toBeInTheDocument();
+  });
+
+  it("should display a warning badge when deck totalCards is not 100", () => {
+    const deckWithOver100: DeckWithCompletion = {
+      ...baseDeck,
+      totalCards: 102,
+    };
+    const { rerender } = render(<DeckCardItem deck={deckWithOver100} />);
+    expect(screen.getByText("102/100")).toBeInTheDocument();
+
+    const deckWith100: DeckWithCompletion = {
+      ...baseDeck,
+      totalCards: 100,
+    };
+    rerender(<DeckCardItem deck={deckWith100} />);
+    expect(screen.queryByText("100/100")).not.toBeInTheDocument();
   });
 
   it("should derive owned value from total minus missing when not provided", () => {

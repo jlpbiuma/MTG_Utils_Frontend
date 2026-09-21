@@ -64,16 +64,50 @@ export async function updateDeck(
   return updated as any;
 }
 
-export async function deleteDeck(deckId: string): Promise<{ success: boolean }> {
+export interface DominoCandidate {
+  cardName: string;
+  cardScryfallId: string;
+  releasedQuantity: number;
+  targetDeckId: string;
+  targetDeckName: string;
+  targetDeckCardId: string;
+  targetDeckCompletion: number;
+  neededQuantity: number;
+  canReassign: number;
+}
+
+export interface DeckDeletionImpact {
+  deckId: string;
+  deckName: string;
+  totalAssignedCards: number;
+  uniqueAssignedCards: number;
+  dominoCandidates: DominoCandidate[];
+}
+
+export async function getDeckDeletionImpact(deckId: string): Promise<DeckDeletionImpact> {
   const userId = await getCurrentUserId();
-  await backendFetch(`/api/decks/${deckId}`, {
+  return await backendFetch<DeckDeletionImpact>(
+    `/api/decks/${encodeURIComponent(deckId)}/deletion-impact`,
+    { method: "GET", userId }
+  );
+}
+
+export async function deleteDeck(
+  deckId: string,
+  reassignments?: { targetDeckCardId: string; quantity: number }[]
+): Promise<{ success: boolean }> {
+  const userId = await getCurrentUserId();
+  await backendFetch(`/api/decks/${encodeURIComponent(deckId)}`, {
     method: "DELETE",
+    body: JSON.stringify({ reassignments: reassignments || [] }),
     userId,
   });
 
   revalidatePath("/decks");
+  revalidatePath("/collection");
   return { success: true };
 }
+
 
 export async function setDeckCommander(
   deckId: string,
@@ -169,6 +203,96 @@ export async function removeCardFromDeck(deckCardId: string): Promise<{ success:
   return { success: true };
 }
 
+export async function updateDeckCardTags(
+  cardId: string,
+  tags: string[],
+  deckId?: string
+): Promise<{ success: boolean; tags: string[] }> {
+  const userId = await getCurrentUserId();
+  const res = await backendFetch<{ status: string; cardId: string; tags: string[] }>(
+    `/api/decks/cards/${cardId}/tags`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ tags }),
+      userId,
+    }
+  );
+
+  if (deckId) {
+    revalidatePath(`/decks/${deckId}`);
+  }
+  revalidatePath("/decks");
+  return { success: true, tags: res.tags };
+}
+
+export async function updateDeckTags(
+  deckId: string,
+  tags: string[]
+): Promise<{ success: boolean; tags: string[] }> {
+  const userId = await getCurrentUserId();
+  const res = await backendFetch<{ status: string; deckId: string; tags: string[] }>(
+    `/api/decks/${deckId}/tags`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ tags }),
+      userId,
+    }
+  );
+
+  revalidatePath(`/decks/${deckId}`);
+  revalidatePath("/decks");
+  return { success: true, tags: res.tags };
+}
+
+export async function removeCardFromDeckByName(
+  deckId: string,
+  cardName: string
+): Promise<{ success: boolean }> {
+  const userId = await getCurrentUserId();
+  const deck = await backendFetch<any>(`/api/decks/${deckId}`, { userId });
+  if (deck && deck.cards) {
+    const norm = cardName.trim().toLowerCase();
+    const found = deck.cards.find(
+      (c: any) => c.cardName?.trim().toLowerCase() === norm
+    );
+    if (found) {
+      await backendFetch(`/api/decks/cards/${found.id}`, {
+        method: "DELETE",
+        userId,
+      });
+      revalidatePath(`/decks/${deckId}`);
+      revalidatePath("/decks");
+      return { success: true };
+    }
+  }
+  return { success: false };
+}
+
+export async function unassignCardFromDeckByName(
+  deckId: string,
+  cardName: string
+): Promise<{ success: boolean }> {
+  const userId = await getCurrentUserId();
+  const deck = await backendFetch<any>(`/api/decks/${deckId}`, { userId });
+  if (deck && deck.cards) {
+    const norm = cardName.trim().toLowerCase();
+    const found = deck.cards.find(
+      (c: any) => c.cardName?.trim().toLowerCase() === norm
+    );
+    if (found) {
+      await backendFetch(`/api/decks/cards/${found.id}/release`, {
+        method: "POST",
+        body: JSON.stringify({ quantity: 1 }),
+        userId,
+      });
+      revalidatePath(`/decks/${deckId}`);
+      revalidatePath("/decks");
+      return { success: true };
+    }
+  }
+  return { success: false };
+}
+
 export async function assignCollectionCardToDeck(
   deckCardId: string,
   quantityToAssign: number = 1
@@ -226,6 +350,26 @@ export async function addMissingCardsToCollection(
   });
 
   revalidatePath(`/decks/${deckId}`);
+  revalidatePath("/decks");
+  revalidatePath("/collection");
+  return { success: true, addedCount: res.addedCount };
+}
+
+export async function addMissingCardToCollection(
+  deckId: string,
+  deckCardId: string
+): Promise<{ success: boolean; addedCount: number }> {
+  const userId = await getCurrentUserId();
+  const res = await backendFetch<{ status: string; addedCount: number }>(
+    `/api/decks/cards/${deckCardId}/add-missing`,
+    {
+      method: "POST",
+      userId,
+    }
+  );
+
+  revalidatePath(`/decks/${deckId}`);
+  revalidatePath("/decks");
   revalidatePath("/collection");
   return { success: true, addedCount: res.addedCount };
 }
@@ -234,3 +378,89 @@ export async function addMissingCardsToCollection(
 export const assignCardToDeck = assignCollectionCardToDeck;
 export const unassignCardFromDeck = releaseCollectionCardFromDeck;
 export const reassignCardToDeck = reassignCardFromOtherDeck;
+
+export interface DeckOverlapSharedCard {
+  cardName: string;
+  cardScryfallId: string;
+  imageUri: string | null;
+  manaCost: string | null;
+  typeLine: string | null;
+  deckACardId: string;
+  deckAQuantity: number;
+  deckAAssigned: number;
+  deckBCardId: string;
+  deckBQuantity: number;
+  deckBAssigned: number;
+}
+
+export interface DeckOverlapPair {
+  deckAId: string;
+  deckAName: string;
+  deckBId: string;
+  deckBName: string;
+  sharedCount: number;
+  overlapPercentage: number;
+  sharedCards: DeckOverlapSharedCard[];
+}
+
+export interface DeckOverlapSummary {
+  id: string;
+  name: string;
+  commander: string | null;
+  commanderImageUri: string | null;
+  colors: string[];
+  totalCards: number;
+  nonBasicCardsCount: number;
+}
+
+export interface DecksOverlapResponse {
+  decks: DeckOverlapSummary[];
+  pairs: DeckOverlapPair[];
+}
+
+export async function getDecksOverlap(): Promise<DecksOverlapResponse> {
+  const userId = await getCurrentUserId();
+  return await backendFetch<DecksOverlapResponse>("/api/decks/overlap", {
+    method: "GET",
+    userId,
+  });
+}
+
+export async function archiveDeck(
+  deckId: string,
+  isArchived: boolean = true
+): Promise<{ success: boolean }> {
+  const userId = await getCurrentUserId();
+  await backendFetch(`/api/decks/${encodeURIComponent(deckId)}/archive?archived=${isArchived}`, {
+    method: "PATCH",
+    userId,
+  });
+
+  revalidatePath("/decks");
+  revalidatePath(`/decks/${deckId}`);
+  revalidatePath("/priorities");
+  revalidatePath("/collection");
+  return { success: true };
+}
+
+export async function moveCardToSideboard(
+  cardId: string,
+  isSideboard: boolean,
+  deckId?: string
+): Promise<{ success: boolean; cardId?: string; merged?: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  const res = await backendFetch<{ status: string; cardId?: string; merged?: boolean }>(
+    `/api/decks/cards/${encodeURIComponent(cardId)}/sideboard`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ isSideboard }),
+      userId,
+    }
+  );
+  if (deckId) {
+    revalidatePath(`/decks/${deckId}`);
+  }
+  revalidatePath("/decks");
+  return { success: res.status === "success", cardId: res.cardId, merged: res.merged };
+}
+

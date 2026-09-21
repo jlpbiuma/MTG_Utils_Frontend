@@ -80,12 +80,33 @@ export async function importDeckFromMoxfieldUrl(
   }
 }
 
+export interface ResolvedWantItem {
+  cardName: string;
+  resolvedQuantity: number;
+}
+
+export interface CollectionImportResult {
+  success: boolean;
+  totalImported: number;
+  uniqueImported: number;
+  importId: string;
+  resolvedWants?: ResolvedWantItem[];
+  resolvedWantsCount?: number;
+}
+
 export async function importCollectionFromText(
   rawText: string,
   requestKey: string
-): Promise<{ success: boolean; totalImported: number; uniqueImported: number; importId: string }> {
+): Promise<CollectionImportResult> {
   const userId = await getCurrentUserId();
-  const res = await backendFetch<{ status: string; importedCount: number; uniqueCards: number; importId: string }>("/api/import/collection", {
+  const res = await backendFetch<{
+    status: string;
+    importedCount: number;
+    uniqueCards: number;
+    importId: string;
+    resolvedWants?: ResolvedWantItem[];
+    resolvedWantsCount?: number;
+  }>("/api/import/collection", {
     method: "POST",
     body: JSON.stringify({ text: rawText, requestKey }),
     userId,
@@ -93,11 +114,14 @@ export async function importCollectionFromText(
 
   revalidatePath("/collection");
   revalidatePath("/decks");
+  revalidatePath("/wants");
   return {
     success: true,
     importId: res.importId,
     totalImported: res.importedCount,
     uniqueImported: res.uniqueCards,
+    resolvedWants: res.resolvedWants || [],
+    resolvedWantsCount: res.resolvedWantsCount || 0,
   };
 }
 

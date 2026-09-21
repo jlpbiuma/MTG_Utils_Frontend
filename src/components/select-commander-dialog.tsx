@@ -67,7 +67,7 @@ export function DoubleFacePreview({ faces }: { faces: string[] }) {
 
   return (
     <span
-      className="inline-flex shrink-0 cursor-help text-amber-300"
+      className="inline-flex shrink-0 cursor-help text-primary"
       title="Carta transformable: ver ambas caras"
       onMouseEnter={handleEnter}
       onMouseLeave={() => setOpen(false)}
@@ -75,7 +75,7 @@ export function DoubleFacePreview({ faces }: { faces: string[] }) {
       <RotateCw className="h-3.5 w-3.5" />
       {open && typeof document !== "undefined" && createPortal(
         <div
-          className="pointer-events-none fixed z-[9999] flex gap-2 rounded-xl border border-amber-500/50 bg-slate-950 p-2 shadow-2xl shadow-black/80"
+          className="pointer-events-none fixed z-[9999] flex gap-2 rounded-lg border border-border bg-popover p-2"
           style={{ left: position.left, top: position.top }}
         >
           {faces.slice(0, 2).map((face, index) => (
@@ -273,53 +273,53 @@ export function SelectCommanderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg min-w-0 overflow-hidden">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-amber-300 text-xl">
-            <Crown className="h-6 w-6 text-amber-400" />
+          <DialogTitle className="flex items-center gap-2 text-primary text-xl">
+            <Crown className="h-6 w-6 text-primary" />
             Asignar Comandante al Mazo
           </DialogTitle>
-          <DialogDescription className="text-slate-400 text-xs">
+          <DialogDescription className="text-muted-foreground text-xs">
             Cada mazo debe tener un comandante asignado para consultar recomendaciones comunitarias de EDHREC y estadísticas de legalidad.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
           {selectedCommander && (
-            <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
-              <label className="text-xs font-semibold uppercase tracking-wider text-amber-300">
+            <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/10 p-3">
+              <label className="text-xs font-semibold uppercase tracking-wider text-primary">
                 {selectedCommander.name} tiene Partner: selecciona su compañero
               </label>
               {loadingPartnerCandidates && (
-                <p className="text-[11px] text-slate-400">Buscando criaturas legendarias con Partner...</p>
+                <p className="text-[11px] text-muted-foreground">Buscando criaturas legendarias con Partner...</p>
               )}
               {partnerCandidates.length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="text-[11px] text-slate-300">Compañeros encontrados en este mazo:</p>
+                  <p className="text-[11px] text-muted-foreground">Compañeros encontrados en este mazo:</p>
                   <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
                     {partnerCandidates.map((card) => (
                       <Button
                         key={card.id}
                         type="button"
                         variant="outline"
-                        className="w-full justify-between h-8 px-2 text-xs border-slate-700 hover:border-amber-400"
+                        className="w-full justify-between h-8 px-2 text-xs border-border hover:border-primary"
                         onClick={() => setPartnerInput(card.cardName)}
                         disabled={loading}
                       >
                         <span className="truncate">{card.cardName}</span>
-                        <span className="ml-2 text-[10px] text-slate-400 shrink-0">Elegir</span>
+                        <span className="ml-2 text-[10px] text-muted-foreground shrink-0">Elegir</span>
                       </Button>
                     ))}
                   </div>
                 </div>
               )}
               {!loadingPartnerCandidates && partnerCandidates.length === 0 && (
-                <p className="text-[11px] text-slate-400">No hay otra criatura legendaria con Partner en este mazo.</p>
+                <p className="text-[11px] text-muted-foreground">No hay otra criatura legendaria con Partner en este mazo.</p>
               )}
               <Input
                 placeholder="Nombre del comandante compañero"
                 value={partnerInput}
                 onChange={(e) => setPartnerInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handlePartnerSave(); } }}
-                className="bg-slate-950 border-slate-700"
+                className="border-border"
               />
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setSelectedCommander(null)} disabled={loading}>Volver</Button>
@@ -340,19 +340,19 @@ export function SelectCommanderDialog({
           {candidateCards.length > 0 && (
             <div className="w-full min-w-0 space-y-2 overflow-hidden">
               <div className="flex min-w-0 flex-col gap-2">
-                <label className="min-w-0 text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <label className="min-w-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-primary" />
                   Elegir de las cartas del mazo ({candidateCards.length})
                 </label>
                 {candidateCards.length > 6 && (
                   <div className="relative w-full min-w-0">
-                    <Search className="w-3 h-3 absolute left-2 top-2 text-slate-500" />
+                    <Search className="w-3 h-3 absolute left-2 top-2 text-muted-foreground" />
                     <input
                       type="text"
                       placeholder="Filtrar..."
                       value={candidateFilter}
                       onChange={(e) => setCandidateFilter(e.target.value)}
-                      className="w-full h-7 pl-6 pr-2 bg-slate-950 border border-slate-800 rounded text-xs text-slate-200"
+                      className="w-full h-7 pl-6 pr-2 bg-background border border-border rounded-md text-xs text-foreground"
                     />
                   </div>
                 )}
@@ -368,8 +368,8 @@ export function SelectCommanderDialog({
                       key={card.id}
                       className={`flex min-w-0 items-center justify-between p-2.5 rounded-lg border transition-all ${
                         isCurrent
-                          ? "bg-amber-500/10 border-amber-500/50"
-                          : "bg-slate-950/60 border-slate-800 hover:border-slate-700"
+                          ? "bg-primary/10 border-primary/50"
+                          : "bg-card border-border hover:border-primary/40"
                       }`}
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -381,10 +381,10 @@ export function SelectCommanderDialog({
                               width={32}
                               height={44}
                               sizes="32px"
-                              className="w-8 h-11 object-cover rounded border border-slate-700 shrink-0 cursor-pointer"
+                              className="w-8 h-11 object-cover rounded-md border border-border shrink-0 cursor-pointer"
                             />
                           ) : (
-                            <div className="w-8 h-11 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-[9px] text-slate-500 shrink-0">
+                            <div className="w-8 h-11 rounded-md bg-secondary border border-border flex items-center justify-center text-[9px] text-muted-foreground shrink-0">
                               MTG
                             </div>
                           )}
@@ -392,18 +392,18 @@ export function SelectCommanderDialog({
 
                       <div className="min-w-0 flex-1 overflow-hidden">
                           <CardPreviewHover cardName={card.cardName} imageUri={card.imageUri}>
-                            <span className="font-semibold text-xs text-slate-200 truncate cursor-pointer hover:text-amber-300 block">
+                            <span className="font-semibold text-xs text-foreground truncate cursor-pointer hover:text-primary block">
                               {card.cardName}
                             </span>
                           </CardPreviewHover>
                           <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                             {isLegendary && (
-                              <Badge variant="outline" className="shrink-0 text-[9px] px-1 py-0 bg-amber-500/10 text-amber-300 border-amber-500/30">
+                              <Badge variant="outline" className="shrink-0 text-[9px] px-1 py-0 bg-primary/10 text-primary border-primary/30">
                                 Legendaria
                               </Badge>
                             )}
                             <span
-                              className="w-0 min-w-0 flex-1 truncate text-[10px] text-slate-400"
+                              className="w-0 min-w-0 flex-1 truncate text-[10px] text-muted-foreground"
                               title={card.typeLine || "Criatura"}
                             >
                               {truncateTypeLine(card.typeLine || "Criatura")}
@@ -434,8 +434,8 @@ export function SelectCommanderDialog({
           )}
 
           {/* Manual Input */}
-          <div className="space-y-2 pt-2 border-t border-slate-800/80">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+          <div className="space-y-2 pt-2 border-t border-border">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               O escribe el nombre de cualquier comandante (en inglés):
             </label>
             <div className="flex gap-2">
@@ -443,7 +443,7 @@ export function SelectCommanderDialog({
                 placeholder="ej: Niv-Mizzet, Parun / Aragorn, the Uniter"
                 value={commanderInput}
                 onChange={(e) => setCommanderInput(e.target.value)}
-                className="bg-slate-950 border-slate-700 focus:border-amber-400 text-sm"
+                className="border-border focus-visible:ring-ring text-sm"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -469,7 +469,7 @@ export function SelectCommanderDialog({
             variant="ghost"
             onClick={() => onOpenChange(false)}
             disabled={loading}
-            className="text-xs text-slate-400 hover:text-white"
+            className="text-xs text-muted-foreground hover:text-foreground"
           >
             Cerrar
           </Button>

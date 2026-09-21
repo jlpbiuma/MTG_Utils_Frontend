@@ -127,6 +127,8 @@ export interface CardPrintingDetail {
   price_usd?: number | null;
   price_usd_foil?: number | null;
   released_at?: string | null;
+  set_type?: string | null;
+  icon_svg_uri?: string | null;
 }
 
 export interface CardRulingDetail {

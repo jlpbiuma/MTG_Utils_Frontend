@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Mail, Lock, Loader2, CheckCircle2, AlertCircle, ShieldCheck } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +40,6 @@ export function AuthForm() {
         } else if (result.needsConfirmation) {
           setConfirmationNotice(true);
         } else {
-          // Logged in directly
           router.push("/decks");
           router.refresh();
         }
@@ -73,27 +72,23 @@ export function AuthForm() {
   };
 
   return (
-    <Card className="w-full max-w-md border border-slate-800 bg-slate-900/80 backdrop-blur-xl shadow-2xl relative overflow-hidden">
-      {/* Decorative top mana line */}
-      <div className="h-1 w-full bg-gradient-to-r from-amber-500 via-sky-500 to-purple-500" />
-
-      <CardHeader className="text-center pb-4 pt-8">
-        <div className="mx-auto h-12 w-12 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/20 mb-3">
-          <Sparkles className="h-6 w-6" />
+    <Card className="w-full max-w-[400px] hover:border-border">
+      <CardHeader className="text-center pb-2 pt-8 px-8">
+        <div className="mx-auto mb-5 flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background text-sm font-semibold tracking-tight">
+          M
         </div>
-        <CardTitle className="text-2xl font-black tracking-tight text-white">
-          {mode === "login" ? "Acceder a MTG Utils" : "Crear Cuenta de Planeswalker"}
+        <CardTitle className="text-2xl font-medium tracking-tight">
+          {mode === "login" ? "Inicia sesión" : "Crea tu cuenta"}
         </CardTitle>
-        <CardDescription className="text-slate-400 text-sm">
+        <CardDescription className="text-sm mt-2">
           {mode === "login"
-            ? "Inicia sesión para sincronizar tus mazos y colección"
-            : "Regístrate para guardar tu inventario y calcular qué cartas te faltan"}
+            ? "Sincroniza mazos y colección en un solo lugar."
+            : "Guarda tu inventario y calcula qué te falta."}
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="space-y-6 pt-2 pb-8">
-        {/* Toggle Mode Switcher */}
-        <div className="flex rounded-lg bg-slate-950 p-1 border border-slate-800">
+      <CardContent className="space-y-5 px-8 pb-8 pt-4">
+        <div className="flex rounded-full bg-secondary p-1 border border-border">
           <button
             type="button"
             onClick={() => {
@@ -101,13 +96,13 @@ export function AuthForm() {
               setError(null);
               setConfirmationNotice(false);
             }}
-            className={`flex-1 py-2 text-sm font-semibold rounded-md transition-all ${
+            className={`flex-1 py-1.5 text-sm font-medium rounded-full transition-colors ${
               mode === "login"
-                ? "bg-amber-500 text-slate-950 shadow-sm"
-                : "text-slate-400 hover:text-white"
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Iniciar Sesión
+            Entrar
           </button>
           <button
             type="button"
@@ -116,116 +111,88 @@ export function AuthForm() {
               setError(null);
               setConfirmationNotice(false);
             }}
-            className={`flex-1 py-2 text-sm font-semibold rounded-md transition-all ${
+            className={`flex-1 py-1.5 text-sm font-medium rounded-full transition-colors ${
               mode === "register"
-                ? "bg-amber-500 text-slate-950 shadow-sm"
-                : "text-slate-400 hover:text-white"
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Crear Cuenta
+            Registrarse
           </button>
         </div>
 
-        {/* Alerts */}
         {error && (
-          <div className="p-3.5 rounded-lg bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs flex items-start gap-2.5">
-            <AlertCircle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
-            <div className="flex-1">
-              <span className="font-semibold block">Error de autenticación:</span>
-              {error}
-            </div>
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/25 text-red-300 text-xs flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>{error}</span>
           </div>
         )}
 
         {confirmationNotice && (
-          <div className="p-3.5 rounded-lg bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 text-xs flex items-start gap-2.5">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
-            <div className="flex-1">
-              <span className="font-semibold block">¡Cuenta creada con éxito!</span>
-              Hemos enviado un enlace de confirmación a tu correo. Por favor, revísalo para activar tu cuenta.
-            </div>
+          <div className="p-3 rounded-lg bg-success/10 border border-success/25 text-emerald-300 text-xs flex items-start gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>Cuenta creada. Revisa tu correo para confirmar.</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              <Mail className="h-3.5 w-3.5 text-amber-400" />
-              Correo Electrónico
-            </label>
+            <label className="text-sm text-muted-foreground">Email</label>
             <Input
               type="email"
-              placeholder="tu-correo@ejemplo.com"
+              placeholder="tu@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="bg-slate-950/90 h-11 border-slate-700"
+              className="h-10"
               required
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5 text-amber-400" />
-              Contraseña
-            </label>
+            <label className="text-sm text-muted-foreground">Contraseña</label>
             <Input
               type="password"
               placeholder="Mínimo 6 caracteres"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="bg-slate-950/90 h-11 border-slate-700"
+              className="h-10"
               required
             />
           </div>
 
-          <Button
-            type="submit"
-            variant="mana"
-            disabled={loading}
-            className="w-full h-11 text-base font-bold shadow-lg shadow-amber-500/20 mt-2"
-          >
+          <Button type="submit" disabled={loading} className="w-full h-10 mt-1">
             {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : mode === "login" ? (
-              "Acceder a mis Mazos"
+              "Continuar"
             ) : (
-              "Crear Mi Cuenta"
+              "Crear cuenta"
             )}
           </Button>
         </form>
 
-        {/* Separator "o" */}
-        <div className="relative my-2">
+        <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-800" />
+            <div className="w-full border-t border-border" />
           </div>
           <div className="relative flex justify-center text-xs">
-            <span className="bg-slate-900 px-3 text-slate-400 font-mono">o</span>
+            <span className="bg-card px-3 text-muted-foreground">o</span>
           </div>
         </div>
 
-        {/* Guest / Demo button */}
         <Button
           type="button"
           variant="outline"
           disabled={loading || guestLoading}
           onClick={handleGuestSignIn}
-          className="w-full h-11 border-amber-500/30 text-amber-300 hover:bg-amber-500/10 hover:border-amber-400 font-semibold transition-all shadow-sm"
+          className="w-full h-10"
         >
           {guestLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <Sparkles className="h-4 w-4 mr-2 text-amber-400" />
+            "Continuar como invitado"
           )}
-          Entrar como invitado (demo)
         </Button>
-
-        <div className="text-center pt-2">
-          <p className="text-xs text-slate-500 flex items-center justify-center gap-1">
-            <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
-            Conectado de forma segura con FastAPI Backend
-          </p>
-        </div>
       </CardContent>
     </Card>
   );

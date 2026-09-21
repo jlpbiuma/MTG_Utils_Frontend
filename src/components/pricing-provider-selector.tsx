@@ -12,6 +12,7 @@ interface PricingProviderSelectorProps {
   summary?: PriceSummary | null;
   isLoading?: boolean;
   showMissingNetValue?: boolean;
+  showValueSummary?: boolean;
   className?: string;
 }
 
@@ -22,6 +23,7 @@ export function PricingProviderSelector({
   summary,
   isLoading = false,
   showMissingNetValue = true,
+  showValueSummary = true,
   className = "",
 }: PricingProviderSelectorProps) {
   const [refreshing, setRefreshing] = useState(false);
@@ -38,13 +40,13 @@ export function PricingProviderSelector({
   const currencySymbol = summary?.currencySymbol ?? PRICE_PROVIDERS[currentProvider]?.currencySymbol ?? "€";
 
   return (
-    <div className={`p-4 rounded-xl border border-slate-800/80 bg-slate-900/50 backdrop-blur-md ${className}`}>
+    <div className={`p-4 rounded-lg border border-border bg-card ${className}`}>
       {/* Top row: Provider Selector & Refresh button */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/60">
+      <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${showValueSummary ? "pb-3 border-b border-border" : ""}`}>
         <div className="flex items-center gap-2">
-          <Coins className="h-4 w-4 text-amber-400" />
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Mercado y Precios:</span>
-          <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-lg border border-slate-800">
+          <Coins className="h-4 w-4 text-primary" />
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Mercado y Precios:</span>
+          <div className="flex items-center gap-1 bg-background p-1 rounded-lg border border-border">
             {(Object.keys(PRICE_PROVIDERS) as PriceProvider[]).map((p) => {
               const conf = PRICE_PROVIDERS[p];
               const active = currentProvider === p;
@@ -52,10 +54,10 @@ export function PricingProviderSelector({
                 <button
                   key={p}
                   onClick={() => onProviderChange(p)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
                     active
-                      ? "bg-amber-500 text-slate-950 shadow-sm"
-                      : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
                   }`}
                 >
                   {conf.logoText} ({conf.currencySymbol})
@@ -70,35 +72,36 @@ export function PricingProviderSelector({
           size="sm"
           disabled={isLoading || refreshing}
           onClick={handleRefresh}
-          className="h-8 text-xs border-slate-700 bg-slate-900/80 hover:bg-slate-800 text-slate-200 gap-1.5"
+          className="h-8 text-xs gap-1.5"
         >
-          <RefreshCw className={`h-3.5 w-3.5 text-amber-400 ${refreshing || isLoading ? "animate-spin" : ""}`} />
+          <RefreshCw className={`h-3.5 w-3.5 text-primary ${refreshing || isLoading ? "animate-spin" : ""}`} />
           <span>Actualizar Precios</span>
         </Button>
       </div>
 
       {/* Bottom row: Net Value KPIs */}
+      {showValueSummary && (
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 pt-3">
         {/* Total Net Value */}
         <div className="flex flex-col">
-          <span className="text-[11px] font-medium text-slate-400">Precio Neto Total ({PRICE_PROVIDERS[currentProvider]?.name})</span>
+          <span className="text-[11px] font-medium text-muted-foreground">Precio Neto Total ({PRICE_PROVIDERS[currentProvider]?.name})</span>
           <div className="flex items-baseline gap-1 mt-0.5">
-            <span className="text-xl font-black font-mono text-amber-400">
+            <span className="text-xl font-semibold font-mono text-primary">
               {summary ? summary.totalNetValue.toFixed(2) : "..."}
             </span>
-            <span className="text-xs font-mono text-amber-500">{currencySymbol}</span>
+            <span className="text-xs font-mono text-primary">{currencySymbol}</span>
           </div>
         </div>
 
         {/* Missing Cards Value (Cost to finish deck) */}
         {showMissingNetValue && (
           <div className="flex flex-col">
-            <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
+            <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
               <ShoppingCart className="h-3 w-3 text-rose-400" />
               Coste Faltantes (Completar Mazo)
             </span>
             <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="text-xl font-black font-mono text-rose-400">
+              <span className="text-xl font-semibold font-mono text-rose-400">
                 {summary ? (summary.totalMissingValue ?? 0).toFixed(2) : "..."}
               </span>
               <span className="text-xs font-mono text-rose-500">{currencySymbol}</span>
@@ -108,12 +111,12 @@ export function PricingProviderSelector({
 
         {/* Owned Value in Physical Collection */}
         <div className="flex flex-col">
-          <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
+          <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
             <CheckCircle2 className="h-3 w-3 text-emerald-400" />
             Valor en Posesión
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
-            <span className="text-xl font-black font-mono text-emerald-400">
+            <span className="text-xl font-semibold font-mono text-emerald-400">
               {summary
                 ? (
                     summary.totalOwnedValue ??
@@ -125,6 +128,7 @@ export function PricingProviderSelector({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

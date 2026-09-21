@@ -20,6 +20,9 @@ import {
   CardPrintingDetail,
 } from "@/actions/scryfall";
 import { updateDeckCardVersion } from "@/actions/decks";
+import { getCardPriceHistory } from "@/actions/pricing";
+import { PriceHistoryChart } from "@/components/price-history-chart";
+import type { CardPriceHistoryResponse } from "@/lib/pricing/types";
 import { parseRulesTextTokens, translateRarityEs } from "@/lib/card-spanish-dictionary";
 import { DeckRequirement } from "@/lib/schemas";
 import {
@@ -36,6 +39,8 @@ import {
   HelpCircle,
   BookOpen,
   Library,
+  Calendar,
+  Filter,
 } from "lucide-react";
 
 interface CardDetailDialogProps {
@@ -57,7 +62,11 @@ interface CardDetailDialogProps {
   deckCardId?: string;
   isCommander?: boolean;
   onVersionSelect?: (version: CardPrintingDetail) => Promise<void> | void;
+  defaultTab?: "versions" | "legalities" | "prices" | "rulings" | "collection";
 }
+
+// Client-side cache for card price history to avoid repeated network requests
+export const priceHistoryClientCache = new Map<string, CardPriceHistoryResponse>();
 
 export function CardDetailDialog({
   cardId,
@@ -78,6 +87,7 @@ export function CardDetailDialog({
   deckCardId,
   isCommander,
   onVersionSelect,
+  defaultTab = "versions",
 }: CardDetailDialogProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
@@ -90,6 +100,10 @@ export function CardDetailDialog({
   const [selectedPrintingId, setSelectedPrintingId] = useState<string | undefined>(cardId);
   const [isUpdatingVersion, setIsUpdatingVersion] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState(defaultTab);
+  const [priceHistory, setPriceHistory] = useState<CardPriceHistoryResponse | null>(null);
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
+  const [showAllVersions, setShowAllVersions] = useState(false);
 
   // Track the card name for which details were fetched so we don't re-fetch when selecting versions
   const fetchedCardRef = React.useRef<string | null>(null);
@@ -99,6 +113,9 @@ export function CardDetailDialog({
       fetchedCardRef.current = null;
       setDetails(null);
       setFeedbackMessage(null);
+      setPriceHistory(null);
+      setActiveTab(defaultTab);
+      setShowAllVersions(false);
       return;
     }
 
@@ -111,6 +128,7 @@ export function CardDetailDialog({
     setLoading(true);
     fetchedCardRef.current = cardName;
     setSelectedPrintingId(cardId);
+    setActiveTab(defaultTab);
 
     getCardDetails({ id: cardId, name: cardName })
       .then((res) => {
@@ -139,9 +157,90 @@ export function CardDetailDialog({
     };
   }, [isOpen, cardName]);
 
-  const handleSelectVersion = async (printing: CardPrintingDetail, index: number) => {
+  useEffect(() => {
+    if (!isOpen || activeTab !== "prices") return;
+
+    // Use a stable identifier for the card or printing
+    const targetCardId =
+      cardId ||
+      details?.id ||
+      selectedPrintingId ||
+      details?.printings?.[0]?.id;
+
+    if (!targetCardId) return;
+
+    // 1. Check client-side memory cache
+    const cached = priceHistoryClientCache.get(targetCardId);
+    if (cached) {
+      setPriceHistory(cached);
+      setPriceHistoryLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPriceHistoryLoading(true);
+    getCardPriceHistory(targetCardId, "cardmarket", 30)
+      .then((res) => {
+        if (!cancelled && res) {
+          // Store in client cache by targetCardId, catalogId, and all printing IDs
+          priceHistoryClientCache.set(targetCardId, res);
+          if (res.catalogId) {
+            priceHistoryClientCache.set(res.catalogId, res);
+          }
+          if (res.series) {
+            for (const s of res.series) {
+              if (s.printingId) {
+                priceHistoryClientCache.set(s.printingId, res);
+              }
+            }
+          }
+          setPriceHistory(res);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load price history:", err);
+        if (!cancelled) setPriceHistory(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPriceHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, activeTab, cardId, details?.id, selectedPrintingId]);
+
+  // Filter printings to last 3 years by default
+  const threeYearsAgoIso = React.useMemo(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 3);
+    return d.toISOString().slice(0, 10);
+  }, []);
+
+  const recentPrintings = React.useMemo(() => {
+    if (!details?.printings) return [];
+    return details.printings.filter((p) => {
+      if (!p.released_at) return true;
+      return p.released_at >= threeYearsAgoIso;
+    });
+  }, [details?.printings, threeYearsAgoIso]);
+
+  // Fallback to all printings if card has no releases in the last 3 years
+  const printingsToShow = React.useMemo(() => {
+    if (!details?.printings) return [];
+    if (showAllVersions || recentPrintings.length === 0) {
+      return details.printings;
+    }
+    return recentPrintings;
+  }, [details?.printings, recentPrintings, showAllVersions]);
+
+  const handleSelectVersion = async (printing: CardPrintingDetail, index?: number) => {
+    const targetIdx =
+      index !== undefined && index >= 0
+        ? index
+        : (details?.printings?.findIndex((p) => p.id === printing.id) ?? 0);
     // Immediately select and switch preview image without delay or glitch
-    setActivePrintIndex(index);
+    setActivePrintIndex(targetIdx >= 0 ? targetIdx : 0);
     setSelectedPrintingId(printing.id);
     setFeedbackMessage(null);
 
@@ -189,6 +288,17 @@ export function CardDetailDialog({
   const formatPrice = (value?: number | null) =>
     value == null ? "—" : `${value.toFixed(2)} €`;
 
+  const formatReleaseDate = (dateStr?: string | null) => {
+    if (!dateStr) return null;
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr.slice(0, 4);
+      return d.toLocaleDateString("es-ES", { month: "short", year: "numeric" });
+    } catch {
+      return dateStr.slice(0, 4);
+    }
+  };
+
   // Resolved display fields (preferring active face/printing, then details)
   const displayNameEs = currentFace?.name_es || details?.name_es || cardName;
   const displayNameEn = currentFace?.name || details?.name || cardName;
@@ -234,7 +344,7 @@ export function CardDetailDialog({
       case "infrecuente":
         return "bg-sky-500/20 text-sky-300 border-sky-500/40";
       default:
-        return "bg-slate-800/60 text-slate-300 border-slate-700/60";
+        return "bg-secondary text-muted-foreground border-border";
     }
   };
 
@@ -247,19 +357,19 @@ export function CardDetailDialog({
         return <XCircle className="h-3.5 w-3.5 text-rose-400" />;
       case "restricted":
       case "restringida":
-        return <AlertCircle className="h-3.5 w-3.5 text-amber-400" />;
+        return <AlertCircle className="h-3.5 w-3.5 text-primary" />;
       default:
-        return <HelpCircle className="h-3.5 w-3.5 text-slate-500" />;
+        return <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />;
     }
   };
 
   const renderFormattedRulesText = (text: string) => {
-    if (!text) return <span className="text-slate-500 italic">Sin texto de reglas</span>;
+    if (!text) return <span className="text-muted-foreground italic">Sin texto de reglas</span>;
 
     const paragraphs = text.split("\n");
 
     return (
-      <div className="space-y-2 text-sm leading-relaxed text-slate-200">
+      <div className="space-y-2 text-sm leading-relaxed text-foreground">
         {paragraphs.map((p, pIdx) => {
           const tokens = parseRulesTextTokens(p);
           return (
@@ -287,33 +397,33 @@ export function CardDetailDialog({
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
 
-      <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto p-0 border-slate-800 bg-slate-950/95 backdrop-blur-2xl shadow-2xl rounded-2xl sm:rounded-2xl">
+      <DialogContent className="max-w-6xl w-[96vw] max-h-[92vh] overflow-y-auto p-0 border-border bg-popover rounded-xl sm:rounded-xl shadow-2xl">
         <div className="relative p-6 sm:p-8">
           {/* Header */}
-          <DialogHeader className="pb-4 border-b border-slate-800/80">
+          <DialogHeader className="pb-4 border-b border-border">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <DialogTitle className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-3">
+                <DialogTitle className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight flex items-center gap-3">
                   <span>{displayNameEs}</span>
                   {details?.has_spanish_print ? (
                     <Badge className="bg-emerald-500/15 border-emerald-500/40 text-emerald-300 text-[10px] font-semibold py-0.5">
                       Oficial ES
                     </Badge>
                   ) : (
-                    <Badge className="bg-amber-500/15 border-amber-500/40 text-amber-300 text-[10px] font-semibold py-0.5">
+                    <Badge className="bg-primary/15 border-primary/40 text-primary text-[10px] font-semibold py-0.5">
                       Traducida ES
                     </Badge>
                   )}
                 </DialogTitle>
-                <p className="text-xs text-slate-400 font-mono mt-1">
-                  Nombre original: <span className="text-slate-300">{displayNameEn}</span>
+                <p className="text-xs text-muted-foreground font-mono mt-1">
+                  Nombre original: <span className="text-muted-foreground">{displayNameEn}</span>
                 </p>
               </div>
 
               <div className="flex items-center gap-3">
                 <ManaCost manaCost={displayManaCost} />
                 {details?.cmc !== undefined && (
-                  <Badge variant="outline" className="border-slate-700 bg-slate-900 text-xs font-mono text-slate-300">
+                  <Badge variant="outline" className="border-border bg-card text-xs font-mono text-muted-foreground">
                     CMC: {details.cmc}
                   </Badge>
                 )}
@@ -325,7 +435,7 @@ export function CardDetailDialog({
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mt-6 items-start">
             {/* Left Column: Visual Card Art & Controls */}
             <div className="md:col-span-5 flex flex-col items-center">
-              <div className="relative w-full max-w-[280px] aspect-[5/7] rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-900 shadow-2xl foil-card-effect group">
+              <div className="relative w-full max-w-[280px] aspect-[5/7] rounded-lg overflow-hidden border border-border bg-card foil-card-effect group">
                 {displayImageUri ? (
                   <Image
                     src={displayImageUri}
@@ -335,10 +445,10 @@ export function CardDetailDialog({
                     className="object-cover transition-transform duration-300 group-hover:scale-105"
                   />
                 ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-slate-600 p-4 text-center">
+                  <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground p-4 text-center">
                     <BookOpen className="h-10 w-10 mb-2" />
                     <span className="text-sm font-semibold">{displayNameEs}</span>
-                    <span className="text-xs mt-1 text-slate-500">Ilustración no disponible</span>
+                    <span className="text-xs mt-1 text-muted-foreground">Ilustración no disponible</span>
                   </div>
                 )}
 
@@ -348,7 +458,7 @@ export function CardDetailDialog({
                     size="sm"
                     variant="outline"
                     onClick={() => setActiveFaceIndex((prev) => (prev === 0 ? 1 : 0))}
-                    className="absolute bottom-3 right-3 bg-slate-950/80 backdrop-blur-md border-amber-500/50 text-amber-300 hover:bg-slate-900 text-xs font-semibold gap-1.5 shadow-xl"
+                    className="absolute bottom-3 right-3 bg-background/90 border-primary/50 text-primary hover:bg-card text-xs font-semibold gap-1.5"
                   >
                     <RotateCw className="h-3.5 w-3.5" />
                     Girar cara
@@ -357,34 +467,34 @@ export function CardDetailDialog({
               </div>
 
               {/* Set & Rarity Strip below card art */}
-              <div className="w-full max-w-[280px] mt-4 p-3 rounded-xl border border-slate-800/80 bg-slate-900/40 text-xs space-y-2">
+              <div className="w-full max-w-[280px] mt-4 p-3 rounded-xl border border-border/80 bg-card/40 text-xs space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Rareza</span>
+                  <span className="text-muted-foreground">Rareza</span>
                   <span className={`px-2 py-0.5 rounded-full border text-[11px] font-bold ${getRarityBadgeStyle(rarityLabel)}`}>
                     {rarityLabel}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Colección</span>
-                  <span className="font-semibold text-slate-200 text-right truncate max-w-[150px]" title={displaySetName || displaySetCode}>
+                  <span className="text-muted-foreground">Colección</span>
+                  <span className="font-semibold text-foreground text-right truncate max-w-[150px]" title={displaySetName || displaySetCode}>
                     {displaySetName || displaySetCode || "—"} {displaySetCode && `(${displaySetCode})`}
                   </span>
                 </div>
 
                 {displayCollectorNumber && (
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Nº de Carta</span>
-                    <span className="font-mono text-slate-200">#{displayCollectorNumber}</span>
+                    <span className="text-muted-foreground">Nº de Carta</span>
+                    <span className="font-mono text-foreground">#{displayCollectorNumber}</span>
                   </div>
                 )}
 
                 {details?.artist && (
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400 flex items-center gap-1">
+                    <span className="text-muted-foreground flex items-center gap-1">
                       <Palette className="h-3 w-3" /> Ilustrador
                     </span>
-                    <span className="font-medium text-slate-300 truncate max-w-[140px]">{details.artist}</span>
+                    <span className="font-medium text-muted-foreground truncate max-w-[140px]">{details.artist}</span>
                   </div>
                 )}
               </div>
@@ -393,14 +503,14 @@ export function CardDetailDialog({
             {/* Right Column: Card Details, Rules, Combat, and Tabs */}
             <div className="md:col-span-7 space-y-5">
               {/* Type line & Combat Stats */}
-              <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-md">
+              <div className="flex items-center justify-between gap-3 p-3.5 rounded-lg border border-border bg-card">
                 <div>
-                  <p className="text-xs uppercase tracking-wider font-semibold text-slate-400">Tipo de Carta</p>
-                  <p className="text-base font-bold text-amber-300 mt-0.5">{displayTypeEs}</p>
+                  <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Tipo de Carta</p>
+                  <p className="text-base font-semibold text-primary mt-0.5">{displayTypeEs}</p>
                 </div>
 
                 {displayPower !== undefined && displayToughness !== undefined && (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-950/40 border border-rose-800/50 text-rose-300 font-black text-base font-mono">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-950/40 border border-rose-800/50 text-rose-300 font-semibold text-base font-mono">
                     <Swords className="h-4 w-4" />
                     <span>
                       {displayPower}/{displayToughness}
@@ -409,14 +519,14 @@ export function CardDetailDialog({
                 )}
 
                 {displayLoyalty !== undefined && (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/50 text-amber-300 font-black text-base font-mono">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/30 text-primary font-semibold text-base font-mono">
                     <Shield className="h-4 w-4" />
                     <span>Lealtad: {displayLoyalty}</span>
                   </div>
                 )}
 
                 {displayDefense !== undefined && (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-950/40 border border-sky-800/50 text-sky-300 font-black text-base font-mono">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-950/40 border border-sky-800/50 text-sky-300 font-semibold text-base font-mono">
                     <Shield className="h-4 w-4" />
                     <span>Defensa: {displayDefense}</span>
                   </div>
@@ -424,40 +534,42 @@ export function CardDetailDialog({
               </div>
 
               {/* Rules Box in Spanish */}
-              <div className="p-4 rounded-xl border border-slate-800/90 bg-slate-900/40 space-y-3">
+              <div className="p-4 rounded-xl border border-border/90 bg-card/40 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <BookOpen className="h-3.5 w-3.5 text-amber-400" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <BookOpen className="h-3.5 w-3.5 text-primary" />
                     Texto de Reglas (Oficial en Español)
                   </span>
                   {hasFaces && (
-                    <span className="text-[11px] font-mono text-amber-300 bg-amber-950/50 px-2 py-0.5 rounded border border-amber-800/40">
+                    <span className="text-[11px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/30">
                       Cara {activeFaceIndex + 1} de {details!.card_faces!.length}
                     </span>
                   )}
                 </div>
 
-                <div className="bg-slate-950/60 p-3.5 rounded-lg border border-slate-800/70">
+                <div className="bg-background/60 p-3.5 rounded-lg border border-border/70">
                   {renderFormattedRulesText(displayRulesEs)}
                 </div>
 
                 {/* Flavor text in Spanish */}
                 {displayFlavorEs && (
-                  <div className="pt-2 border-t border-slate-800/60 text-xs italic text-slate-400 font-serif leading-relaxed">
+                  <div className="pt-2 border-t border-border/60 text-xs italic text-muted-foreground font-serif leading-relaxed">
                     «{displayFlavorEs}»
                   </div>
                 )}
               </div>
 
               {/* Tabs for Technical Data, Legalities, Prices & Collection */}
-              <Tabs defaultValue="versions" className="w-full">
-                <TabsList className="flex flex-wrap bg-slate-900 border border-slate-800">
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="w-full">
+                <TabsList className="flex flex-wrap bg-card border border-border">
                   <TabsTrigger value="versions" className="text-xs flex-1 min-w-0 flex items-center justify-center gap-1.5 font-semibold">
-                    <Layers className="h-3.5 w-3.5 text-amber-400" />
+                    <Layers className="h-3.5 w-3.5 text-primary" />
                     <span>Versiones</span>
                     {details?.printings?.length ? (
-                      <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded-full font-mono">
-                        {details.printings.length}
+                      <span className="text-[10px] bg-secondary text-muted-foreground px-1.5 py-0.2 rounded-full font-mono">
+                        {printingsToShow.length !== details.printings.length
+                          ? `${printingsToShow.length}/${details.printings.length}`
+                          : details.printings.length}
                       </span>
                     ) : null}
                   </TabsTrigger>
@@ -478,48 +590,91 @@ export function CardDetailDialog({
                 {/* Versions Tab: First tab with visible miniatures & auto-select */}
                 <TabsContent value="versions" className="mt-3 space-y-3">
                   {feedbackMessage && (
-                    <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 text-xs shadow-sm">
+                    <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 text-xs">
                       <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
                       <span>{feedbackMessage}</span>
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-                    <span>
-                      {deckId
-                        ? "Haz clic en una versión para seleccionarla como la carta y miniatura estándar del mazo."
-                        : "Haz clic en una versión para previsualizar sus detalles y precios."}
-                    </span>
-                    {isUpdatingVersion && (
-                      <span className="text-amber-400 font-medium animate-pulse text-[11px]">
-                        Guardando estándar...
+                  {/* Filter bar: Last 3 years vs All */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-card/60 border border-border/80 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Filter className="h-3.5 w-3.5 text-primary" />
+                      <span className="font-semibold text-foreground">Mostrar:</span>
+                      <div className="inline-flex rounded-lg bg-secondary/80 p-0.5 border border-border">
+                        <button
+                          type="button"
+                          onClick={() => setShowAllVersions(false)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                            !showAllVersions
+                              ? "bg-primary text-primary-foreground shadow-sm font-semibold"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Últimos 3 años ({recentPrintings.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowAllVersions(true)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                            showAllVersions
+                              ? "bg-primary text-primary-foreground shadow-sm font-semibold"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Todas ({details?.printings?.length ?? 0})
+                        </button>
+                      </div>
+                    </div>
+
+                    {recentPrintings.length === 0 && (details?.printings?.length ?? 0) > 0 && (
+                      <span className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md">
+                        Sin ediciones en 3 años · Mostrando todas
                       </span>
                     )}
+
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground ml-auto">
+                      <span>
+                        {deckId
+                          ? "Haz clic para fijar versión del mazo."
+                          : "Haz clic para ver detalles y precios."}
+                      </span>
+                      {isUpdatingVersion && (
+                        <span className="text-primary font-medium animate-pulse">
+                          Guardando...
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  {details?.printings && details.printings.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[380px] overflow-y-auto pr-1">
-                      {details.printings.map((p, index) => {
+                  {printingsToShow && printingsToShow.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[460px] overflow-y-auto pr-1">
+                      {printingsToShow.map((p) => {
                         const isStandard = selectedPrintingId
                           ? p.id === selectedPrintingId
-                          : index === activePrintIndex;
+                          : details?.printings?.[activePrintIndex]?.id === p.id;
+                        const isCurrentlyActive = details?.printings?.[activePrintIndex]?.id === p.id;
                         const thumbUri = p.image_uri_small || p.image_uri || p.image_uri_large;
+                        const releaseFormatted = formatReleaseDate(p.released_at);
 
                         return (
                           <button
                             key={p.id}
                             type="button"
-                            onClick={() => handleSelectVersion(p, index)}
+                            onClick={() => {
+                              const originalIdx = details?.printings?.findIndex((item) => item.id === p.id) ?? -1;
+                              handleSelectVersion(p, originalIdx >= 0 ? originalIdx : undefined);
+                            }}
                             className={`group relative flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all duration-150 cursor-pointer ${
                               isStandard
-                                ? "bg-amber-950/40 border-amber-500/90 ring-1 ring-amber-500/50 shadow-md shadow-amber-950/40"
-                                : index === activePrintIndex
-                                ? "bg-slate-800/80 border-slate-600/90"
-                                : "bg-slate-900/50 border-slate-800/80 hover:bg-slate-800/60 hover:border-slate-700"
+                                ? "bg-primary/10 border-primary ring-1 ring-ring"
+                                : isCurrentlyActive
+                                ? "bg-secondary border-border"
+                                : "bg-card border-border hover:bg-accent hover:border-primary/40"
                             }`}
                           >
                             {/* Miniature Thumbnail */}
-                            <div className="relative w-12 h-16 sm:w-14 sm:h-20 shrink-0 rounded-md overflow-hidden bg-slate-950 border border-slate-700/80 shadow-md">
+                            <div className="relative w-12 h-16 sm:w-14 sm:h-20 shrink-0 rounded-md overflow-hidden bg-background border border-border">
                               {thumbUri ? (
                                 <Image
                                   src={thumbUri}
@@ -529,27 +684,40 @@ export function CardDetailDialog({
                                   className="object-cover transition-transform duration-200 group-hover:scale-105"
                                 />
                               ) : (
-                                <div className="w-full h-full flex flex-col items-center justify-center text-[10px] text-slate-500 text-center p-1 bg-slate-900">
-                                  <BookOpen className="h-4 w-4 mb-1 text-slate-600" />
+                                <div className="w-full h-full flex flex-col items-center justify-center text-[10px] text-muted-foreground text-center p-1 bg-card">
+                                  <BookOpen className="h-4 w-4 mb-1 text-muted-foreground" />
                                   <span className="font-mono">{p.set_code?.toUpperCase()}</span>
                                 </div>
                               )}
                               {isStandard && (
-                                <div className="absolute top-1 right-1 bg-amber-500 rounded-full p-0.5 shadow-md">
-                                  <CheckCircle2 className="h-3 w-3 text-slate-950" />
+                                <div className="absolute top-1 right-1 bg-primary rounded-full p-0.5">
+                                  <CheckCircle2 className="h-3 w-3 text-primary-foreground" />
                                 </div>
                               )}
                             </div>
 
                             {/* Details */}
                             <div className="min-w-0 flex-1 space-y-1">
-                              <div className="flex items-center justify-between gap-1">
-                                <span
-                                  className="font-bold text-slate-100 text-xs truncate group-hover:text-amber-300 transition-colors"
-                                  title={p.set_name || p.set_code}
-                                >
-                                  {p.set_name || p.set_code?.toUpperCase()}
-                                </span>
+                              <div className="flex items-center justify-between gap-1.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  {p.set_code && (
+                                    <img
+                                      src={`https://svgs.scryfall.io/sets/${p.set_code.toLowerCase()}.svg`}
+                                      alt=""
+                                      aria-hidden="true"
+                                      className="w-3.5 h-3.5 object-contain shrink-0 filter invert dark:invert-0 opacity-75"
+                                      onError={(e) => {
+                                        (e.target as HTMLElement).style.display = "none";
+                                      }}
+                                    />
+                                  )}
+                                  <span
+                                    className="font-bold text-foreground text-xs truncate group-hover:text-primary transition-colors"
+                                    title={p.set_name || p.set_code}
+                                  >
+                                    {p.set_name || p.set_code?.toUpperCase()}
+                                  </span>
+                                </div>
                                 {p.rarity && (
                                   <span
                                     className={`px-1.5 py-0.2 rounded text-[9px] font-bold border shrink-0 ${getRarityBadgeStyle(
@@ -561,38 +729,31 @@ export function CardDetailDialog({
                                 )}
                               </div>
 
-                              <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
-                                <span className="bg-slate-800/90 px-1.5 py-0.5 rounded text-slate-300 font-bold text-[10px]">
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono">
+                                <span className="bg-secondary/90 px-1.5 py-0.5 rounded text-muted-foreground font-bold text-[10px]">
                                   {p.set_code?.toUpperCase()}
                                 </span>
                                 <span>#{p.collector_number}</span>
-                                {p.released_at && (
-                                  <span className="text-slate-500 text-[10px]">
-                                    {p.released_at.slice(0, 4)}
+                                {releaseFormatted && (
+                                  <span className="text-muted-foreground text-[10px] flex items-center gap-0.5 font-sans">
+                                    <Calendar className="h-2.5 w-2.5 opacity-60" />
+                                    {releaseFormatted}
                                   </span>
                                 )}
                               </div>
 
                               <div className="flex items-center justify-between gap-2 text-[10px] pt-0.5">
-                                <div className="flex items-center gap-1 text-slate-400">
+                                <div className="flex items-center gap-1 text-muted-foreground">
                                   <span>Cardmarket:</span>
-                                  <span className="font-bold text-amber-300 font-mono">
+                                  <span className="font-bold text-primary font-mono">
                                     {formatPrice(p.trend ?? p.price_eur)}
                                   </span>
                                 </div>
-                                {p.cardtrader_trend != null && (
-                                  <div className="flex items-center gap-1 text-slate-500">
-                                    <span>CT:</span>
-                                    <span className="font-medium text-sky-300 font-mono">
-                                      {formatPrice(p.cardtrader_trend)}
-                                    </span>
-                                  </div>
-                                )}
                               </div>
 
                               {isStandard && (
                                 <div className="pt-0.5">
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/40 px-1.5 py-0.2 rounded-full">
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/15 border border-primary/40 px-1.5 py-0.2 rounded-full">
                                     <CheckCircle2 className="h-2.5 w-2.5" />
                                     Estándar en mazo
                                   </span>
@@ -604,12 +765,12 @@ export function CardDetailDialog({
                       })}
                     </div>
                   ) : loading ? (
-                    <div className="p-8 text-center text-slate-500 space-y-2">
-                      <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-amber-500 border-r-transparent"></div>
+                    <div className="p-8 text-center text-muted-foreground space-y-2">
+                      <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primary border-r-transparent"></div>
                       <p className="text-xs">Cargando versiones disponibles...</p>
                     </div>
                   ) : (
-                    <p className="p-4 text-center text-slate-500 text-xs">
+                    <p className="p-4 text-center text-muted-foreground text-xs">
                       No hay otras versiones registradas para esta carta.
                     </p>
                   )}
@@ -617,14 +778,14 @@ export function CardDetailDialog({
 
                 {/* Format Legalities Tab */}
                 <TabsContent value="legalities" className="mt-3">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3 rounded-xl border border-slate-800/80 bg-slate-900/30 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3 rounded-xl border border-border/80 bg-card/30 text-xs">
                     {details?.legalities && details.legalities.length > 0 ? (
                       details.legalities.map((item) => (
                         <div
                           key={item.format}
-                          className="flex items-center justify-between p-2 rounded-lg bg-slate-950/50 border border-slate-800/60"
+                          className="flex items-center justify-between p-2 rounded-lg bg-background/50 border border-border/60"
                         >
-                          <span className="text-slate-300 truncate pr-1 font-medium">{item.format_name}</span>
+                          <span className="text-muted-foreground truncate pr-1 font-medium">{item.format_name}</span>
                           <span
                             className={`flex items-center gap-1 font-semibold text-[11px] ${
                               item.status === "legal"
@@ -632,8 +793,8 @@ export function CardDetailDialog({
                                 : item.status === "banned"
                                 ? "text-rose-400"
                                 : item.status === "restricted"
-                                ? "text-amber-400"
-                                : "text-slate-500"
+                                ? "text-primary"
+                                : "text-muted-foreground"
                             }`}
                           >
                             {getLegalityIcon(item.status)}
@@ -642,7 +803,7 @@ export function CardDetailDialog({
                         </div>
                       ))
                     ) : (
-                      <p className="col-span-full text-center text-slate-500 py-3">
+                      <p className="col-span-full text-center text-muted-foreground py-3">
                         Cargando formatos de legalidad...
                       </p>
                     )}
@@ -651,90 +812,90 @@ export function CardDetailDialog({
 
                 {/* Market Prices Tab */}
                 <TabsContent value="prices" className="mt-3">
-                  <div className="space-y-3 p-3 rounded-xl border border-slate-800/80 bg-slate-900/30 text-xs">
+                  <div className="space-y-3 p-3 rounded-xl border border-border/80 bg-card/30 text-xs">
                     {currentPrint ? (
                       <>
                         <div className="flex items-center justify-between px-1">
-                          <span className="text-slate-400 font-semibold uppercase tracking-wider">
+                          <span className="text-muted-foreground font-semibold uppercase tracking-wider">
                             {currentPrint.set_code?.toUpperCase()} · #{currentPrint.collector_number}
                           </span>
-                          <span className="text-slate-500">Cardmarket / EUR</span>
+                          <span className="text-muted-foreground">Cardmarket / EUR</span>
                         </div>
                         <div className="grid grid-cols-3 gap-3">
-                          <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/70 text-center">
-                            <p className="text-slate-400 text-[11px]">Trend</p>
-                            <p className="text-lg font-black text-amber-300 font-mono mt-1">
+                          <div className="p-3 rounded-lg bg-background/60 border border-border/70 text-center">
+                            <p className="text-muted-foreground text-[11px]">Trend</p>
+                            <p className="text-lg font-semibold text-primary font-mono mt-1">
                               {formatPrice(currentPrint.trend)}
                             </p>
                           </div>
-                          <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/70 text-center">
-                            <p className="text-slate-400 text-[11px]">Mín</p>
-                            <p className="text-lg font-black text-emerald-400 font-mono mt-1">
+                          <div className="p-3 rounded-lg bg-background/60 border border-border/70 text-center">
+                            <p className="text-muted-foreground text-[11px]">Mín</p>
+                            <p className="text-lg font-semibold text-emerald-400 font-mono mt-1">
                               {formatPrice(currentPrint.min)}
                             </p>
                           </div>
-                          <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/70 text-center">
-                            <p className="text-slate-400 text-[11px]">Máx</p>
-                            <p className="text-lg font-black text-rose-400 font-mono mt-1">
+                          <div className="p-3 rounded-lg bg-background/60 border border-border/70 text-center">
+                            <p className="text-muted-foreground text-[11px]">Máx</p>
+                            <p className="text-lg font-semibold text-rose-400 font-mono mt-1">
                               {formatPrice(currentPrint.max)}
                             </p>
                           </div>
                         </div>
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/70 text-center">
-                            <p className="text-slate-400 text-[11px]">CardTrader Trend</p>
-                            <p className="text-lg font-black text-sky-300 font-mono mt-1">
-                              {formatPrice(currentPrint.cardtrader_trend)}
-                            </p>
-                          </div>
-                          <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/70 text-center">
-                            <p className="text-slate-400 text-[11px]">CardTrader Mín</p>
-                            <p className="text-lg font-black text-sky-400 font-mono mt-1">
-                              {formatPrice(currentPrint.cardtrader_min)}
-                            </p>
-                          </div>
-                          <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/70 text-center">
-                            <p className="text-slate-400 text-[11px]">CardTrader Máx</p>
-                            <p className="text-lg font-black text-sky-400 font-mono mt-1">
-                              {formatPrice(currentPrint.cardtrader_max)}
-                            </p>
-                          </div>
-                        </div>
-                        <p className="text-center text-slate-500 pt-1">
-                          Estimación directa de Scryfall
+                        <p className="text-center text-muted-foreground pt-1">
+                          Precios oficiales diarios de Cardmarket vía MTGJSON
                         </p>
                       </>
                     ) : (
                       <>
-                        <p className="text-slate-500">Sin precios de mercado registrados para esta carta.</p>
+                        <p className="text-muted-foreground">Sin precios de mercado registrados para esta carta.</p>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/70 text-center">
-                            <p className="text-slate-400 text-[11px]">Cardmarket / EUR</p>
-                            <p className="text-lg font-black text-amber-300 font-mono mt-1">
+                          <div className="p-3 rounded-lg bg-background/60 border border-border/70 text-center">
+                            <p className="text-muted-foreground text-[11px]">Cardmarket / EUR</p>
+                            <p className="text-lg font-semibold text-primary font-mono mt-1">
                               {details?.prices?.eur ? `${details.prices.eur} €` : "—"}
                             </p>
                           </div>
-                          <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/70 text-center">
-                            <p className="text-slate-400 text-[11px]">EUR Foil</p>
-                            <p className="text-lg font-black text-amber-400 font-mono mt-1">
+                          <div className="p-3 rounded-lg bg-background/60 border border-border/70 text-center">
+                            <p className="text-muted-foreground text-[11px]">EUR Foil</p>
+                            <p className="text-lg font-semibold text-primary font-mono mt-1">
                               {details?.prices?.eur_foil ? `${details.prices.eur_foil} €` : "—"}
                             </p>
                           </div>
-                          <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/70 text-center">
-                            <p className="text-slate-400 text-[11px]">Mercado USD</p>
-                            <p className="text-lg font-black text-sky-300 font-mono mt-1">
+                          <div className="p-3 rounded-lg bg-background/60 border border-border/70 text-center">
+                            <p className="text-muted-foreground text-[11px]">Mercado USD</p>
+                            <p className="text-lg font-semibold text-sky-300 font-mono mt-1">
                               {details?.prices?.usd ? `$${details.prices.usd}` : "—"}
                             </p>
                           </div>
-                          <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/70 text-center">
-                            <p className="text-slate-400 text-[11px]">USD Foil</p>
-                            <p className="text-lg font-black text-sky-400 font-mono mt-1">
+                          <div className="p-3 rounded-lg bg-background/60 border border-border/70 text-center">
+                            <p className="text-muted-foreground text-[11px]">USD Foil</p>
+                            <p className="text-lg font-semibold text-sky-400 font-mono mt-1">
                               {details?.prices?.usd_foil ? `$${details.prices.usd_foil}` : "—"}
                             </p>
                           </div>
                         </div>
                       </>
                     )}
+
+                    <div className="pt-2 border-t border-border/70 space-y-2">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-muted-foreground font-semibold uppercase tracking-wider">
+                          Histórico por printing (30 días)
+                        </span>
+                        <span className="text-muted-foreground">Cardmarket</span>
+                      </div>
+                      {priceHistoryLoading ? (
+                        <p className="text-center text-muted-foreground py-8">Cargando histórico…</p>
+                      ) : (
+                        <PriceHistoryChart
+                          series={priceHistory?.series ?? []}
+                          expansions={priceHistory?.expansions ?? []}
+                          activePrintingId={currentPrint?.id}
+                          currencySymbol="€"
+                          height={280}
+                        />
+                      )}
+                    </div>
                   </div>
                 </TabsContent>
 
@@ -745,22 +906,22 @@ export function CardDetailDialog({
                       {details.rulings.map((ruling, index) => (
                         <div
                           key={`${ruling.date}-${index}`}
-                          className="p-3.5 rounded-xl border border-slate-800/80 bg-slate-900/40"
+                          className="p-3.5 rounded-xl border border-border/80 bg-card/40"
                         >
                           <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[11px] font-mono text-amber-300">
+                            <span className="text-[11px] font-mono text-primary">
                               {ruling.date.slice(0, 10)}
                             </span>
-                            <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
                               {ruling.source || "Scryfall"}
                             </span>
                           </div>
-                          <p className="text-sm text-slate-200 leading-relaxed">{ruling.text}</p>
+                          <p className="text-sm text-foreground leading-relaxed">{ruling.text}</p>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="p-3 text-center text-slate-500">
+                    <p className="p-3 text-center text-muted-foreground">
                       No hay rulings adicionales para esta carta.
                     </p>
                   )}
@@ -768,28 +929,28 @@ export function CardDetailDialog({
 
                 {/* Collection & Decks Status Tab */}
                 <TabsContent value="collection" className="mt-3">
-                  <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-900/30 text-xs space-y-3">
+                  <div className="p-4 rounded-xl border border-border/80 bg-card/30 text-xs space-y-3">
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
-                        <span className="text-slate-400 text-[11px]">En tu Colección</span>
-                        <p className="text-xl font-black text-emerald-400 font-mono mt-0.5">
+                      <div className="p-2.5 rounded-lg bg-background/60 border border-border">
+                        <span className="text-muted-foreground text-[11px]">En tu Colección</span>
+                        <p className="text-xl font-semibold text-emerald-400 font-mono mt-0.5">
                           {ownedInCollection ?? quantity ?? 0} copias
                         </p>
                       </div>
 
                       {assignedQuantity !== undefined && (
-                        <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
-                          <span className="text-slate-400 text-[11px]">Asignadas a Mazos</span>
-                          <p className="text-xl font-black text-sky-400 font-mono mt-0.5">
+                        <div className="p-2.5 rounded-lg bg-background/60 border border-border">
+                          <span className="text-muted-foreground text-[11px]">Asignadas a Mazos</span>
+                          <p className="text-xl font-semibold text-sky-400 font-mono mt-0.5">
                             {assignedQuantity} copias
                           </p>
                         </div>
                       )}
 
                       {missingCount !== undefined && (
-                        <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
-                          <span className="text-slate-400 text-[11px]">Faltantes en este Mazo</span>
-                          <p className="text-xl font-black text-amber-400 font-mono mt-0.5">
+                        <div className="p-2.5 rounded-lg bg-background/60 border border-border">
+                          <span className="text-muted-foreground text-[11px]">Faltantes en este Mazo</span>
+                          <p className="text-xl font-semibold text-rose-400 font-mono mt-0.5">
                             {missingCount} copias
                           </p>
                         </div>
@@ -809,9 +970,13 @@ export function CardDetailDialog({
                           {requestedInDecks.map((req) => (
                             <span
                               key={req.deckId}
-                              className="px-2 py-0.5 rounded bg-slate-900/80 border border-indigo-700/40 text-xs text-indigo-200 font-medium"
+                              className="px-2 py-0.5 rounded bg-card/80 border border-indigo-700/40 text-xs text-indigo-200 font-medium"
                             >
-                              {req.deckName} ({req.quantity})
+                              {req.deckName} ({req.quantity}
+                              {req.completionPercentage != null
+                                ? `, ${req.completionPercentage}%`
+                                : ""}
+                              )
                             </span>
                           ))}
                         </div>

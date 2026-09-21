@@ -2,11 +2,26 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { backendFetch } from "@/lib/api-client";
 
 const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001";
 const DEMO_USER_EMAIL = "planeswalker@magic.io";
+
+/**
+ * Whether the current request reached an HTTPS-terminating proxy. The
+ * deployment serves plain HTTP (no TLS), so Secure cookies would be silently
+ * dropped by the browser and the session would never persist.
+ */
+async function isSecureConnection(): Promise<boolean> {
+  try {
+    const h = await headers();
+    const proto = h.get("x-forwarded-proto");
+    return proto?.toLowerCase().startsWith("https") ?? false;
+  } catch {
+    return false;
+  }
+}
 
 export interface UserSessionState {
   id: string;
@@ -110,7 +125,7 @@ export async function signInWithEmail(
     if (res.accessToken) {
       cookieStore.set("mtg_token", res.accessToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: await isSecureConnection(),
         sameSite: "lax",
         path: "/",
         maxAge: 60 * 60 * 24 * 7,
@@ -120,7 +135,7 @@ export async function signInWithEmail(
     if (res.refreshToken) {
       cookieStore.set("mtg_refresh_token", res.refreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: await isSecureConnection(),
         sameSite: "lax",
         path: "/",
         maxAge: 60 * 60 * 24 * 30,
@@ -130,14 +145,14 @@ export async function signInWithEmail(
     if (res.user?.id) {
       cookieStore.set("mtg_user_id", res.user.id, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: await isSecureConnection(),
         sameSite: "lax",
         path: "/",
         maxAge: 60 * 60 * 24 * 7,
       });
       cookieStore.set("mtg_user_email", res.user.email || "", {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: await isSecureConnection(),
         sameSite: "lax",
         path: "/",
         maxAge: 60 * 60 * 24 * 7,
@@ -184,7 +199,7 @@ export async function signUpWithEmail(
       const cookieStore = await cookies();
       cookieStore.set("mtg_token", res.accessToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: await isSecureConnection(),
         sameSite: "lax",
         path: "/",
         maxAge: 60 * 60 * 24 * 7,
@@ -192,7 +207,7 @@ export async function signUpWithEmail(
       if (res.user?.id) {
         cookieStore.set("mtg_user_id", res.user.id, {
           httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
+          secure: await isSecureConnection(),
           sameSite: "lax",
           path: "/",
           maxAge: 60 * 60 * 24 * 7,
@@ -229,7 +244,7 @@ export async function signInAsGuest(): Promise<{ error?: string }> {
 
     cookieStore.set("mtg_token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: await isSecureConnection(),
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
@@ -237,7 +252,7 @@ export async function signInAsGuest(): Promise<{ error?: string }> {
 
     cookieStore.set("mtg_user_id", userId, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: await isSecureConnection(),
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
@@ -245,7 +260,7 @@ export async function signInAsGuest(): Promise<{ error?: string }> {
 
     cookieStore.set("mtg_user_email", email, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: await isSecureConnection(),
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
@@ -259,21 +274,21 @@ export async function signInAsGuest(): Promise<{ error?: string }> {
       const cookieStore = await cookies();
       cookieStore.set("mtg_token", "demo-access-token", {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: await isSecureConnection(),
         sameSite: "lax",
         path: "/",
         maxAge: 60 * 60 * 24 * 7,
       });
       cookieStore.set("mtg_user_id", "00000000-0000-0000-0000-000000000000", {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: await isSecureConnection(),
         sameSite: "lax",
         path: "/",
         maxAge: 60 * 60 * 24 * 7,
       });
       cookieStore.set("mtg_user_email", "demo@magic.io", {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: await isSecureConnection(),
         sameSite: "lax",
         path: "/",
         maxAge: 60 * 60 * 24 * 7,

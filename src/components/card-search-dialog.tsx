@@ -103,25 +103,25 @@ export function CardSearchDialog({
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-6 overflow-hidden">
         <DialogHeader>
-          <DialogTitle className="text-xl flex items-center gap-2 text-amber-300">
-            <Search className="h-5 w-5 text-amber-400" />
+          <DialogTitle className="text-xl flex items-center gap-2 text-primary">
+            <Search className="h-5 w-5 text-primary" />
             {title}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3 pt-2">
           <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Escribe el nombre de la carta (ej: Black Lotus, Lightning Bolt, Atraxa...)"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="pl-9 h-11 bg-slate-950/90 text-base"
+              className="pl-9 h-11 text-base"
               autoFocus
             />
           </div>
 
-          <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2 cursor-pointer">
                 <span>Cantidad:</span>
@@ -131,7 +131,7 @@ export function CardSearchDialog({
                   max="99"
                   value={quantity}
                   onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-14 h-7 px-2 bg-slate-950 border border-slate-700 rounded text-center text-slate-100"
+                  className="w-14 h-7 px-2 bg-background border border-border rounded-md text-center text-foreground"
                 />
               </label>
 
@@ -141,7 +141,7 @@ export function CardSearchDialog({
                     type="checkbox"
                     checked={isSideboard}
                     onChange={(e) => setIsSideboard(e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400"
+                    className="rounded border-border bg-background text-primary focus:ring-ring"
                   />
                   <span>Añadir al Sideboard</span>
                 </label>
@@ -152,23 +152,23 @@ export function CardSearchDialog({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto mt-3 pr-1 space-y-2 min-h-[300px] border-t border-slate-800 pt-3">
+        <div className="flex-1 overflow-y-auto mt-3 pr-1 space-y-2 min-h-[300px] border-t border-border pt-3">
           {loading && (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-              <Loader2 className="h-8 w-8 animate-spin text-amber-400 mb-2" />
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
               <p className="text-sm">Buscando en la base de datos de Scryfall...</p>
             </div>
           )}
 
           {!loading && query.length >= 2 && results.length === 0 && (
-            <div className="text-center py-16 text-slate-400">
+            <div className="text-center py-16 text-muted-foreground">
               <p>No se encontraron cartas para &quot;{query}&quot;</p>
-              <p className="text-xs text-slate-500 mt-1">Prueba con el nombre en inglés o parte del nombre.</p>
+              <p className="text-xs text-muted-foreground mt-1">Prueba con el nombre en inglés o parte del nombre.</p>
             </div>
           )}
 
           {!loading && query.length < 2 && (
-            <div className="text-center py-16 text-slate-500">
+            <div className="text-center py-16 text-muted-foreground">
               <p>Escribe al menos 2 letras para buscar cartas oficiales de Magic.</p>
             </div>
           )}
@@ -184,7 +184,7 @@ export function CardSearchDialog({
               return (
                 <div
                   key={card.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-slate-700 transition-all gap-3"
+                  className="flex items-center justify-between p-3 rounded-lg bg-card border border-border hover:border-primary/40 transition-all gap-3"
                 >
                   <div
                     onClick={() => setPreviewCard(card)}
@@ -201,21 +201,21 @@ export function CardSearchDialog({
                         className="w-10 h-14 object-cover rounded shadow-xs group-hover:opacity-90 transition-opacity"
                       />
                     ) : (
-                      <div className="w-10 h-14 bg-slate-800 rounded flex items-center justify-center text-slate-500">
+                      <div className="w-10 h-14 bg-secondary rounded-md flex items-center justify-center text-muted-foreground">
                         <ImageIcon className="h-4 w-4" />
                       </div>
                     )}
 
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-slate-100 group-hover:text-amber-300 transition-colors text-sm truncate">
+                        <span className="font-semibold text-foreground group-hover:text-primary transition-colors text-sm truncate">
                           {card.name}
                         </span>
                         <ManaCost
                           manaCost={card.mana_cost || card.card_faces?.[0]?.mana_cost}
                         />
                       </div>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">
                         {card.type_line} • {card.set?.toUpperCase()}
                       </p>
                     </div>
@@ -226,7 +226,7 @@ export function CardSearchDialog({
                     variant="secondary"
                     disabled={isAdding}
                     onClick={() => handleAdd(card)}
-                    className="shrink-0 hover:border-amber-500/50 hover:text-amber-300"
+                    className="shrink-0 hover:border-primary/50 hover:text-primary"
                   >
                     {isAdding ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />

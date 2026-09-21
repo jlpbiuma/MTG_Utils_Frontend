@@ -112,18 +112,18 @@ export function EditDeckDialog({ deck, deckCards, onUpdated, trigger }: EditDeck
           <Button
             size="sm"
             variant="outline"
-            className="h-8 px-2.5 gap-1.5 text-xs text-slate-300 border-slate-700 hover:border-amber-400 hover:text-white"
+            className="h-8 px-2.5 gap-1.5 text-xs text-muted-foreground border-border hover:border-primary hover:text-foreground"
             title="Editar nombre, formato o descripción del mazo"
           >
-            <Pencil className="h-3.5 w-3.5 text-amber-400" />
+            <Pencil className="h-3.5 w-3.5 text-primary" />
             <span>Editar</span>
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-amber-300">
-            <Layers className="h-5 w-5 text-amber-400" />
+          <DialogTitle className="flex items-center gap-2 text-primary">
+            <Layers className="h-5 w-5 text-primary" />
             Editar Mazo
           </DialogTitle>
         </DialogHeader>
@@ -136,26 +136,25 @@ export function EditDeckDialog({ deck, deckCards, onUpdated, trigger }: EditDeck
           )}
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Nombre del Mazo *
             </label>
             <Input
               placeholder="ej: Urza Lord High Artificer Combo"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="bg-slate-950"
               required
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Formato
             </label>
             <select
               value={format}
               onChange={(e) => setFormat(e.target.value)}
-              className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+              className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {MTG_FORMATS.map((fmt) => (
                 <option key={fmt} value={fmt}>
@@ -167,15 +166,15 @@ export function EditDeckDialog({ deck, deckCards, onUpdated, trigger }: EditDeck
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold uppercase tracking-wider text-amber-300 flex items-center gap-1">
-                <Crown className="w-3.5 h-3.5 text-amber-400" />
+              <label className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1">
+                <Crown className="w-3.5 h-3.5 text-primary" />
                 Comandante {format.toLowerCase().includes("commander") ? "(Obligatorio)" : "(Opcional)"}
               </label>
               {commander && (
                 <button
                   type="button"
                   onClick={() => setCommander("")}
-                  className="text-[10px] text-slate-500 hover:text-rose-400 underline"
+                  className="text-[10px] text-muted-foreground hover:text-rose-400 underline"
                 >
                   Quitar
                 </button>
@@ -186,7 +185,7 @@ export function EditDeckDialog({ deck, deckCards, onUpdated, trigger }: EditDeck
               placeholder="ej: Aragorn, the Uniter"
               value={commander}
               onChange={(e) => setCommander(e.target.value)}
-              className="bg-slate-950 border-slate-700 focus:border-amber-400"
+              className="border-border focus-visible:ring-ring"
             />
             {deckCards && deckCards.length > 0 && (
               <datalist id="commander-suggestions">
@@ -202,13 +201,13 @@ export function EditDeckDialog({ deck, deckCards, onUpdated, trigger }: EditDeck
                   ))}
               </datalist>
             )}
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-muted-foreground">
               Necesario para consultar sugerencias y estadísticas de comunidad en EDHREC.
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Descripción o Estrategia (Opcional)
             </label>
             <textarea
@@ -216,7 +215,7 @@ export function EditDeckDialog({ deck, deckCards, onUpdated, trigger }: EditDeck
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="flex w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:border-transparent resize-none"
+              className="flex w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent resize-none"
             />
           </div>
 

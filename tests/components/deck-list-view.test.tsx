@@ -86,6 +86,16 @@ describe("DeckListView", () => {
     ]);
   });
 
+  it("filters the list to complete or incomplete decks", () => {
+    render(<DeckListView decks={[azorius, jund, monoBlue, noColors]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Completos" }));
+    expect(flatTitles()).toEqual(["Pauper Blue"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Incompletos" }));
+    expect(flatTitles()).toEqual(["Azorius Blink", "Spirit Tokens", "Jund Sacrifice"]);
+  });
+
   it("groups decks by color identity when 'Por Colores' is toggled", () => {
     render(<DeckListView decks={[azorius, jund, monoBlue, noColors]} />);
 

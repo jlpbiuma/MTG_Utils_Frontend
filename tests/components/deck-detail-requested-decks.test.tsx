@@ -125,14 +125,14 @@ describe("DeckDetailView - Requested In Decks Metric (Missing Priority)", () => 
     ],
   };
 
-  it("renders 'Se pide en 7 mazos:' with all requesting deck badges for unowned missing card", () => {
+  it("opens the requesting decks from Se pide en N mazos", () => {
     render(<DeckDetailView initialDeck={mockDeck} />);
 
-    // Arcane Signet is missing and requested in 7 decks
-    expect(screen.getByText(/Se pide en 7 mazos:/i)).toBeInTheDocument();
-    expect(screen.getAllByText("Urza Power (1)").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Atraxa Proliferate (1)")).toBeInTheDocument();
-    expect(screen.getByText("Edgar Markov (1)")).toBeInTheDocument();
+    expect(screen.queryByText("Atraxa Proliferate (1)")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Se pide en 7 mazos/i }));
+
+    expect(screen.getByText("Atraxa Proliferate")).toBeInTheDocument();
+    expect(screen.getByText("Edgar Markov")).toBeInTheDocument();
     expect(screen.getByText("(No la tienes en colección)")).toBeInTheDocument();
   });
 
@@ -144,7 +144,7 @@ describe("DeckDetailView - Requested In Decks Metric (Missing Priority)", () => 
     expect(screen.getByText("Reasignar aquí")).toBeInTheDocument();
 
     // It also shows requested in 2 decks without collision
-    expect(screen.getByText(/Se pide en 2 mazos:/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Se pide en 2 mazos/i })).toBeInTheDocument();
   });
 
   it("does not show requested in decks missing badge for fully complete owned card", () => {
@@ -152,7 +152,7 @@ describe("DeckDetailView - Requested In Decks Metric (Missing Priority)", () => 
 
     // Tidus commander card is owned (missingCount == 0)
     // The "Se pide en 1 mazo:" should NOT be shown in the card row since it's not missing
-    const singleDeckBadge = screen.queryByText(/Se pide en 1 mazo:/i);
+    const singleDeckBadge = screen.queryByRole("button", { name: /Se pide en 1 mazo/i });
     expect(singleDeckBadge).toBeNull();
   });
 
@@ -194,8 +194,9 @@ describe("DeckDetailView - Requested In Decks Metric (Missing Priority)", () => 
 
     // In modal, check that the requested in decks info is rendered
     await waitFor(() => {
-      const modalElements = screen.getAllByText(/Se pide en 7 mazos:/i);
-      expect(modalElements.length).toBe(2); // One in deck list, one in dialog
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText(/Se pide en 7 mazos:/i)).toBeInTheDocument();
+      expect(screen.getByText(/Atraxa Proliferate \(1\)/)).toBeInTheDocument();
     });
   });
 });

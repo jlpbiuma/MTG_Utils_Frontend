@@ -9,12 +9,8 @@ import {
   ArrowDown,
   ArrowUpDown,
   X,
-  ChevronsUpDown,
-  Layers,
 } from "lucide-react";
 import { SortField, SortDirection } from "@/lib/sorting";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 
 interface FloatingDeckControlsProps {
   // Sorting state
@@ -105,17 +101,17 @@ export function FloatingDeckControls({
       {isOpen && (
         <div
           ref={panelRef}
-          className="mb-3 w-80 sm:w-96 rounded-2xl border border-slate-700/80 bg-slate-900/95 p-4 backdrop-blur-xl shadow-2xl shadow-black/80 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-200 text-slate-200"
+          className="mb-3 w-80 sm:w-96 rounded-lg border border-border bg-card p-4 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-200 text-foreground"
         >
           {/* Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="flex items-center justify-between pb-3 border-b border-border">
             <div className="flex items-center gap-2">
-              <SlidersHorizontal className="h-4 w-4 text-amber-400" />
-              <span className="font-bold text-sm text-white">Organizar y Agrupar</span>
+              <SlidersHorizontal className="h-4 w-4 text-primary" />
+              <span className="font-semibold text-sm text-foreground">Organizar y Agrupar</span>
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               title="Cerrar panel"
             >
               <X className="h-4 w-4" />
@@ -125,8 +121,8 @@ export function FloatingDeckControls({
           {/* Section 1: Grouping */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <FolderTree className="h-3.5 w-3.5 text-amber-400" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <FolderTree className="h-3.5 w-3.5 text-primary" />
                 Agrupación
               </span>
               {isGroupedByType && (
@@ -134,7 +130,7 @@ export function FloatingDeckControls({
                   {onExpandAll && (
                     <button
                       onClick={onExpandAll}
-                      className="px-1.5 py-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                      className="px-1.5 py-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                     >
                       Expandir todo
                     </button>
@@ -142,7 +138,7 @@ export function FloatingDeckControls({
                   {onCollapseAll && (
                     <button
                       onClick={onCollapseAll}
-                      className="px-1.5 py-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                      className="px-1.5 py-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                     >
                       Colapsar todo
                     </button>
@@ -151,14 +147,14 @@ export function FloatingDeckControls({
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-950/80 border border-slate-800">
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-background border border-border">
               <button
                 type="button"
                 onClick={() => onGroupingToggle(true)}
-                className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                className={`py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
                   isGroupedByType
-                    ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/25 ring-1 ring-amber-400"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-primary text-primary-foreground ring-1 ring-ring"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <FolderTree className="h-4 w-4" />
@@ -168,10 +164,10 @@ export function FloatingDeckControls({
               <button
                 type="button"
                 onClick={() => onGroupingToggle(false)}
-                className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                className={`py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
                   !isGroupedByType
-                    ? "bg-slate-800 text-white shadow-sm ring-1 ring-slate-700"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-accent text-foreground ring-1 ring-ring"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <AlignJustify className="h-4 w-4" />
@@ -182,8 +178,8 @@ export function FloatingDeckControls({
 
           {/* Section 2: Sorting */}
           <div className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-              <ArrowUpDown className="h-3.5 w-3.5 text-amber-400" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <ArrowUpDown className="h-3.5 w-3.5 text-primary" />
               Ordenar Cartas por
             </span>
 
@@ -196,13 +192,13 @@ export function FloatingDeckControls({
                     onClick={() => handleFieldClick(opt.field)}
                     className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
                       isActive
-                        ? "bg-amber-500/20 text-amber-300 border-amber-500/60 shadow-sm"
-                        : "bg-slate-950/60 text-slate-400 border-slate-800/80 hover:text-white hover:border-slate-700"
+                        ? "bg-primary/20 text-primary border-primary/30"
+                        : "bg-secondary text-muted-foreground border-border hover:text-foreground hover:border-border"
                     }`}
                   >
                     <span>{opt.label}</span>
                     {isActive && (
-                      <span className="text-amber-400 font-bold ml-1">
+                      <span className="text-primary font-bold ml-1">
                         {sortDirection === "asc" ? (
                           <ArrowUp className="h-3.5 w-3.5" />
                         ) : (
@@ -223,17 +219,17 @@ export function FloatingDeckControls({
         ref={buttonRef}
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center gap-2.5 px-4 py-3 rounded-full bg-slate-900/95 border border-amber-500/50 text-white shadow-2xl shadow-black/80 hover:border-amber-400 hover:shadow-amber-500/20 hover:scale-105 active:scale-95 transition-all backdrop-blur-md group"
+        className="flex items-center gap-2.5 px-4 py-3 rounded-full bg-card border border-primary/30 text-foreground hover:border-primary hover:scale-105 active:scale-95 transition-all group"
         title="Opciones flotantes para ordenar y agrupar cartas"
       >
-        <div className="p-1 rounded-full bg-amber-500/20 text-amber-400 group-hover:bg-amber-500 group-hover:text-slate-950 transition-colors">
+        <div className="p-1 rounded-full bg-primary/20 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
           <SlidersHorizontal className="h-4 w-4" />
         </div>
         <div className="flex flex-col items-start text-left leading-none">
-          <span className="text-xs font-extrabold tracking-wide text-slate-100">
+          <span className="text-xs font-semibold tracking-wide text-foreground">
             Vista & Orden
           </span>
-          <span className="text-[10px] text-amber-300 font-mono mt-1">
+          <span className="text-[10px] text-primary font-mono mt-1">
             {isGroupedByType ? "Agrupado" : "Lista"} • {currentSortLabel} {sortDirection === "asc" ? "↑" : "↓"}
           </span>
         </div>

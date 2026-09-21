@@ -12,7 +12,7 @@ interface PriceBadgeProps {
 export function PriceBadge({ quote, showSubtotal = true, className = "" }: PriceBadgeProps) {
   if (!quote) {
     return (
-      <div className={`inline-flex items-center gap-1 text-[11px] font-mono text-slate-500 ${className}`}>
+      <div className={`inline-flex items-center gap-1 text-[11px] font-mono text-muted-foreground ${className}`}>
         <span>...</span>
       </div>
     );
@@ -27,9 +27,9 @@ export function PriceBadge({ quote, showSubtotal = true, className = "" }: Price
         {/* Trend price */}
         <div
           title={`Precio de Tendencia: ${unitPrice.trend.toFixed(2)} ${currencySymbol}`}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-300 font-mono text-xs font-semibold"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary/10 border border-border text-primary font-mono text-xs font-semibold"
         >
-          <TrendingUp className="h-3 w-3 text-amber-400" />
+          <TrendingUp className="h-3 w-3 text-primary" />
           <span>
             {unitPrice.trend.toFixed(2)} {currencySymbol}
           </span>
@@ -38,13 +38,13 @@ export function PriceBadge({ quote, showSubtotal = true, className = "" }: Price
         {/* Min / Max compact pill */}
         <div
           title={`Mínimo: ${unitPrice.min.toFixed(2)} ${currencySymbol} | Máximo: ${unitPrice.max.toFixed(2)} ${currencySymbol}`}
-          className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 text-slate-400 font-mono text-[10px]"
+          className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-secondary border border-border text-muted-foreground font-mono text-[10px]"
         >
           <span className="flex items-center text-emerald-400">
             <ArrowDown className="h-2.5 w-2.5" />
             {unitPrice.min.toFixed(2)}
           </span>
-          <span className="text-slate-600">/</span>
+          <span className="text-muted-foreground/60">/</span>
           <span className="flex items-center text-rose-400">
             <ArrowUp className="h-2.5 w-2.5" />
             {unitPrice.max.toFixed(2)}
@@ -58,7 +58,7 @@ export function PriceBadge({ quote, showSubtotal = true, className = "" }: Price
             target="_blank"
             rel="noopener noreferrer"
             title={`Ver en ${provider === "cardmarket" ? "Cardmarket" : provider === "cardtrader" ? "Card Trader" : "MTGGoldfish"}`}
-            className="p-1 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors"
+            className="p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
           >
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
@@ -67,8 +67,8 @@ export function PriceBadge({ quote, showSubtotal = true, className = "" }: Price
 
       {/* Subtotal if quantity > 1 */}
       {showSubtotal && quote.quantity > 1 && (
-        <span className="text-[10px] font-mono text-slate-400">
-          Subtotal: <strong className="text-slate-200">{subtotal.toFixed(2)} {currencySymbol}</strong>
+        <span className="text-[10px] font-mono text-muted-foreground">
+          Subtotal: <strong className="text-foreground">{subtotal.toFixed(2)} {currencySymbol}</strong>
         </span>
       )}
     </div>

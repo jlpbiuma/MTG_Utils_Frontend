@@ -43,4 +43,22 @@ describe("Deck Bulk Missing Cards Transfer (Swift Parity)", () => {
       "Deck not found"
     );
   });
+
+  it("should call backend /api/decks/cards/:id/add-missing endpoint for a single card", async () => {
+    const { addMissingCardToCollection } = await import("@/actions/decks");
+    const mockResponse = { status: "success", addedCount: 1 };
+    vi.mocked(backendFetch).mockResolvedValueOnce(mockResponse);
+
+    const result = await addMissingCardToCollection("deck-123", "card-456");
+
+    expect(backendFetch).toHaveBeenCalledWith("/api/decks/cards/card-456/add-missing", {
+      method: "POST",
+      userId: "user-test-123",
+    });
+
+    expect(result).toEqual({
+      success: true,
+      addedCount: 1,
+    });
+  });
 });

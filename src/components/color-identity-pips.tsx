@@ -65,7 +65,7 @@ export function ColorIdentityPips({
           <span
             key={color}
             className={cn(
-              "inline-block rounded-full ring-1 ring-inset bg-slate-600",
+              "inline-block rounded-full ring-1 ring-inset bg-muted-foreground/50",
               sizeClasses[size]
             )}
             title={colorName}

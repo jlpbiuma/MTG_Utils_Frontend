@@ -6,10 +6,12 @@ function localImagePath(src: string | unknown): string | unknown {
   try {
     const url = new URL(src);
     const isLocalImageService =
-      url.port === "8080" &&
+      (url.port === "8080" || url.port === "8088" || url.hostname === "nginx") &&
       (url.hostname === "localhost" ||
         url.hostname === "127.0.0.1" ||
-        url.hostname === "::1");
+        url.hostname === "::1" ||
+        url.hostname === "nginx" ||
+        url.hostname.startsWith("192.168."));
     return isLocalImageService && url.pathname.startsWith("/images/")
       ? url.pathname
       : src;

@@ -2,7 +2,14 @@
 
 import { getCurrentUserId } from "./auth";
 import { backendFetch } from "@/lib/api-client";
-import { PriceProvider, PriceSummary } from "@/lib/pricing/types";
+import {
+  PriceProvider,
+  PriceSummary,
+  PriceMoversResponse,
+  MoversScope,
+  CardPriceHistoryResponse,
+  CollectionValueHistoryResponse,
+} from "@/lib/pricing/types";
 import { CardToPrice } from "@/lib/pricing";
 
 /**
@@ -51,6 +58,64 @@ export async function getCollectionPriceSummary(
     userId,
   });
 }
+
+export async function getPriceMovers(options: {
+  provider?: PriceProvider;
+  windowDays?: number;
+  limit?: number;
+  scope?: MoversScope;
+} = {}): Promise<PriceMoversResponse> {
+  const {
+    provider = "cardmarket",
+    windowDays = 30,
+    limit = 20,
+    scope = "global",
+  } = options;
+  const params = new URLSearchParams({
+    provider,
+    windowDays: String(windowDays),
+    limit: String(limit),
+    scope,
+  });
+  return await backendFetch<PriceMoversResponse>(`/api/pricing/movers?${params.toString()}`, {
+    method: "GET",
+    userId: await getCurrentUserId(),
+  });
+}
+
+export async function getCardPriceHistory(
+  cardId: string,
+  provider: PriceProvider = "cardmarket",
+  days: number = 30
+): Promise<CardPriceHistoryResponse> {
+  const params = new URLSearchParams({
+    provider,
+    days: String(days),
+  });
+  return await backendFetch<CardPriceHistoryResponse>(
+    `/api/catalog/cards/${encodeURIComponent(cardId)}/price-history?${params.toString()}`,
+    {
+      method: "GET",
+      userId: await getCurrentUserId(),
+      next: { revalidate: 3600 },
+    }
+  );
+}
+
+export async function getCollectionPriceHistory(
+  provider: PriceProvider = "cardmarket",
+  days: number = 30
+): Promise<CollectionValueHistoryResponse> {
+  const params = new URLSearchParams({
+    provider,
+    days: String(days),
+  });
+  return await backendFetch<CollectionValueHistoryResponse>(
+    `/api/pricing/collection/history?${params.toString()}`,
+    { method: "GET", userId: await getCurrentUserId() }
+  );
+}
+
 
 export async function triggerWeeklyCollectionPricing(): Promise<{
   success: boolean;

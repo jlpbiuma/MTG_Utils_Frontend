@@ -7,11 +7,14 @@ import { PriceSummary } from "@/lib/pricing/types";
 
 export function normalizeCardName(name: string): string {
   if (!name) return "";
-  return name
+  const cleaned = name
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, " ")
-    .split(" // ")[0]; // Front face for dual/split cards
+    .replace(/\s+/g, " ");
+  if (cleaned.includes("/")) {
+    return cleaned.replace(/\s*\/+\s*/g, " // ").split(" // ")[0];
+  }
+  return cleaned;
 }
 
 export type CardTypeCategory =
@@ -44,6 +47,7 @@ export const CARD_TYPE_GROUPS: Record<CardTypeCategory, CardTypeGroupInfo> = {
 };
 
 const BASIC_LAND_NAMES = new Set([
+  // English
   "plains",
   "island",
   "swamp",
@@ -55,6 +59,49 @@ const BASIC_LAND_NAMES = new Set([
   "snow-covered swamp",
   "snow-covered mountain",
   "snow-covered forest",
+  // English plurals
+  "islands",
+  "swamps",
+  "mountains",
+  "forests",
+  // Spanish
+  "llanura",
+  "isla",
+  "pantano",
+  "montaña",
+  "montana",
+  "bosque",
+  "yermo",
+  "yermos",
+  // Spanish plurals
+  "llanuras",
+  "islas",
+  "pantanos",
+  "montañas",
+  "montanas",
+  "bosques",
+  // Spanish snow-covered
+  "llanura nevada",
+  "llanuras nevadas",
+  "llanura cubierta de nieve",
+  "isla nevada",
+  "islas nevadas",
+  "isla cubierta de nieve",
+  "pantano nevado",
+  "pantanos nevados",
+  "pantano cubierto de nieve",
+  "montaña nevada",
+  "montañas nevadas",
+  "montana nevada",
+  "montanas nevadas",
+  "montaña cubierta de nieve",
+  "montana cubierta de nieve",
+  "bosque nevado",
+  "bosques nevados",
+  "bosque cubierto de nieve",
+  "yermo nevado",
+  "yermos nevados",
+  "yermo cubierto de nieve",
 ]);
 
 /**
@@ -69,10 +116,25 @@ export function isBasicLand(
 ): boolean {
   if (typeLine) {
     const lower = typeLine.toLowerCase();
-    if (lower.includes("basic land") || lower.includes("tierra básica")) return true;
+    if (
+      lower.includes("basic land") ||
+      lower.includes("tierra básica") ||
+      lower.includes("tierra basica") ||
+      (lower.includes("basic") && lower.includes("land")) ||
+      (lower.includes("básica") && lower.includes("tierra")) ||
+      (lower.includes("basica") && lower.includes("tierra"))
+    ) {
+      return true;
+    }
   }
   if (cardName) {
-    return BASIC_LAND_NAMES.has(normalizeCardName(cardName));
+    const norm = normalizeCardName(cardName);
+    if (BASIC_LAND_NAMES.has(norm)) return true;
+    for (const b of Array.from(BASIC_LAND_NAMES)) {
+      if (norm === b || norm.startsWith(`${b} `) || norm.endsWith(` ${b}`)) {
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -140,6 +202,8 @@ export interface GroupedCardSection<T> {
   order: number;
   cards: T[];
   totalCards: number;
+  totalCardsCount: number;
+  completionTotalCards: number;
   uniqueCards: number;
   ownedCards: number;
   missingCards: number;
@@ -153,8 +217,8 @@ export interface GroupedCardSection<T> {
 export interface GroupCardsOptions {
   /**
    * When true, basic lands are excluded from the section's completion stats
-   * (totalCards, ownedCards, missingCards, completionPercentage). They are
-   * still included in the cards list and in the price totals.
+   * (completionTotalCards, ownedCards, missingCards, completionPercentage). They are
+   * still included in totalCardsCount, cards list and in the price totals.
    */
   excludeBasicLands?: boolean;
 }
@@ -191,22 +255,26 @@ export function groupCardsByType<
     const catCards = buckets.get(cat);
     if (!catCards || catCards.length === 0) continue;
 
-    let totalCards = 0;
+    let completionTotalCards = 0;
+    let totalCardsCount = 0;
     let ownedCards = 0;
     let missingCards = 0;
     let sectionTotalPrice = 0;
     let sectionMissingPrice = 0;
 
     for (const card of catCards) {
-      const isBasic = excludeBasicLands && isBasicLand(card.typeLine, card.cardName);
+      const isBasic = isBasicLand(card.typeLine, card.cardName);
       const owned = card.ownedInCollection ?? 0;
-      const effectiveOwned = Math.min(owned, card.quantity);
-      const missing = card.missingCount ?? Math.max(0, card.quantity - owned);
+      // Basic lands are always 100% owned without needing to be in the collection or moved to deck
+      const effectiveOwned = isBasic ? card.quantity : Math.min(owned, card.quantity);
+      const missing = isBasic ? 0 : (card.missingCount ?? Math.max(0, card.quantity - owned));
 
-      // Basic lands don't count toward completion: excluded from the
-      // numerator (owned) and the denominator (total).
-      if (!isBasic) {
-        totalCards += card.quantity;
+      totalCardsCount += card.quantity;
+
+      if (excludeBasicLands && isBasic) {
+        // Excluded from completion numerator and denominator only if explicitly requested
+      } else {
+        completionTotalCards += card.quantity;
         ownedCards += effectiveOwned;
         missingCards += missing;
       }
@@ -224,7 +292,7 @@ export function groupCardsByType<
 
     // A section made only of basic lands has nothing left to complete.
     const completionPercentage =
-      totalCards > 0 ? Math.round((ownedCards / totalCards) * 1000) / 10 : 100;
+      completionTotalCards > 0 ? Math.round((ownedCards / completionTotalCards) * 1000) / 10 : 100;
 
     const totalP = Math.round(sectionTotalPrice * 100) / 100;
     const missP = Math.round(sectionMissingPrice * 100) / 100;
@@ -235,7 +303,9 @@ export function groupCardsByType<
       label: groupInfo.label,
       order: groupInfo.order,
       cards: catCards,
-      totalCards,
+      totalCards: completionTotalCards,
+      totalCardsCount,
+      completionTotalCards,
       uniqueCards: catCards.length,
       ownedCards,
       missingCards,

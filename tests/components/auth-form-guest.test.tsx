@@ -28,11 +28,11 @@ describe("AuthForm Guest Login (Swift Parity)", () => {
     vi.clearAllMocks();
   });
 
-  it("should render Entrar como invitado (demo) button", () => {
+  it("should render Continuar como invitado button", () => {
     render(<AuthForm />);
 
     const guestButton = screen.getByRole("button", {
-      name: /Entrar como invitado \(demo\)/i,
+      name: /Continuar como invitado/i,
     });
     expect(guestButton).toBeInTheDocument();
   });
@@ -41,7 +41,7 @@ describe("AuthForm Guest Login (Swift Parity)", () => {
     render(<AuthForm />);
 
     const guestButton = screen.getByRole("button", {
-      name: /Entrar como invitado \(demo\)/i,
+      name: /Continuar como invitado/i,
     });
     fireEvent.click(guestButton);
 
@@ -60,7 +60,7 @@ describe("AuthForm Guest Login (Swift Parity)", () => {
     render(<AuthForm />);
 
     const guestButton = screen.getByRole("button", {
-      name: /Entrar como invitado \(demo\)/i,
+      name: /Continuar como invitado/i,
     });
     fireEvent.click(guestButton);
 

@@ -8,6 +8,7 @@ export const DeckCreateSchema = z.object({
   commander: z.string().nullable().optional(),
   commanderScryfallId: z.string().nullable().optional(),
   commanderImageUri: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 export const DeckUpdateSchema = z.object({
@@ -17,6 +18,8 @@ export const DeckUpdateSchema = z.object({
   commander: z.string().nullable().optional(),
   commanderScryfallId: z.string().nullable().optional(),
   commanderImageUri: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  isArchived: z.boolean().optional(),
 });
 
 export const DeckCardCreateSchema = z.object({
@@ -28,6 +31,7 @@ export const DeckCardCreateSchema = z.object({
   manaCost: z.string().nullable().optional(),
   typeLine: z.string().nullable().optional(),
   imageUri: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 export const CollectionCardCreateSchema = z.object({
@@ -56,6 +60,7 @@ export interface DeckWithCompletion {
   commander: string | null;
   commanderScryfallId: string | null;
   commanderImageUri: string | null;
+  isArchived?: boolean;
   createdAt: Date;
   updatedAt: Date;
   totalCards: number;
@@ -70,6 +75,7 @@ export interface DeckWithCompletion {
   ownedValue?: number | null;
   currency?: Currency;
   currencySymbol?: string;
+  tags?: string[];
 }
 
 export type DeckSummary = DeckWithCompletion;
@@ -85,6 +91,8 @@ export interface DeckRequirement {
   deckId: string;
   deckName: string;
   quantity: number;
+  completionPercentage?: number;
+  colors?: string[];
 }
 
 export interface DeckCardWithOwnership {
@@ -107,6 +115,7 @@ export interface DeckCardWithOwnership {
   missingCount: number;
   canBeCommander?: boolean;
   setCode?: string | null;
+  tags?: string[];
 }
 
 export interface DeckDetailWithStats extends DeckWithCompletion {
@@ -128,5 +137,8 @@ export interface EdhrecCardRecommendation {
   isInDeck: boolean;
   isInCollection: boolean;
   collectionQuantity: number;
+  requestedInDecks?: DeckRequirement[];
+  requestedInDecksCount?: number;
+  isInWant?: boolean;
 }
 

@@ -143,22 +143,22 @@ export function ImportDeckDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2 border-slate-700 hover:border-amber-500/50 hover:bg-slate-900">
-          <UploadCloud className="h-4 w-4 text-amber-400" />
+        <Button variant="outline" className="gap-2 border-border hover:border-primary hover:bg-accent">
+          <UploadCloud className="h-4 w-4 text-primary" />
           Importar Mazo
         </Button>
       </DialogTrigger>
 
       <DialogContent className="max-w-xl max-h-[90vh] flex flex-col p-6 overflow-hidden">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-amber-300 text-xl">
-            <UploadCloud className="h-5 w-5 text-amber-400" />
+          <DialogTitle className="flex items-center gap-2 text-primary text-xl">
+            <UploadCloud className="h-5 w-5 text-primary" />
             Importar Mazo (TXT / Moxfield / Arena)
           </DialogTitle>
         </DialogHeader>
 
         {/* Tab Switcher */}
-        <div className="flex rounded-lg bg-slate-950 p-1 border border-slate-800 mt-2">
+        <div className="flex rounded-md bg-secondary p-1 border border-border mt-2">
           <button
             type="button"
             onClick={() => {
@@ -167,8 +167,8 @@ export function ImportDeckDialog() {
             }}
             className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 ${
               tab === "text"
-                ? "bg-amber-500 text-slate-950 shadow-sm"
-                : "text-slate-400 hover:text-white"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <FileText className="h-3.5 w-3.5" />
@@ -182,8 +182,8 @@ export function ImportDeckDialog() {
             }}
             className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 ${
               tab === "moxfield"
-                ? "bg-amber-500 text-slate-950 shadow-sm"
-                : "text-slate-400 hover:text-white"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <Link2 className="h-3.5 w-3.5" />
@@ -203,25 +203,24 @@ export function ImportDeckDialog() {
             <form onSubmit={handleTextImport} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Nombre del Mazo
                   </label>
                   <Input
                     placeholder="ej: Mi Mazo de Moxfield"
                     value={deckName}
                     onChange={(e) => setDeckName(e.target.value)}
-                    className="bg-slate-950"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Formato
                   </label>
                   <select
                     value={format}
                     onChange={(e) => setFormat(e.target.value)}
-                    className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                    className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {MTG_FORMATS.map((fmt) => (
                       <option key={fmt} value={fmt}>
@@ -234,14 +233,14 @@ export function ImportDeckDialog() {
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Lista de Cartas (Formato Moxfield, Arena o plano)
                   </label>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-7 text-xs gap-1 border-slate-700 text-slate-300"
+                    className="h-7 text-xs gap-1 border-border text-muted-foreground"
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <FileText className="h-3 w-3" />
@@ -261,7 +260,7 @@ export function ImportDeckDialog() {
                   value={deckText}
                   onChange={(e) => setDeckText(e.target.value)}
                   rows={9}
-                  className="flex w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-mono text-slate-200 placeholder:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 resize-none"
+                  className="flex w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
                   required
                 />
               </div>
@@ -293,25 +292,24 @@ export function ImportDeckDialog() {
           ) : (
             <form onSubmit={handleMoxfieldImport} className="space-y-4">
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Enlace público de Moxfield
                 </label>
                 <Input
                   placeholder="https://www.moxfield.com/decks/k0kUqT2tKUqjZ549Xh0O0A"
                   value={moxfieldUrl}
                   onChange={(e) => setMoxfieldUrl(e.target.value)}
-                  className="bg-slate-950"
                   required
                 />
               </div>
 
               {showCloudflareHelper && (
-                <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs space-y-2">
-                  <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                <div className="p-4 rounded-lg bg-secondary border border-border text-foreground text-xs space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold text-primary">
                     <HelpCircle className="h-4 w-4" />
                     Cómo importar desde Moxfield en 2 clics:
                   </div>
-                  <ol className="list-decimal list-inside space-y-1 text-slate-300">
+                  <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
                     <li>Abre tu mazo en <strong>Moxfield.com</strong>.</li>
                     <li>
                       En la barra de herramientas del mazo, pulsa en <strong>Export</strong> $\rightarrow$ <strong>Text</strong> (o <em>Copy</em>).
@@ -324,7 +322,7 @@ export function ImportDeckDialog() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="mt-2 text-xs border-amber-500/50 text-amber-300 hover:bg-amber-500/10"
+                    className="mt-2 text-xs border-primary/50 text-primary hover:bg-accent"
                     onClick={() => {
                       setTab("text");
                       setError(null);

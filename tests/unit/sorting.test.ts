@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sortCards, extractCmc, SortableCard } from "@/lib/sorting";
+import { sortCards, extractCmc, matchesPriceFilter, SortableCard } from "@/lib/sorting";
 import { PriceSummary } from "@/lib/pricing";
 
 describe("Card Sorting Engine", () => {
@@ -189,5 +189,63 @@ describe("Card Sorting Engine", () => {
       "Sol Ring",
       "Arcane Signet",
     ]);
+  });
+
+  describe("matchesPriceFilter", () => {
+    it("returns true when no min or max price is provided", () => {
+      expect(
+        matchesPriceFilter("Sol Ring", "id-sol-ring", null, null, samplePriceSummary.quotes)
+      ).toBe(true);
+    });
+
+    it("filters correctly by minPrice", () => {
+      // Sol Ring: 1.5, Bolt: 2.0, Lotus: 5000, Counterspell: 1.2
+      expect(
+        matchesPriceFilter("Sol Ring", "id-sol-ring", 1.5, null, samplePriceSummary.quotes)
+      ).toBe(true);
+      expect(
+        matchesPriceFilter("Counterspell", "id-counterspell", 1.5, null, samplePriceSummary.quotes)
+      ).toBe(false);
+      expect(
+        matchesPriceFilter("Black Lotus", "id-lotus", 1.5, null, samplePriceSummary.quotes)
+      ).toBe(true);
+    });
+
+    it("filters correctly by maxPrice", () => {
+      expect(
+        matchesPriceFilter("Sol Ring", "id-sol-ring", null, 2.0, samplePriceSummary.quotes)
+      ).toBe(true);
+      expect(
+        matchesPriceFilter("Lightning Bolt", "id-bolt", null, 2.0, samplePriceSummary.quotes)
+      ).toBe(true);
+      expect(
+        matchesPriceFilter("Black Lotus", "id-lotus", null, 2.0, samplePriceSummary.quotes)
+      ).toBe(false);
+    });
+
+    it("filters correctly by both minPrice and maxPrice range", () => {
+      // Range 1.3 to 3.0: Sol Ring (1.5) and Bolt (2.0) should pass; Counterspell (1.2) and Lotus (5000) should fail
+      expect(
+        matchesPriceFilter("Sol Ring", "id-sol-ring", 1.3, 3.0, samplePriceSummary.quotes)
+      ).toBe(true);
+      expect(
+        matchesPriceFilter("Lightning Bolt", "id-bolt", 1.3, 3.0, samplePriceSummary.quotes)
+      ).toBe(true);
+      expect(
+        matchesPriceFilter("Counterspell", "id-counterspell", 1.3, 3.0, samplePriceSummary.quotes)
+      ).toBe(false);
+      expect(
+        matchesPriceFilter("Black Lotus", "id-lotus", 1.3, 3.0, samplePriceSummary.quotes)
+      ).toBe(false);
+    });
+
+    it("excludes unpriced cards when price filter is specified", () => {
+      expect(
+        matchesPriceFilter("Unknown Card", "unknown-id", 1.0, null, samplePriceSummary.quotes)
+      ).toBe(false);
+      expect(
+        matchesPriceFilter("Unknown Card", "unknown-id", null, 5.0, samplePriceSummary.quotes)
+      ).toBe(false);
+    });
   });
 });
