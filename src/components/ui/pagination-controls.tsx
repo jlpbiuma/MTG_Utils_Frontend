@@ -41,9 +41,7 @@ export function PaginationControls({
       )}
     >
       <div className="text-xs sm:text-sm">
-        Mostrando <span className="font-semibold text-foreground">{startDisplay}</span> -{" "}
-        <span className="font-semibold text-foreground">{endDisplay}</span> de{" "}
-        <span className="font-semibold text-foreground">{totalCards}</span> {itemLabel}
+        Mostrando {startDisplay} - {endDisplay} de {totalCards} {itemLabel}
       </div>
 
       <div className="flex items-center gap-1.5">
@@ -70,7 +68,7 @@ export function PaginationControls({
         </Button>
 
         <span className="px-3 py-1 text-xs font-medium text-foreground bg-secondary rounded-md border border-border">
-          {currentPage} / {Math.max(1, totalPages)}
+          Página {currentPage} de {Math.max(1, totalPages)}
         </span>
 
         <Button

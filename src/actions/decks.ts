@@ -9,6 +9,7 @@ import {
   DeckCardCreateInput,
   DeckSummary,
   DeckDetailWithStats,
+  CommanderRecommendationsListResponse,
 } from "@/lib/schemas";
 
 export async function getUserDecks(): Promise<DeckSummary[]> {
@@ -462,5 +463,33 @@ export async function moveCardToSideboard(
   }
   revalidatePath("/decks");
   return { success: res.status === "success", cardId: res.cardId, merged: res.merged };
+}
+
+export interface GetEdhrecRecommendationsParams {
+  search?: string;
+  colors?: string;
+  top100Only?: boolean;
+  ownedCommanderOnly?: boolean;
+  sortBy?: "completion" | "rank" | "name";
+  page?: number;
+  pageSize?: number;
+}
+
+export async function getEdhrecCommanderRecommendations(
+  params: GetEdhrecRecommendationsParams = {}
+): Promise<CommanderRecommendationsListResponse> {
+  const userId = await getCurrentUserId();
+  const searchParams = new URLSearchParams();
+  if (params.search) searchParams.set("search", params.search);
+  if (params.colors) searchParams.set("colors", params.colors);
+  if (params.top100Only) searchParams.set("top100_only", "true");
+  if (params.ownedCommanderOnly) searchParams.set("owned_commander_only", "true");
+  if (params.sortBy) searchParams.set("sort_by", params.sortBy);
+  if (params.page) searchParams.set("page", params.page.toString());
+  if (params.pageSize) searchParams.set("page_size", params.pageSize.toString());
+
+  const query = searchParams.toString();
+  const endpoint = `/api/edhrec/commanders${query ? `?${query}` : ""}`;
+  return await backendFetch<CommanderRecommendationsListResponse>(endpoint, { userId });
 }
 

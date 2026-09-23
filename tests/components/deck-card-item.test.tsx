@@ -193,4 +193,22 @@ describe("DeckCardItem Component", () => {
 
     expect(screen.queryByText("¿Eliminar mazo permanentemente?")).not.toBeInTheDocument();
   });
+
+  it("should display Top 100 EDHREC badge with rank when isCommanderTop100 is true", () => {
+    const top100Deck: DeckWithCompletion = {
+      ...baseDeck,
+      isCommanderTop100: true,
+      commanderEdhrecRank: 12,
+    };
+
+    render(<DeckCardItem deck={top100Deck} />);
+
+    expect(screen.getByText("Top 100 EDHREC #12")).toBeInTheDocument();
+  });
+
+  it("should not display Top 100 EDHREC badge when isCommanderTop100 is false or undefined", () => {
+    render(<DeckCardItem deck={baseDeck} />);
+
+    expect(screen.queryByText(/Top 100 EDHREC/i)).not.toBeInTheDocument();
+  });
 });

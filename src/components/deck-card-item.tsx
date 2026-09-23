@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Trash2, ExternalLink, CheckCircle2, AlertCircle, AlertTriangle, Pencil, Crown, ShoppingCart, Archive, ArchiveRestore } from "lucide-react";
+import { Trash2, ExternalLink, CheckCircle2, AlertCircle, AlertTriangle, Pencil, Crown, ShoppingCart, Archive, ArchiveRestore, Flame } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,16 @@ export function DeckCardItem({ deck }: DeckCardItemProps) {
               >
                 <AlertTriangle className="h-3 w-3 shrink-0" />
                 <span>{deck.totalCards}/100</span>
+              </Badge>
+            )}
+            {deck.isCommanderTop100 && (
+              <Badge
+                variant="outline"
+                className="bg-amber-500/15 text-amber-300 border-amber-500/40 text-[11px] font-semibold flex items-center gap-1 shadow-sm"
+                title={`Este comandante pertenece al Top 100 de EDHREC${deck.commanderEdhrecRank ? ` (puesto #${deck.commanderEdhrecRank})` : ""}`}
+              >
+                <Flame className="h-3 w-3 text-amber-400 shrink-0" />
+                <span>Top 100 EDHREC{deck.commanderEdhrecRank ? ` #${deck.commanderEdhrecRank}` : ""}</span>
               </Badge>
             )}
             {isArchived && (

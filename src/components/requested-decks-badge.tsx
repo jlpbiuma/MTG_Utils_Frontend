@@ -38,12 +38,12 @@ export function RequestedDecksBadge({
         title={`Ver mazo: ${deck.deckName} (${deck.completionPercentage ?? 0}% completado)`}
       >
         <Layers className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-        <span className="truncate max-w-[150px]">En mazo: {deck.deckName}</span>
+        <span className="truncate max-w-[150px]">Se pide en mazo: {deck.deckName}</span>
       </Link>
     );
   }
 
-  const label = `En ${requestedCount} mazos`;
+  const label = `Se pide en ${requestedCount} mazos`;
 
   return (
     <>

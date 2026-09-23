@@ -61,6 +61,8 @@ export interface DeckWithCompletion {
   commanderScryfallId: string | null;
   commanderImageUri: string | null;
   isArchived?: boolean;
+  isCommanderTop100?: boolean;
+  commanderEdhrecRank?: number | null;
   createdAt: Date;
   updatedAt: Date;
   totalCards: number;
@@ -96,6 +98,12 @@ export interface DeckRequirement {
 }
 
 export interface DeckCardWithOwnership {
+  inclusionPct?: number;
+  synergy?: number;
+  isTopCard?: boolean;
+  isHighSynergy?: boolean;
+  isInWant?: boolean;
+  edhrecCategory?: import("@/lib/card-utils").CardTypeCategory;
   id: string;
   deckId: string;
   cardScryfallId: string;
@@ -142,3 +150,79 @@ export interface EdhrecCardRecommendation {
   isInWant?: boolean;
 }
 
+export interface CommanderTypeBreakdown {
+  creatures: number;
+  instants: number;
+  sorceries: number;
+  artifacts: number;
+  enchantments: number;
+  battle: number;
+  planeswalkers: number;
+  lands: number;
+  basicLands: number;
+  nonbasicLands: number;
+}
+
+export interface CommanderTypeOwnership {
+  creaturesOwned: number;
+  creaturesTotal: number;
+  instantsOwned: number;
+  instantsTotal: number;
+  sorceriesOwned: number;
+  sorceriesTotal: number;
+  artifactsOwned: number;
+  artifactsTotal: number;
+  enchantmentsOwned: number;
+  enchantmentsTotal: number;
+  planeswalkersOwned: number;
+  planeswalkersTotal: number;
+  nonbasicLandsOwned: number;
+  nonbasicLandsTotal: number;
+}
+
+export interface CommanderRecommendationSummary {
+  id: string;
+  name: string;
+  normalizedName: string;
+  slug: string;
+  imageUri: string | null;
+  colorIdentity: string[];
+  isTop100: boolean;
+  edhrecRank: number | null;
+  numDecks: number;
+  typeBreakdown: CommanderTypeBreakdown;
+  typeOwnership: CommanderTypeOwnership;
+  completionPercentage: number;
+  ownedCardsCount: number;
+  totalRequiredCards: number;
+  userOwnsCommander: boolean;
+  ownedValue?: number;
+  missingValue?: number;
+  unpricedCards?: number;
+  unfilledSlots?: number;
+  highSynergyCoverage?: RecommendationCoverage;
+  topCardsCoverage?: RecommendationCoverage;
+}
+
+export interface CommanderRecommendationsListResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  commanders: CommanderRecommendationSummary[];
+}
+
+
+export interface RecommendedDeck extends DeckDetailWithStats {
+  typeQuotas: Partial<Record<import("@/lib/card-utils").CardTypeCategory, number>>;
+  basicLandQuota: number;
+  priceSummary: import("@/lib/pricing").PriceSummary;
+  unpricedCards: number;
+  unfilledSlots: number;
+}
+
+export interface RecommendationCoverage {
+  owned: number;
+  total: number;
+  percentage: number | null;
+}

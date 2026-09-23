@@ -18,6 +18,7 @@ export function normalizeCardName(name: string): string {
 }
 
 export type CardTypeCategory =
+  | "commanders"
   | "creatures"
   | "planeswalkers"
   | "instants"
@@ -35,6 +36,7 @@ export interface CardTypeGroupInfo {
 }
 
 export const CARD_TYPE_GROUPS: Record<CardTypeCategory, CardTypeGroupInfo> = {
+  commanders: { key: "commanders", label: "Comandante", order: 0 },
   creatures: { key: "creatures", label: "Criaturas", order: 1 },
   planeswalkers: { key: "planeswalkers", label: "Planeswalkers", order: 2 },
   instants: { key: "instants", label: "Instantáneos", order: 3 },
@@ -209,6 +211,7 @@ export interface GroupedCardSection<T> {
   missingCards: number;
   completionPercentage: number;
   sectionTotalPrice: number;
+  unpricedCards: number;
   sectionMissingPrice: number;
   sectionOwnedPrice: number;
   currencySymbol: string;
@@ -235,13 +238,14 @@ export function groupCardsByType<
     quantity: number;
     ownedInCollection?: number;
     missingCount?: number;
+    edhrecCategory?: CardTypeCategory;
   }
 >(cards: T[], priceSummary?: PriceSummary | null, options?: GroupCardsOptions): GroupedCardSection<T>[] {
   const excludeBasicLands = options?.excludeBasicLands ?? false;
   const buckets = new Map<CardTypeCategory, T[]>();
 
   for (const card of cards) {
-    const cat = getCardCategory(card.typeLine, card.cardName);
+    const cat = card.edhrecCategory ?? getCardCategory(card.typeLine, card.cardName);
     const list = buckets.get(cat) || [];
     list.push(card);
     buckets.set(cat, list);
@@ -260,6 +264,7 @@ export function groupCardsByType<
     let ownedCards = 0;
     let missingCards = 0;
     let sectionTotalPrice = 0;
+    let unpricedCards = 0;
     let sectionMissingPrice = 0;
 
     for (const card of catCards) {
@@ -285,6 +290,7 @@ export function groupCardsByType<
         (card.cardScryfallId ? priceSummary?.quotes[card.cardScryfallId] : undefined) ||
         priceSummary?.quotes[norm];
 
+      if (quote?.unitPrice?.trend == null) unpricedCards += card.quantity;
       const trend = quote?.unitPrice?.trend ?? 0;
       sectionTotalPrice += trend * card.quantity;
       sectionMissingPrice += trend * missing;
@@ -311,6 +317,7 @@ export function groupCardsByType<
       missingCards,
       completionPercentage,
       sectionTotalPrice: totalP,
+      unpricedCards,
       sectionMissingPrice: missP,
       sectionOwnedPrice: ownedP,
       currencySymbol,

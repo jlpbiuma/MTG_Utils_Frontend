@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { createDeck } from "@/actions/decks";
 
 const MTG_FORMATS = [
@@ -39,11 +38,21 @@ const DEFAULT_SUGGESTED_TAGS = [
   "Synergy",
 ];
 
-export function CreateDeckDialog() {
+export interface CreateDeckDialogProps {
+  initialCommander?: string;
+  initialName?: string;
+  trigger?: React.ReactNode;
+}
+
+export function CreateDeckDialog({
+  initialCommander = "",
+  initialName = "",
+  trigger,
+}: CreateDeckDialogProps = {}) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName);
   const [format, setFormat] = useState("Commander / EDH");
-  const [commander, setCommander] = useState("");
+  const [commander, setCommander] = useState(initialCommander);
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState<string[]>([
     "Ramp",
@@ -56,6 +65,15 @@ export function CreateDeckDialog() {
   const [newTagInput, setNewTagInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync initial props when dialog opens
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
+      if (initialCommander && !commander) setCommander(initialCommander);
+      if (initialName && !name) setName(initialName);
+    }
+  };
 
   const handleAddCustomTag = () => {
     const val = newTagInput.trim();
@@ -112,12 +130,16 @@ export function CreateDeckDialog() {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="mana" className="gap-2">
-          <Plus className="h-4 w-4" />
-          Nuevo Mazo
-        </Button>
+        {trigger ? (
+          trigger
+        ) : (
+          <Button variant="mana" className="gap-2">
+            <Plus className="h-4 w-4" />
+            Nuevo Mazo
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>

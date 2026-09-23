@@ -36,3 +36,16 @@ export async function getDeckRecommendations(
     };
   }
 }
+
+export async function getRecommendedDeck(slug: string): Promise<import("@/lib/schemas").RecommendedDeck | null> {
+  const userId = await getCurrentUserId();
+  try {
+    const result = await backendFetch<import("@/lib/schemas").RecommendedDeck & { missingCards: number }>(
+      `/api/edhrec/commanders/${encodeURIComponent(slug)}/deck`, { userId }
+    );
+    return { ...result, missingCardsCount: result.missingCards };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("(404)")) return null;
+    throw error;
+  }
+}

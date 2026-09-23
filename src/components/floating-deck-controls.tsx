@@ -18,6 +18,7 @@ interface FloatingDeckControlsProps {
   sortDirection: SortDirection;
   onSortChange: (field: SortField, direction: SortDirection) => void;
   showStatusOption?: boolean;
+  showEdhrecOptions?: boolean;
 
   // Grouping state
   isGroupedByType: boolean;
@@ -35,6 +36,7 @@ export function FloatingDeckControls({
   sortDirection,
   onSortChange,
   showStatusOption = false,
+  showEdhrecOptions = false,
   isGroupedByType,
   onGroupingToggle,
   onExpandAll,
@@ -75,25 +77,38 @@ export function FloatingDeckControls({
   }, [isOpen]);
 
   const sortOptions: Array<{ field: SortField; label: string }> = [
+    ...(showEdhrecOptions
+      ? [
+          { field: "inclusion" as SortField, label: "Inclusión" },
+          { field: "synergy" as SortField, label: "Sinergia" },
+        ]
+      : []),
     { field: "name", label: "Nombre" },
     { field: "price_trend", label: "Precio" },
     { field: "price_subtotal", label: "Subtotal" },
     { field: "cmc", label: "Coste / CMC" },
     { field: "type", label: "Tipo" },
     { field: "quantity", label: "Cantidad" },
-    ...(showStatusOption ? [{ field: "status" as SortField, label: "Estado" }] : []),
+    ...(showStatusOption
+      ? [{ field: "status" as SortField, label: "Estado" }]
+      : []),
   ];
 
   const handleFieldClick = (field: SortField) => {
     if (sortField === field) {
       onSortChange(field, sortDirection === "asc" ? "desc" : "asc");
     } else {
-      const defaultDesc = field.startsWith("price") || field === "quantity";
+      const defaultDesc =
+        field === "inclusion" ||
+        field === "synergy" ||
+        field.startsWith("price") ||
+        field === "quantity";
       onSortChange(field, defaultDesc ? "desc" : "asc");
     }
   };
 
-  const currentSortLabel = sortOptions.find((o) => o.field === sortField)?.label || "Nombre";
+  const currentSortLabel =
+    sortOptions.find((o) => o.field === sortField)?.label || "Nombre";
 
   return (
     <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
@@ -107,7 +122,9 @@ export function FloatingDeckControls({
           <div className="flex items-center justify-between pb-3 border-b border-border">
             <div className="flex items-center gap-2">
               <SlidersHorizontal className="h-4 w-4 text-primary" />
-              <span className="font-semibold text-sm text-foreground">Organizar y Agrupar</span>
+              <span className="font-semibold text-sm text-foreground">
+                Organizar y Agrupar
+              </span>
             </div>
             <button
               onClick={() => setIsOpen(false)}
@@ -230,7 +247,8 @@ export function FloatingDeckControls({
             Vista & Orden
           </span>
           <span className="text-[10px] text-primary font-mono mt-1">
-            {isGroupedByType ? "Agrupado" : "Lista"} • {currentSortLabel} {sortDirection === "asc" ? "↑" : "↓"}
+            {isGroupedByType ? "Agrupado" : "Lista"} • {currentSortLabel}{" "}
+            {sortDirection === "asc" ? "↑" : "↓"}
           </span>
         </div>
       </button>

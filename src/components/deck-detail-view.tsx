@@ -43,7 +43,7 @@ import { EdhrecRecommendations } from "@/components/edhrec-recommendations";
 import { SelectCommanderDialog } from "@/components/select-commander-dialog";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import { RequestedDecksBadge } from "@/components/requested-decks-badge";
-import { CardPrintingDetail } from "@/actions/scryfall";
+import { getCardNamed, CardPrintingDetail } from "@/actions/scryfall";
 import { ConfirmDeleteDeckDialog } from "@/components/confirm-delete-deck-dialog";
 import { DeckAnalyticsView } from "@/components/deck-analytics-view";
 import { DeckMulliganSimulator } from "@/components/deck-mulligan-simulator";
@@ -72,13 +72,18 @@ import {
   archiveDeck,
   moveCardToSideboard,
 } from "@/actions/decks";
-import { addDeckMissingToWants } from "@/actions/wants";
+import { addOrIncrementWant, addDeckMissingToWants } from "@/actions/wants";
 import { PriceProvider, PriceSummary } from "@/lib/pricing";
 import { PricingProviderSelector } from "@/components/pricing-provider-selector";
 import { PriceBadge } from "@/components/price-badge";
 import { CardSortingBar } from "@/components/card-sorting-bar";
 import { PriceFilter } from "@/components/price-filter";
-import { SortField, SortDirection, sortCards, matchesPriceFilter } from "@/lib/sorting";
+import {
+  SortField,
+  SortDirection,
+  sortCards,
+  matchesPriceFilter,
+} from "@/lib/sorting";
 import {
   normalizeCardName,
   groupCardsByType,
@@ -87,10 +92,23 @@ import {
 
 interface DeckDetailViewProps {
   initialDeck: DeckDetailWithStats;
+  recommendation?: {
+    priceSummary: PriceSummary;
+    unpricedCards: number;
+    unfilledSlots: number;
+    typeQuotas?: Partial<
+      Record<import("@/lib/card-utils").CardTypeCategory, number>
+    >;
+    basicLandQuota?: number;
+  };
 }
 
-export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
+export function DeckDetailView({
+  initialDeck,
+  recommendation,
+}: DeckDetailViewProps) {
   const router = useRouter();
+  const readOnly = !!recommendation;
   const [deckInfo, setDeckInfo] = useState({
     name: initialDeck.name,
     format: initialDeck.format,
@@ -145,7 +163,7 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
   }, [initialDeck.colors, cards]);
 
   const handleConfirmDeleteDeck = async (
-    reassignments?: { targetDeckCardId: string; quantity: number }[]
+    reassignments?: { targetDeckCardId: string; quantity: number }[],
   ) => {
     await deleteDeck(initialDeck.id, reassignments);
     router.push("/decks");
@@ -184,8 +202,7 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
       version.image_uri_small ||
       null) as string | null;
     const newSetCode: string | null = (version.set_code || null) as
-      | string
-      | null;
+      string | null;
     const targetCardId =
       selectedCardForDetail?.deckCardId || selectedCardForDetail?.id;
 
@@ -301,20 +318,44 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
     }
   };
 
+  const [addingWant, setAddingWant] = useState<string | null>(null);
+  const [wantError, setWantError] = useState<string | null>(null);
+  const handleAddWant = async (card: DeckCardWithOwnership) => {
+    if (addingWant || card.isInWant) return;
+    setAddingWant(card.id);
+    setWantError(null);
+    try {
+      const id = card.cardScryfallId || (await getCardNamed(card.cardName, true))?.id;
+      if (!id) throw new Error("No se pudo resolver la impresión de esta carta. Inténtalo de nuevo.");
+      await addOrIncrementWant({ cardScryfallId: id, cardName: card.cardName,
+        quantity: 1, manaCost: card.manaCost, typeLine: card.typeLine,
+        imageUri: card.imageUri, setCode: card.setCode });
+      setCards(previous => previous.map(c => normalizeCardName(c.cardName) === normalizeCardName(card.cardName) ? { ...c, isInWant: true } : c));
+    } catch (error) {
+      setWantError(error instanceof Error ? error.message : "No se pudo añadir a Wants.");
+    } finally {
+      setAddingWant(null);
+    }
+  };
+
   const handleAddAllMissingToWants = async () => {
     setIsAddingMissingToWants(true);
     try {
       const res = await addDeckMissingToWants(initialDeck.id);
       if (res.addedCount > 0) {
-        alert(`¡Éxito! Se han añadido ${res.addedCount} cartas a tu lista de Wants.`);
+        alert(
+          `¡Éxito! Se han añadido ${res.addedCount} cartas a tu lista de Wants.`,
+        );
       } else {
-        alert("Todas las cartas faltantes de este mazo ya están en tus Wants o no hay cartas faltantes.");
+        alert(
+          "Todas las cartas faltantes de este mazo ya están en tus Wants o no hay cartas faltantes.",
+        );
       }
     } catch (err: unknown) {
       alert(
         err instanceof Error
           ? err.message
-          : "Error al añadir cartas faltantes a wants"
+          : "Error al añadir cartas faltantes a wants",
       );
     } finally {
       setIsAddingMissingToWants(false);
@@ -332,38 +373,46 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
   };
 
   // Sorting state
-  const [sortField, setSortField] = useState<SortField>("name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [sortField, setSortField] = useState<SortField>(
+    readOnly ? "inclusion" : "name",
+  );
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    readOnly ? "desc" : "asc",
+  );
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
 
   // Dynamic pricing state
   const [priceProvider, setPriceProvider] =
     useState<PriceProvider>("cardmarket");
-  const [priceSummary, setPriceSummary] = useState<PriceSummary | null>(() => {
-    if (initialDeck.totalValue != null) {
-      const net = initialDeck.totalValue;
-      const missing = initialDeck.missingValue ?? 0;
-      const owned =
-        initialDeck.ownedValue ??
-        Math.max(0, Math.round((net - missing) * 100) / 100);
-      return {
-        provider: "cardmarket",
-        currency: initialDeck.currency || "EUR",
-        currencySymbol: initialDeck.currencySymbol || "€",
-        totalCards: initialDeck.totalCards,
-        totalNetValue: net,
-        totalMissingValue: missing,
-        totalOwnedValue: owned,
-        quotes: {},
-      };
-    }
-    return null;
-  });
+  const [loadedPriceSummary, setPriceSummary] = useState<PriceSummary | null>(
+    () => {
+      if (recommendation) return recommendation.priceSummary;
+      if (initialDeck.totalValue != null) {
+        const net = initialDeck.totalValue;
+        const missing = initialDeck.missingValue ?? 0;
+        const owned =
+          initialDeck.ownedValue ??
+          Math.max(0, Math.round((net - missing) * 100) / 100);
+        return {
+          provider: "cardmarket",
+          currency: initialDeck.currency || "EUR",
+          currencySymbol: initialDeck.currencySymbol || "€",
+          totalCards: initialDeck.totalCards,
+          totalNetValue: net,
+          totalMissingValue: missing,
+          totalOwnedValue: owned,
+          quotes: {},
+        };
+      }
+      return null;
+    },
+  );
   const [isLoadingPrices, setIsLoadingPrices] = useState(false);
 
   const loadPrices = useCallback(
     async (providerToLoad = priceProvider, bypassCache = false) => {
+      if (readOnly) return;
       setIsLoadingPrices(true);
       try {
         const res = await fetch("/api/prices", {
@@ -387,12 +436,14 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
         setIsLoadingPrices(false);
       }
     },
-    [initialDeck.id, priceProvider],
+    [initialDeck.id, priceProvider, readOnly],
   );
 
   useEffect(() => {
-    loadPrices(priceProvider, false);
-  }, [priceProvider, loadPrices]);
+    if (!readOnly) loadPrices(priceProvider, false);
+  }, [priceProvider, loadPrices, readOnly]);
+
+  const priceSummary = recommendation?.priceSummary ?? loadedPriceSummary;
 
   const mainboardCards = cards.filter((c) => !c.isSideboard);
   const sideboardCards = cards.filter((c) => c.isSideboard);
@@ -414,14 +465,15 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
       return false;
     }
     if (filterMode === "missing" && c.missingCount <= 0) return false;
-    if (filterMode === "owned" && c.ownedInCollection < c.quantity) return false;
+    if (filterMode === "owned" && c.ownedInCollection < c.quantity)
+      return false;
     if (
       !matchesPriceFilter(
         c.cardName,
         c.cardScryfallId,
         parsedMinPrice,
         parsedMaxPrice,
-        priceSummary?.quotes
+        priceSummary?.quotes,
       )
     ) {
       return false;
@@ -543,10 +595,16 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
     setLoadingCardId(card.id);
     try {
       const nextSideboard = !card.isSideboard;
-      const res = await moveCardToSideboard(card.id, nextSideboard, initialDeck.id);
+      const res = await moveCardToSideboard(
+        card.id,
+        nextSideboard,
+        initialDeck.id,
+      );
       if (res.success) {
         setCards((prev) =>
-          prev.map((c) => (c.id === card.id ? { ...c, isSideboard: nextSideboard } : c))
+          prev.map((c) =>
+            c.id === card.id ? { ...c, isSideboard: nextSideboard } : c,
+          ),
         );
         router.refresh();
       } else {
@@ -582,6 +640,15 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
   };
 
   const stats = React.useMemo(() => {
+    if (readOnly)
+      return {
+        totalCards: initialDeck.totalCards,
+        ownedCards: initialDeck.ownedCards,
+        missingCardsCount: initialDeck.missingCardsCount,
+        completionPercentage: initialDeck.completionPercentage,
+        isComplete:
+          initialDeck.totalCards > 0 && initialDeck.missingCardsCount === 0,
+      };
     let total = 0;
     let owned = 0;
     for (const c of cards || []) {
@@ -615,12 +682,12 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
         (total || initialDeck.totalCards) > 0 &&
         (total > 0 ? missing === 0 : initialDeck.missingCardsCount === 0),
     };
-  }, [cards, initialDeck]);
+  }, [readOnly, cards, initialDeck]);
 
   const isComplete = stats.isComplete;
 
   const renderCardRow = (card: DeckCardWithOwnership) => {
-    const isBasic = isBasicLand(card.typeLine, card.cardName);
+    const isBasic = !readOnly && isBasicLand(card.typeLine, card.cardName);
     const isCardComplete = isBasic || card.ownedInCollection >= card.quantity;
     const isBusy = loadingCardId === card.id;
 
@@ -701,6 +768,16 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
               <ManaCost manaCost={card.manaCost} />
             </div>
 
+            {readOnly && (
+              <div className="flex flex-wrap gap-2 mt-1 text-xs">
+                {card.isTopCard && <Badge variant="outline">Top Cards</Badge>}
+                {card.isHighSynergy && (
+                  <Badge variant="outline">Alta sinergia</Badge>
+                )}
+                <span>Inclusión: {(card.inclusionPct ?? 0).toFixed(1)}%</span>
+                <span>Sinergia: {(card.synergy ?? 0).toFixed(1)}%</span>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground mt-0.5 truncate">
               {card.typeLine || "Card"}
             </p>
@@ -725,7 +802,7 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                 </span>
               )}
 
-              {!isBasic && !isCardComplete && (
+              {!readOnly && !isBasic && !isCardComplete && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -740,86 +817,102 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
               )}
             </div>
 
-            {/* Physical Assignment status pill & actions */}
-            <div className="mt-2 flex items-center gap-2 flex-wrap">
-              {card.assignedQuantity > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-sky-300 bg-sky-950/70 px-2 py-0.5 rounded border border-sky-800/60 "
-                    title="Copias de tu colección física asignadas a este mazo"
-                  >
-                    🎯 Asignada ({card.assignedQuantity}/{card.quantity})
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleUnassign(card.id)}
-                    disabled={isBusy}
-                    className="h-6 text-[11px] px-2 text-muted-foreground hover:text-rose-300 hover:bg-rose-950/30"
-                    title="Liberar 1 copia física de vuelta a tu colección libre"
-                  >
-                    Liberar
-                  </Button>
-                </div>
-              )}
-
-              {card.assignedQuantity < card.quantity && (
-                <>
-                  {card.availableToAssign > 0 ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleAssign(card.id)}
-                      disabled={isBusy}
-                      className="h-6 text-[11px] px-2 gap-1 text-sky-300 border-sky-500/40 hover:bg-sky-500/10 hover:border-sky-400"
-                      title="Asignar una copia física disponible de tu colección a este mazo"
-                    >
-                      📥 Asignar al mazo ({card.availableToAssign} disp.)
-                    </Button>
-                  ) : card.assignedInOtherDecks &&
-                    card.assignedInOtherDecks.length > 0 ? (
-                    <div className="flex items-center gap-1.5 flex-wrap text-xs text-primary bg-secondary px-2.5 py-1 rounded border border-primary/30">
-                      <span className="font-semibold text-primary">
-                        ⚠️ Asignada en:
+            {!readOnly && (
+              <>
+                {/* Physical Assignment status pill & actions */}
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  {card.assignedQuantity > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-sky-300 bg-sky-950/70 px-2 py-0.5 rounded border border-sky-800/60 "
+                        title="Copias de tu colección física asignadas a este mazo"
+                      >
+                        🎯 Asignada ({card.assignedQuantity}/{card.quantity})
                       </span>
-                      {card.assignedInOtherDecks.map((other) => (
-                        <span
-                          key={other.deckId}
-                          className="flex items-center gap-1 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/30 text-foreground font-medium"
-                        >
-                          <span>
-                            {other.deckName} ({other.quantity})
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() =>
-                              handleReassign(
-                                other.deckId,
-                                card.id,
-                                card.cardName,
-                              )
-                            }
-                            disabled={isBusy}
-                            className="h-4 text-[10px] px-1 text-primary hover:text-foreground underline font-bold"
-                            title={`Reasignar copia física desde ${other.deckName} a este mazo`}
-                          >
-                            Reasignar aquí
-                          </Button>
-                        </span>
-                      ))}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleUnassign(card.id)}
+                        disabled={isBusy}
+                        className="h-6 text-[11px] px-2 text-muted-foreground hover:text-rose-300 hover:bg-rose-950/30"
+                        title="Liberar 1 copia física de vuelta a tu colección libre"
+                      >
+                        Liberar
+                      </Button>
                     </div>
-                  ) : card.ownedInCollection === 0 ? (
-                    <span className="text-xs text-muted-foreground italic">
-                      (No la tienes en colección)
-                    </span>
-                  ) : null}
-                </>
-              )}
-            </div>
+                  )}
+
+                  {card.assignedQuantity < card.quantity && (
+                    <>
+                      {card.availableToAssign > 0 ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleAssign(card.id)}
+                          disabled={isBusy}
+                          className="h-6 text-[11px] px-2 gap-1 text-sky-300 border-sky-500/40 hover:bg-sky-500/10 hover:border-sky-400"
+                          title="Asignar una copia física disponible de tu colección a este mazo"
+                        >
+                          📥 Asignar al mazo ({card.availableToAssign} disp.)
+                        </Button>
+                      ) : card.assignedInOtherDecks &&
+                        card.assignedInOtherDecks.length > 0 ? (
+                        <div className="flex items-center gap-1.5 flex-wrap text-xs text-primary bg-secondary px-2.5 py-1 rounded border border-primary/30">
+                          <span className="font-semibold text-primary">
+                            ⚠️ Asignada en:
+                          </span>
+                          {card.assignedInOtherDecks.map((other) => (
+                            <span
+                              key={other.deckId}
+                              className="flex items-center gap-1 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/30 text-foreground font-medium"
+                            >
+                              <span>
+                                {other.deckName} ({other.quantity})
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  handleReassign(
+                                    other.deckId,
+                                    card.id,
+                                    card.cardName,
+                                  )
+                                }
+                                disabled={isBusy}
+                                className="h-4 text-[10px] px-1 text-primary hover:text-foreground underline font-bold"
+                                title={`Reasignar copia física desde ${other.deckName} a este mazo`}
+                              >
+                                Reasignar aquí
+                              </Button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : card.ownedInCollection === 0 ? (
+                        <span className="text-xs text-muted-foreground italic">
+                          (No la tienes en colección)
+                        </span>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+            {readOnly && <div className="mt-2 flex flex-wrap gap-2 text-xs">
+              {card.assignedInOtherDecks.map(other => <Link key={other.deckId} href={`/decks/${other.deckId}`} className="text-sky-300 underline" onClick={event => event.stopPropagation()}>
+                Asignada en {other.deckName}: {other.quantity}
+              </Link>)}
+              {card.ownedInCollection > 0 && <span className="text-muted-foreground">Colección libre: {card.availableToAssign}</span>}
+            </div>}
+            {card.ownedInCollection === 0 && <Button size="sm" variant="outline" className="mt-2 gap-1.5"
+              disabled={!!addingWant || card.isInWant}
+              onClick={() => handleAddWant(card)}>
+              <BookmarkPlus className="h-3.5 w-3.5" />
+              {card.isInWant ? "En Wants" : addingWant === card.id ? "Añadiendo..." : "Añadir a Wants"}
+            </Button>}
 
             {/* Global Deck Demand / Priority for missing cards */}
-            {card.missingCount > 0 && (
+            {(card.requestedInDecksCount ?? card.requestedInDecks?.length ?? 0) > 0 && (
               <RequestedDecksBadge
                 cardName={card.cardName}
                 decks={card.requestedInDecks}
@@ -839,56 +932,66 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
             showSubtotal={true}
           />
 
-          <div className="flex items-center bg-background border border-border rounded-lg p-1 gap-2">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              disabled={isBusy}
-              onClick={() => handleUpdateQuantity(card.id, card.quantity, -1)}
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </Button>
+          {!readOnly && (
+            <>
+              <div className="flex items-center bg-background border border-border rounded-lg p-1 gap-2">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  disabled={isBusy}
+                  onClick={() =>
+                    handleUpdateQuantity(card.id, card.quantity, -1)
+                  }
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </Button>
 
-            <span className="font-mono font-bold text-sm min-w-[20px] text-center text-foreground">
-              {card.quantity}
-            </span>
+                <span className="font-mono font-bold text-sm min-w-[20px] text-center text-foreground">
+                  {card.quantity}
+                </span>
 
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              disabled={isBusy}
-              onClick={() => handleUpdateQuantity(card.id, card.quantity, 1)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  disabled={isBusy}
+                  onClick={() =>
+                    handleUpdateQuantity(card.id, card.quantity, 1)
+                  }
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
 
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
-            disabled={isBusy}
-            onClick={() => handleToggleSideboard(card)}
-            title={card.isSideboard ? "Mover al Mainboard" : "Mover al Sideboard"}
-          >
-            <ArrowRightLeft className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">
-              {card.isSideboard ? "A Mainboard" : "A Sideboard"}
-            </span>
-          </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                disabled={isBusy}
+                onClick={() => handleToggleSideboard(card)}
+                title={
+                  card.isSideboard ? "Mover al Mainboard" : "Mover al Sideboard"
+                }
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5" />
+                <span className="hidden md:inline">
+                  {card.isSideboard ? "A Mainboard" : "A Sideboard"}
+                </span>
+              </Button>
 
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 text-muted-foreground hover:text-rose-400 hover:bg-rose-950/30"
-            disabled={isBusy}
-            onClick={() => handleRemove(card.id)}
-            title="Eliminar carta del mazo"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 text-muted-foreground hover:text-rose-400 hover:bg-rose-950/30"
+                disabled={isBusy}
+                onClick={() => handleRemove(card.id)}
+                title="Eliminar carta del mazo"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -910,12 +1013,42 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
           size="sm"
           className="gap-2 text-muted-foreground hover:text-foreground -ml-2"
         >
-          <Link href="/decks">
+          <Link href={readOnly ? "/decks?tab=edhrec" : "/decks"}>
             <ArrowLeft className="h-4 w-4" />
             Volver a la lista de mazos
           </Link>
         </Button>
       </div>
+
+      {recommendation && (
+        <div
+          className="rounded-lg border border-border bg-card p-4 space-y-2"
+          role="status"
+        >
+          <p className="font-semibold">Recomendación EDHREC · Vista previa</p>
+          <p>
+            Valor usado de la colección (estimación por cupos):{" "}
+            <strong>
+              {(recommendation.priceSummary.totalOwnedValue ?? 0).toFixed(2)} €
+            </strong>
+          </p>
+          {recommendation.unpricedCards > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Valor parcial: {recommendation.unpricedCards} cartas sin precio
+              disponible.
+            </p>
+          )}
+          {recommendation.unfilledSlots > 0 && (
+            <p className="text-sm text-muted-foreground">
+              EDHREC no ofrece cartas suficientes para cubrir{" "}
+              {recommendation.unfilledSlots} huecos; no se incluyen en el
+              precio.
+            </p>
+          )}
+        </div>
+      )}
+
+      {wantError && <p role="alert" className="text-rose-400">{wantError}</p>}
 
       {/* Deck Header Banner */}
       <div className="relative overflow-hidden rounded-lg border border-border bg-card p-6 sm:p-8 ">
@@ -944,7 +1077,10 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                 </Badge>
               )}
               {isArchived && (
-                <Badge variant="secondary" className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs font-medium">
+                <Badge
+                  variant="secondary"
+                  className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs font-medium"
+                >
                   Archivado
                 </Badge>
               )}
@@ -955,54 +1091,62 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                 {deckInfo.name}
               </h1>
 
-              <div className="flex items-center gap-2">
-                <EditDeckDialog
-                  deck={{
-                    id: initialDeck.id,
-                    name: deckInfo.name,
-                    format: deckInfo.format,
-                    description: deckInfo.description,
-                    commander: deckInfo.commander,
-                  }}
-                  deckCards={initialDeck.cards}
-                  onUpdated={(updated) => {
-                    setDeckInfo((prev) => ({ ...prev, ...updated }));
-                    router.refresh();
-                  }}
-                />
+              {!readOnly && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <EditDeckDialog
+                      deck={{
+                        id: initialDeck.id,
+                        name: deckInfo.name,
+                        format: deckInfo.format,
+                        description: deckInfo.description,
+                        commander: deckInfo.commander,
+                      }}
+                      deckCards={initialDeck.cards}
+                      onUpdated={(updated) => {
+                        setDeckInfo((prev) => ({ ...prev, ...updated }));
+                        router.refresh();
+                      }}
+                    />
 
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={isArchiving}
-                  onClick={handleToggleArchive}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground border border-border"
-                  title={isArchived ? "Desarchivar este mazo" : "Archivar este mazo"}
-                >
-                  {isArchived ? (
-                    <>
-                      <ArchiveRestore className="h-3.5 w-3.5 mr-1 text-amber-500" />
-                      Desarchivar
-                    </>
-                  ) : (
-                    <>
-                      <Archive className="h-3.5 w-3.5 mr-1 hover:text-amber-500" />
-                      Archivar
-                    </>
-                  )}
-                </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={isArchiving}
+                      onClick={handleToggleArchive}
+                      className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground border border-border"
+                      title={
+                        isArchived
+                          ? "Desarchivar este mazo"
+                          : "Archivar este mazo"
+                      }
+                    >
+                      {isArchived ? (
+                        <>
+                          <ArchiveRestore className="h-3.5 w-3.5 mr-1 text-amber-500" />
+                          Desarchivar
+                        </>
+                      ) : (
+                        <>
+                          <Archive className="h-3.5 w-3.5 mr-1 hover:text-amber-500" />
+                          Archivar
+                        </>
+                      )}
+                    </Button>
 
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setShowDeleteDeckDialog(true)}
-                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-rose-400 hover:bg-rose-950/30 border border-border hover:border-rose-800/50"
-                  title="Eliminar este mazo permanentemente"
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-1 text-muted-foreground hover:text-rose-400" />
-                  Eliminar
-                </Button>
-              </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowDeleteDeckDialog(true)}
+                      className="h-8 px-2.5 text-xs text-muted-foreground hover:text-rose-400 hover:bg-rose-950/30 border border-border hover:border-rose-800/50"
+                      title="Eliminar este mazo permanentemente"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1 text-muted-foreground hover:text-rose-400" />
+                      Eliminar
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
 
             {deckInfo.description && (
@@ -1046,14 +1190,18 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                       <Crown className="w-3.5 h-3.5 text-primary" />
                       <span>Comandante</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowCommanderModal(true)}
-                      className="text-[11px] text-primary/80 hover:text-primary underline font-medium cursor-pointer transition-colors"
-                      title="Cambiar el comandante de este mazo"
-                    >
-                      (Cambiar)
-                    </button>
+                    {!readOnly && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowCommanderModal(true)}
+                          className="text-[11px] text-primary/80 hover:text-primary underline font-medium cursor-pointer transition-colors"
+                          title="Cambiar el comandante de este mazo"
+                        >
+                          (Cambiar)
+                        </button>
+                      </>
+                    )}
                   </div>
                   <div
                     onClick={handleOpenCommanderDetail}
@@ -1130,7 +1278,7 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
               )}
             </div>
 
-            {stats.missingCardsCount > 0 && (
+            {!readOnly && stats.missingCardsCount > 0 && (
               <div className="flex flex-col sm:flex-row gap-2 mt-2.5">
                 <Button
                   size="sm"
@@ -1180,7 +1328,7 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
       </div>
 
       {/* Alert if deck has more than 100 cards */}
-      {mainboardCount > 100 && (
+      {!readOnly && mainboardCount > 100 && (
         <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 shrink-0">
@@ -1191,7 +1339,8 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                 ¡Atención: El mazo principal tiene {mainboardCount} cartas!
               </p>
               <p className="text-xs text-amber-300/80">
-                Supera el límite estándar de 100 cartas para formatos como Commander / EDH.
+                Supera el límite estándar de 100 cartas para formatos como
+                Commander / EDH.
               </p>
             </div>
           </div>
@@ -1228,22 +1377,26 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
       )}
 
       {/* Select Commander Modal */}
-      <SelectCommanderDialog
-        deckId={initialDeck.id}
-        deckName={deckInfo.name}
-        open={showCommanderModal}
-        onOpenChange={setShowCommanderModal}
-        deckCards={initialDeck.cards}
-        currentCommander={deckInfo.commander}
-        onCommanderSelected={(newCmd, newImg) => {
-          setDeckInfo((prev) => ({
-            ...prev,
-            commander: newCmd,
-            commanderImageUri: newImg || prev.commanderImageUri,
-          }));
-          router.refresh();
-        }}
-      />
+      {!readOnly && (
+        <>
+          <SelectCommanderDialog
+            deckId={initialDeck.id}
+            deckName={deckInfo.name}
+            open={showCommanderModal}
+            onOpenChange={setShowCommanderModal}
+            deckCards={initialDeck.cards}
+            currentCommander={deckInfo.commander}
+            onCommanderSelected={(newCmd, newImg) => {
+              setDeckInfo((prev) => ({
+                ...prev,
+                commander: newCmd,
+                commanderImageUri: newImg || prev.commanderImageUri,
+              }));
+              router.refresh();
+            }}
+          />
+        </>
+      )}
 
       {/* Top View Mode Switcher: Deck Cards vs Analytics vs Mulligan vs EDHREC */}
       <div className="flex items-center gap-2 border-b border-border pb-2 overflow-x-auto">
@@ -1256,50 +1409,60 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
           }`}
         >
           <Layers className="h-4 w-4 text-primary" />
-          <span>Cartas del Mazo</span>
+          <span>{readOnly ? "Cartas recomendadas" : "Cartas del Mazo"}</span>
           <Badge
             variant="outline"
             className="ml-1 text-xs bg-background border-border"
           >
-            {initialDeck.totalCards}
+            {readOnly ? cards.length : initialDeck.totalCards}
           </Badge>
         </button>
 
-        <button
-          onClick={() => setActiveTab("editor")}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
-            activeTab === "editor"
-              ? "bg-accent text-foreground border border-border"
-              : "text-muted-foreground hover:text-foreground hover:bg-card"
-          }`}
-        >
-          <SlidersHorizontal className="h-4 w-4 text-purple-400" />
-          <span>Editar mazo</span>
-        </button>
+        {!readOnly && (
+          <>
+            <button
+              onClick={() => setActiveTab("editor")}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
+                activeTab === "editor"
+                  ? "bg-accent text-foreground border border-border"
+                  : "text-muted-foreground hover:text-foreground hover:bg-card"
+              }`}
+            >
+              <SlidersHorizontal className="h-4 w-4 text-purple-400" />
+              <span>Editar mazo</span>
+            </button>
+          </>
+        )}
 
-        <button
-          onClick={() => setActiveTab("analytics_and_simulations")}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
-            activeTab === "analytics_and_simulations"
-              ? "bg-accent text-foreground border border-border"
-              : "text-muted-foreground hover:text-foreground hover:bg-card"
-          }`}
-        >
-          <BarChart3 className="h-4 w-4 text-primary" />
-          <span>Estadística y simulaciones</span>
-        </button>
+        {!readOnly && (
+          <button
+            onClick={() => setActiveTab("analytics_and_simulations")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
+              activeTab === "analytics_and_simulations"
+                ? "bg-accent text-foreground border border-border"
+                : "text-muted-foreground hover:text-foreground hover:bg-card"
+            }`}
+          >
+            <BarChart3 className="h-4 w-4 text-primary" />
+            <span>Estadística y simulaciones</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab("edhrec")}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
-            activeTab === "edhrec"
-              ? "bg-primary/20 text-primary border border-primary/30"
-              : "text-primary/80 hover:text-primary hover:bg-primary/10"
-          }`}
-        >
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span>Recomendaciones EDHREC</span>
-        </button>
+        {!readOnly && (
+          <>
+            <button
+              onClick={() => setActiveTab("edhrec")}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
+                activeTab === "edhrec"
+                  ? "bg-primary/20 text-primary border border-primary/30"
+                  : "text-primary/80 hover:text-primary hover:bg-primary/10"
+              }`}
+            >
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span>Recomendaciones EDHREC</span>
+            </button>
+          </>
+        )}
       </div>
 
       {activeTab === "editor" ? (
@@ -1353,7 +1516,9 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
           <PricingProviderSelector
             currentProvider={priceProvider}
             onProviderChange={(p) => setPriceProvider(p)}
-            onRefreshPrices={() => loadPrices(priceProvider, true)}
+            onRefreshPrices={async () =>
+              readOnly ? router.refresh() : loadPrices(priceProvider, true)
+            }
             summary={priceSummary}
             isLoading={isLoadingPrices}
             showMissingNetValue={true}
@@ -1371,18 +1536,22 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Mainboard ({mainboardCards.reduce((s, c) => s + c.quantity, 0)})
+                {readOnly ? "Recomendaciones" : "Mainboard"} (
+                {mainboardCards.reduce((s, c) => s + c.quantity, 0)})
               </button>
-              <button
-                onClick={() => setActiveBoard("sideboard")}
-                className={`px-3 h-7 rounded-md text-xs font-semibold transition-all ${
-                  activeBoard === "sideboard"
-                    ? "bg-primary text-primary-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Sideboard ({sideboardCards.reduce((s, c) => s + c.quantity, 0)})
-              </button>
+              {!readOnly && (
+                <button
+                  onClick={() => setActiveBoard("sideboard")}
+                  className={`px-3 h-7 rounded-md text-xs font-semibold transition-all ${
+                    activeBoard === "sideboard"
+                      ? "bg-primary text-primary-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Sideboard (
+                  {sideboardCards.reduce((s, c) => s + c.quantity, 0)})
+                </button>
+              )}
             </div>
 
             {/* Filters and Add Card */}
@@ -1439,12 +1608,16 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                 currencySymbol={priceSummary?.currencySymbol || "€"}
               />
 
-              <CardSearchDialog
-                onAddCard={handleAddCard}
-                title={`Añadir Carta a ${activeBoard === "mainboard" ? "Mainboard" : "Sideboard"}`}
-                triggerText="Buscar en Scryfall"
-                showSideboardOption={true}
-              />
+              {!readOnly && (
+                <>
+                  <CardSearchDialog
+                    onAddCard={handleAddCard}
+                    title={`Añadir Carta a ${activeBoard === "mainboard" ? "Mainboard" : "Sideboard"}`}
+                    triggerText="Buscar en Scryfall"
+                    showSideboardOption={true}
+                  />
+                </>
+              )}
             </div>
           </div>
 
@@ -1461,6 +1634,7 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                     setSortDirection(d);
                   }}
                   showStatusOption={true}
+                  showEdhrecOptions={readOnly}
                 />
               </div>
 
@@ -1554,20 +1728,23 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                   </button>
                 </div>
               )}
-              <div className="mt-4">
-                <CardSearchDialog
-                  onAddCard={handleAddCard}
-                  title={`Añadir Carta a ${activeBoard}`}
-                  triggerText="Añadir primera carta"
-                />
-              </div>
+              {!readOnly && (
+                <div className="mt-4">
+                  <CardSearchDialog
+                    onAddCard={handleAddCard}
+                    title={`Añadir Carta a ${activeBoard}`}
+                    triggerText="Añadir primera carta"
+                  />
+                </div>
+              )}
             </div>
           ) : isGroupedByType ? (
             <div className="space-y-4">
               {groupedSections.map((section) => {
                 const isCollapsed = !!collapsedSections[section.key];
                 const isSectionComplete =
-                  section.completionTotalCards === 0 || section.missingCards === 0;
+                  section.completionTotalCards === 0 ||
+                  section.missingCards === 0;
 
                 return (
                   <div
@@ -1592,6 +1769,17 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-base text-foreground group-hover:text-primary transition-colors tracking-wide">
                             {section.label}
+                            {readOnly && (
+                              <span className="block text-sm font-normal text-muted-foreground">
+                                {recommendation?.typeQuotas?.[section.key] ==
+                                null
+                                  ? section.key === "commanders" ? "Incluido en el valor del mazo" : "Alternativas adicionales"
+                                  : `Elige ${recommendation.typeQuotas[section.key]}${section.key === "lands" ? " tierras no básicas" : " cartas"} para ajustarte a EDHREC`}
+                                {section.key === "lands" &&
+                                  !!recommendation?.basicLandQuota &&
+                                  ` + ${recommendation.basicLandQuota} básicas`}
+                              </span>
+                            )}
                           </span>
                           <Badge
                             variant="outline"
@@ -1603,62 +1791,56 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                         </div>
                       </div>
 
-                      {/* Right: Completion Stats + Section Prices */}
-                      <div className="flex items-center gap-4 flex-wrap justify-between md:justify-end text-xs">
-                        {/* Completion metric & mini progress bar */}
-                        <div className="flex items-center gap-2">
-                          <div className="w-20 sm:w-24">
-                            <Progress
-                              value={section.completionPercentage}
-                              indicatorClassName={
-                                isSectionComplete
-                                  ? "bg-gradient-to-r from-emerald-500 to-teal-400"
-                                  : "bg-primary"
-                              }
-                              className="h-2 bg-accent"
-                            />
-                          </div>
-                          <span
-                            className={`font-mono font-semibold ${
-                              isSectionComplete
-                                ? "text-emerald-400"
-                                : "text-primary"
-                            }`}
-                          >
-                            {section.completionTotalCards > 0
-                              ? `${section.ownedCards}/${section.completionTotalCards} (${section.completionPercentage}%)`
-                              : `${section.totalCardsCount} básicas (100%)`}
-                          </span>
-                        </div>
+                      {readOnly ? (
+                        <span className="text-sm text-muted-foreground">
+                          {
+                            section.cards.filter((c) => c.ownedInCollection > 0)
+                              .length
+                          }{" "}
+                          de {section.cards.length} alternativas visibles en tu
+                          colección ({Math.round(section.cards.filter(c => c.ownedInCollection > 0).length / section.cards.length * 100)}%)
+                        </span>
+                      ) : (
+                        <>
+                          {/* Right: Completion Stats + Section Prices */}
+                          <div className="flex items-center gap-4 flex-wrap justify-between md:justify-end text-xs">
+                            {/* Completion metric & mini progress bar */}
+                            <div className="flex items-center gap-2">
+                              <div className="w-20 sm:w-24">
+                                <Progress
+                                  value={section.completionPercentage}
+                                  indicatorClassName={
+                                    isSectionComplete
+                                      ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+                                      : "bg-primary"
+                                  }
+                                  className="h-2 bg-accent"
+                                />
+                              </div>
+                              <span
+                                className={`font-mono font-semibold ${
+                                  isSectionComplete
+                                    ? "text-emerald-400"
+                                    : "text-primary"
+                                }`}
+                              >
+                                {section.completionTotalCards > 0
+                                  ? `${section.ownedCards}/${section.completionTotalCards} (${section.completionPercentage}%)`
+                                  : `${section.totalCardsCount} básicas (100%)`}
+                              </span>
+                            </div>
 
-                        {/* Price summary badge */}
-                        {section.sectionTotalPrice > 0 && (
-                          <div className="flex items-center gap-1.5 font-mono px-2.5 py-1 rounded bg-background border border-border">
-                            <span className="text-muted-foreground">
-                              Total:
-                            </span>
-                            <span className="font-bold text-primary">
-                              {section.sectionTotalPrice.toFixed(2)}{" "}
-                              {section.currencySymbol}
-                            </span>
-                            {section.ownedCards > 0 &&
-                              section.sectionOwnedPrice > 0 && (
-                                <span className="text-emerald-300/90 pl-1 border-l border-border">
-                                  (En posesión:{" "}
-                                  {section.sectionOwnedPrice.toFixed(2)}{" "}
-                                  {section.currencySymbol})
-                                </span>
-                              )}
-                            {section.missingCards > 0 &&
-                              section.sectionMissingPrice > 0 && (
-                                <span className="text-rose-300/90 pl-1 border-l border-border">
-                                  (Faltan:{" "}
-                                  {section.sectionMissingPrice.toFixed(2)}{" "}
-                                  {section.currencySymbol})
-                                </span>
-                              )}
+
                           </div>
-                        )}
+                        </>
+                      )}
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-mono" aria-label={`Valor de ${section.label}`}>
+                        {priceSummary ? <>
+                          <span className="text-primary">{readOnly ? "Total alternativas" : "Total"}: {section.sectionTotalPrice.toFixed(2)} {section.currencySymbol}</span>
+                          <span className="text-emerald-400">En colección: {section.sectionOwnedPrice.toFixed(2)} {section.currencySymbol}</span>
+                          <span className="text-rose-400">Faltante: {section.sectionMissingPrice.toFixed(2)} {section.currencySymbol}</span>
+                          {section.unpricedCards > 0 && <span className="text-muted-foreground">Parcial · {section.unpricedCards} sin precio</span>}
+                        </> : <span className="text-muted-foreground">Precios no disponibles</span>}
                       </div>
                     </button>
 
@@ -1690,6 +1872,7 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
                 setSortDirection(d);
               }}
               showStatusOption={true}
+              showEdhrecOptions={readOnly}
               isGroupedByType={isGroupedByType}
               onGroupingToggle={setIsGroupedByType}
               onExpandAll={expandAll}
@@ -1716,26 +1899,32 @@ export function DeckDetailView({ initialDeck }: DeckDetailViewProps) {
           assignedQuantity={selectedCardForDetail.assignedQuantity}
           requestedInDecks={selectedCardForDetail.requestedInDecks}
           requestedInDecksCount={selectedCardForDetail.requestedInDecksCount}
-          deckId={initialDeck.id}
+          deckId={readOnly ? undefined : initialDeck.id}
           deckCardId={
-            selectedCardForDetail.deckCardId || selectedCardForDetail.id
+            readOnly
+              ? undefined
+              : selectedCardForDetail.deckCardId || selectedCardForDetail.id
           }
           isCommander={
             selectedCardForDetail.isCommander ||
             selectedCardForDetail.cardName?.toLowerCase() ===
               deckInfo.commander?.toLowerCase()
           }
-          onVersionSelect={handleVersionSelect}
+          onVersionSelect={readOnly ? undefined : handleVersionSelect}
         />
       )}
 
-      <ConfirmDeleteDeckDialog
-        open={showDeleteDeckDialog}
-        onOpenChange={setShowDeleteDeckDialog}
-        deckId={initialDeck.id}
-        deckName={deckInfo.name}
-        onConfirm={handleConfirmDeleteDeck}
-      />
+      {!readOnly && (
+        <>
+          <ConfirmDeleteDeckDialog
+            open={showDeleteDeckDialog}
+            onOpenChange={setShowDeleteDeckDialog}
+            deckId={initialDeck.id}
+            deckName={deckInfo.name}
+            onConfirm={handleConfirmDeleteDeck}
+          />
+        </>
+      )}
     </div>
   );
 }

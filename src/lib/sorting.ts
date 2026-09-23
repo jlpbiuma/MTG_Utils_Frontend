@@ -2,7 +2,7 @@ import { normalizeCardName } from "@/lib/card-utils";
 import { PriceSummary } from "@/lib/pricing";
 
 
-export type SortField = "name" | "price_trend" | "price_subtotal" | "cmc" | "type" | "quantity" | "status" | "requested_decks";
+export type SortField = "inclusion" | "synergy" | "name" | "price_trend" | "price_subtotal" | "cmc" | "type" | "quantity" | "status" | "requested_decks";
 export type SortDirection = "asc" | "desc";
 
 /**
@@ -27,6 +27,8 @@ export function extractCmc(manaCost?: string | null): number {
 }
 
 export interface SortableCard {
+  inclusionPct?: number;
+  synergy?: number;
   cardName: string;
   cardScryfallId: string;
   quantity: number;
@@ -52,6 +54,11 @@ export function sortCards<T extends SortableCard>(
 
   return sorted.sort((a, b) => {
     switch (field) {
+      case "inclusion":
+      case "synergy": {
+        const key = field === "inclusion" ? "inclusionPct" : "synergy";
+        return multiplier * ((a[key] ?? 0) - (b[key] ?? 0)) || a.cardName.localeCompare(b.cardName);
+      }
       case "name": {
         return multiplier * a.cardName.localeCompare(b.cardName);
       }

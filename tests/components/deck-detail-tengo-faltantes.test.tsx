@@ -141,4 +141,59 @@ describe("DeckDetailView - 'Tengo las faltantes' functionality end-to-end", () =
       screen.queryByTitle("Añade todas las cartas faltantes de este mazo a tu inventario físico")
     ).toBeNull();
   });
+  it("shows a recommendation with the same cards and filters without deck mutations", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy.mockClear();
+    render(<DeckDetailView initialDeck={mockDeck} recommendation={{
+      priceSummary: {
+        provider: "cardmarket", currency: "EUR", currencySymbol: "€",
+        totalCards: 2, totalNetValue: 15, totalOwnedValue: 12.5,
+        totalMissingValue: 2.5, quotes: {},
+      }, unpricedCards: 1, unfilledSlots: 0,
+    }} />);
+    expect(screen.getByText("Recomendación EDHREC · Vista previa")).toBeInTheDocument();
+    expect(screen.getByText("12.50 €")).toBeInTheDocument();
+    expect(screen.getByText(/Valor parcial: 1 cartas/)).toBeInTheDocument();
+    expect(screen.getByText("Arcane Signet")).toBeInTheDocument();
+    expect(screen.getByText("Sol Ring")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Volver a la lista/ })).toHaveAttribute("href", "/decks?tab=edhrec");
+    expect(screen.queryByText("Editar mazo")).not.toBeInTheDocument();
+    expect(screen.queryByText("Archivar")).not.toBeInTheDocument();
+    expect(screen.queryByText("(Cambiar)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tengo las faltantes")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Eliminar carta del mazo")).not.toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalledWith("/api/prices", expect.anything());
+    fetchSpy.mockRestore();
+  });
+  it("shows every Vivi alternative with a two-creature quota and sorts by inclusion and price", () => {
+    const cards = [
+      { cardName: "Alpha", inclusionPct: 20, synergy: 5, isTopCard: true },
+      { cardName: "Beta", inclusionPct: 90, synergy: 30, isHighSynergy: true },
+      { cardName: "Gamma", inclusionPct: 40, synergy: 10 },
+    ].map((c, i) => ({ ...mockDeck.cards[0], ...c, id: String(i), cardScryfallId: String(i),
+      typeLine: "Creature", edhrecCategory: "creatures" as const }));
+    const quotes = Object.fromEntries(cards.map((c, i) => [c.cardScryfallId, {
+      cardName: c.cardName, provider: "cardmarket" as const, currency: "EUR" as const,
+      currencySymbol: "€", unitPrice: { trend: [30, 10, 20][i], min: 0, max: 0 },
+      quantity: 1, subtotal: [30, 10, 20][i], lastUpdated: new Date().toISOString(),
+    }]));
+    render(<DeckDetailView initialDeck={{ ...mockDeck, name: "Vivi", cards }} recommendation={{
+      priceSummary: { provider: "cardmarket", currency: "EUR", currencySymbol: "€",
+        totalCards: 2, totalNetValue: 30, totalOwnedValue: 0, totalMissingValue: 30, quotes },
+      unpricedCards: 0, unfilledSlots: 0, typeQuotas: { creatures: 2 },
+    }} />);
+    expect(screen.getByText("Elige 2 cartas para ajustarte a EDHREC")).toBeInTheDocument();
+    expect(screen.getByText("Top Cards")).toBeInTheDocument();
+    expect(screen.getByText("Alta sinergia")).toBeInTheDocument();
+    const names = () => screen.getAllByRole("button", { name: /^Ver detalles de/ }).map(el => el.getAttribute("aria-label")?.replace("Ver detalles de ", ""));
+    expect(names()).toEqual(["Beta", "Gamma", "Alpha"]);
+    fireEvent.click(screen.getByRole("button", { name: "Precio (Unitario)" }));
+    expect(names()).toEqual(["Alpha", "Gamma", "Beta"]);
+    fireEvent.click(screen.getByRole("button", { name: "Sinergia" }));
+    expect(names()).toEqual(["Beta", "Gamma", "Alpha"]);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Gamma" } });
+    expect(names()).toEqual(["Gamma"]);
+    expect(screen.getByText("Elige 2 cartas para ajustarte a EDHREC")).toBeInTheDocument();
+    expect(screen.queryByText("Sideboard")).not.toBeInTheDocument();
+  });
 });

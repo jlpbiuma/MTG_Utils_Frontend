@@ -9,6 +9,7 @@ interface CardSortingBarProps {
   currentDirection: SortDirection;
   onSortChange: (field: SortField, direction: SortDirection) => void;
   showStatusOption?: boolean;
+  showEdhrecOptions?: boolean;
   showRequestedDecksOption?: boolean;
   requestedDecksLabel?: string;
 }
@@ -18,10 +19,17 @@ export function CardSortingBar({
   currentDirection,
   onSortChange,
   showStatusOption = false,
+  showEdhrecOptions = false,
   showRequestedDecksOption = false,
   requestedDecksLabel = "Se pide en",
 }: CardSortingBarProps) {
   const sortOptions: Array<{ field: SortField; label: string }> = [
+    ...(showEdhrecOptions
+      ? [
+          { field: "inclusion" as SortField, label: "Inclusión" },
+          { field: "synergy" as SortField, label: "Sinergia" },
+        ]
+      : []),
     { field: "name", label: "Nombre" },
     { field: "price_trend", label: "Precio (Unitario)" },
     { field: "price_subtotal", label: "Precio (Subtotal)" },
@@ -45,7 +53,12 @@ export function CardSortingBar({
       onSortChange(field, currentDirection === "asc" ? "desc" : "asc");
     } else {
       // Default to asc for name/cmc/type, desc for price/quantity/requested_decks
-      const defaultDesc = field.startsWith("price") || field === "quantity" || field === "requested_decks";
+      const defaultDesc =
+        field === "inclusion" ||
+        field === "synergy" ||
+        field.startsWith("price") ||
+        field === "quantity" ||
+        field === "requested_decks";
       onSortChange(field, defaultDesc ? "desc" : "asc");
     }
   };

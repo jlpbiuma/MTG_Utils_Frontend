@@ -48,25 +48,26 @@ export function CardSearchDialog({
   const [previewCard, setPreviewCard] = useState<ScryfallCardResult | null>(null);
 
   useEffect(() => {
-    if (!query || query.trim().length < 2) {
+    let cancelled = false;
+    if (!open || query.trim().length < 2) {
       setResults([]);
+      setLoading(false);
       return;
     }
-
+    setLoading(true);
     const timer = setTimeout(async () => {
-      setLoading(true);
       try {
-        const res = await searchCards(query, 1);
-        setResults(res.data.slice(0, 15)); // First 15 cards
+        const res = await searchCards(query.trim(), 1);
+        if (!cancelled) setResults(res.data);
       } catch (err) {
         console.error(err);
+        if (!cancelled) setResults([]);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }, 350);
-
-    return () => clearTimeout(timer);
-  }, [query]);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query, open]);
 
   const handleAdd = async (card: ScryfallCardResult) => {
     setAddingId(card.id);
@@ -113,6 +114,7 @@ export function CardSearchDialog({
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
+              aria-label="Buscar cartas en Scryfall"
               placeholder="Escribe el nombre de la carta (ej: Black Lotus, Lightning Bolt, Atraxa...)"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
