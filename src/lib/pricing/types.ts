@@ -117,6 +117,7 @@ export interface PriceSummary {
   totalOwnedValue?: number;   // Net total of owned cards
   totalMissingValue?: number; // Cost to complete the deck (missing cards only)
   quotes: Record<string, CardPriceQuote>; // Keyed by normalized name or scryfall ID
+  lastUpdated?: string;
 }
 
 export interface PriceProviderConfig {

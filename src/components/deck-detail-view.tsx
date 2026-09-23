@@ -123,6 +123,7 @@ export function DeckDetailView({
   const [showCommanderModal, setShowCommanderModal] = useState(
     !initialDeck.commander,
   );
+  const [commanderModalPartnerMode, setCommanderModalPartnerMode] = useState(false);
   const [showDeleteDeckDialog, setShowDeleteDeckDialog] = useState(false);
   const [isArchived, setIsArchived] = useState(!!initialDeck.isArchived);
   const [isArchiving, setIsArchiving] = useState(false);
@@ -388,6 +389,7 @@ export function DeckDetailView({
   const [loadedPriceSummary, setPriceSummary] = useState<PriceSummary | null>(
     () => {
       if (recommendation) return recommendation.priceSummary;
+      if (initialDeck.priceSummary) return initialDeck.priceSummary;
       if (initialDeck.totalValue != null) {
         const net = initialDeck.totalValue;
         const missing = initialDeck.missingValue ?? 0;
@@ -842,74 +844,107 @@ export function DeckDetailView({
                     </div>
                   )}
 
-                  {card.assignedQuantity < card.quantity && (
-                    <>
-                      {card.availableToAssign > 0 ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleAssign(card.id)}
-                          disabled={isBusy}
-                          className="h-6 text-[11px] px-2 gap-1 text-sky-300 border-sky-500/40 hover:bg-sky-500/10 hover:border-sky-400"
-                          title="Asignar una copia física disponible de tu colección a este mazo"
+                  {card.assignedQuantity < card.quantity && card.availableToAssign > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleAssign(card.id)}
+                      disabled={isBusy}
+                      className="h-6 text-[11px] px-2 gap-1 text-sky-300 border-sky-500/40 hover:bg-sky-500/10 hover:border-sky-400"
+                      title="Asignar una copia física disponible de tu colección a este mazo"
+                    >
+                      📥 Asignar al mazo ({card.availableToAssign} disp.)
+                    </Button>
+                  )}
+
+                  {card.assignedInOtherDecks && card.assignedInOtherDecks.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs text-primary bg-secondary px-2.5 py-1 rounded border border-primary/30">
+                      <span className="font-semibold text-primary">
+                        ⚠️ Asignada en:
+                      </span>
+                      {card.assignedInOtherDecks.map((other) => (
+                        <span
+                          key={other.deckId}
+                          className="flex items-center gap-1 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/30 text-foreground font-medium"
                         >
-                          📥 Asignar al mazo ({card.availableToAssign} disp.)
-                        </Button>
-                      ) : card.assignedInOtherDecks &&
-                        card.assignedInOtherDecks.length > 0 ? (
-                        <div className="flex items-center gap-1.5 flex-wrap text-xs text-primary bg-secondary px-2.5 py-1 rounded border border-primary/30">
-                          <span className="font-semibold text-primary">
-                            ⚠️ Asignada en:
-                          </span>
-                          {card.assignedInOtherDecks.map((other) => (
-                            <span
-                              key={other.deckId}
-                              className="flex items-center gap-1 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/30 text-foreground font-medium"
-                            >
-                              <span>
-                                {other.deckName} ({other.quantity})
-                              </span>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  handleReassign(
-                                    other.deckId,
-                                    card.id,
-                                    card.cardName,
-                                  )
-                                }
-                                disabled={isBusy}
-                                className="h-4 text-[10px] px-1 text-primary hover:text-foreground underline font-bold"
-                                title={`Reasignar copia física desde ${other.deckName} a este mazo`}
-                              >
-                                Reasignar aquí
-                              </Button>
-                            </span>
-                          ))}
-                        </div>
-                      ) : card.ownedInCollection === 0 ? (
-                        <span className="text-xs text-muted-foreground italic">
-                          (No la tienes en colección)
+                          <Link
+                            href={`/decks/${other.deckId}`}
+                            className="hover:underline text-sky-400 font-semibold"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {other.deckName} ({other.quantity})
+                          </Link>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              handleReassign(
+                                other.deckId,
+                                card.id,
+                                card.cardName,
+                              )
+                            }
+                            disabled={isBusy}
+                            className="h-4 text-[10px] px-1 text-primary hover:text-foreground underline font-bold"
+                            title={`Reasignar copia física desde ${other.deckName} a este mazo`}
+                          >
+                            Reasignar aquí
+                          </Button>
                         </span>
-                      ) : null}
-                    </>
+                      ))}
+                    </div>
+                  )}
+
+                  {card.assignedQuantity < card.quantity && card.availableToAssign === 0 && (!card.assignedInOtherDecks || card.assignedInOtherDecks.length === 0) && card.ownedInCollection === 0 && (
+                    <span className="text-xs text-muted-foreground italic">
+                      (No la tienes en colección)
+                    </span>
                   )}
                 </div>
               </>
             )}
-            {readOnly && <div className="mt-2 flex flex-wrap gap-2 text-xs">
-              {card.assignedInOtherDecks.map(other => <Link key={other.deckId} href={`/decks/${other.deckId}`} className="text-sky-300 underline" onClick={event => event.stopPropagation()}>
-                Asignada en {other.deckName}: {other.quantity}
-              </Link>)}
-              {card.ownedInCollection > 0 && <span className="text-muted-foreground">Colección libre: {card.availableToAssign}</span>}
-            </div>}
-            {card.ownedInCollection === 0 && <Button size="sm" variant="outline" className="mt-2 gap-1.5"
-              disabled={!!addingWant || card.isInWant}
-              onClick={() => handleAddWant(card)}>
-              <BookmarkPlus className="h-3.5 w-3.5" />
-              {card.isInWant ? "En Wants" : addingWant === card.id ? "Añadiendo..." : "Añadir a Wants"}
-            </Button>}
+            {readOnly && (
+              <div className="mt-2 flex flex-wrap gap-2 text-xs items-center">
+                {card.assignedInOtherDecks && card.assignedInOtherDecks.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap text-xs text-primary bg-secondary px-2.5 py-1 rounded border border-primary/30">
+                    <span className="font-semibold text-primary">
+                      ⚠️ Asignada en:
+                    </span>
+                    {card.assignedInOtherDecks.map((other) => (
+                      <span
+                        key={other.deckId}
+                        className="flex items-center gap-1 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/30 text-foreground font-medium"
+                      >
+                        <Link
+                          href={`/decks/${other.deckId}`}
+                          className="hover:underline text-sky-400 font-semibold"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {other.deckName} ({other.quantity})
+                        </Link>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {card.ownedInCollection > 0 && (
+                  <span className="text-muted-foreground">
+                    Colección libre: {card.availableToAssign}
+                  </span>
+                )}
+              </div>
+            )}
+            {(card.ownedInCollection === 0 || (card.missingCount ?? 0) > 0) && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2 gap-1.5 h-6 text-xs text-amber-300 border-amber-500/40 hover:bg-amber-500/10 hover:border-amber-400"
+                disabled={!!addingWant || card.isInWant}
+                onClick={() => handleAddWant(card)}
+              >
+                <BookmarkPlus className="h-3.5 w-3.5" />
+                {card.isInWant ? "En Wants" : addingWant === card.id ? "Añadiendo..." : "Añadir a Wants"}
+              </Button>
+            )}
 
             {/* Global Deck Demand / Priority for missing cards */}
             {(card.requestedInDecksCount ?? card.requestedInDecks?.length ?? 0) > 0 && (
@@ -1191,16 +1226,32 @@ export function DeckDetailView({
                       <span>Comandante</span>
                     </div>
                     {!readOnly && (
-                      <>
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => setShowCommanderModal(true)}
+                          onClick={() => {
+                            setCommanderModalPartnerMode(false);
+                            setShowCommanderModal(true);
+                          }}
                           className="text-[11px] text-primary/80 hover:text-primary underline font-medium cursor-pointer transition-colors"
                           title="Cambiar el comandante de este mazo"
                         >
                           (Cambiar)
                         </button>
-                      </>
+                        {!deckInfo.commander.includes(" // ") && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCommanderModalPartnerMode(true);
+                              setShowCommanderModal(true);
+                            }}
+                            className="text-[11px] text-primary hover:text-primary underline font-medium cursor-pointer transition-colors"
+                            title="Agregar un compañero (Partner) a este comandante"
+                          >
+                            (+ Partner)
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                   <div
@@ -1383,9 +1434,13 @@ export function DeckDetailView({
             deckId={initialDeck.id}
             deckName={deckInfo.name}
             open={showCommanderModal}
-            onOpenChange={setShowCommanderModal}
+            onOpenChange={(isOpen) => {
+              setShowCommanderModal(isOpen);
+              if (!isOpen) setCommanderModalPartnerMode(false);
+            }}
             deckCards={initialDeck.cards}
             currentCommander={deckInfo.commander}
+            initialPartnerMode={commanderModalPartnerMode}
             onCommanderSelected={(newCmd, newImg) => {
               setDeckInfo((prev) => ({
                 ...prev,
@@ -1791,56 +1846,66 @@ export function DeckDetailView({
                         </div>
                       </div>
 
-                      {readOnly ? (
-                        <span className="text-sm text-muted-foreground">
-                          {
-                            section.cards.filter((c) => c.ownedInCollection > 0)
-                              .length
-                          }{" "}
-                          de {section.cards.length} alternativas visibles en tu
-                          colección ({Math.round(section.cards.filter(c => c.ownedInCollection > 0).length / section.cards.length * 100)}%)
-                        </span>
-                      ) : (
-                        <>
-                          {/* Right: Completion Stats + Section Prices */}
-                          <div className="flex items-center gap-4 flex-wrap justify-between md:justify-end text-xs">
-                            {/* Completion metric & mini progress bar */}
-                            <div className="flex items-center gap-2">
-                              <div className="w-20 sm:w-24">
-                                <Progress
-                                  value={section.completionPercentage}
-                                  indicatorClassName={
-                                    isSectionComplete
-                                      ? "bg-gradient-to-r from-emerald-500 to-teal-400"
-                                      : "bg-primary"
-                                  }
-                                  className="h-2 bg-accent"
-                                />
-                              </div>
-                              <span
-                                className={`font-mono font-semibold ${
+                      {/* Right: Completion Stats + Section Prices */}
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-5 justify-between md:justify-end text-xs">
+                        {readOnly ? (
+                          <span className="text-xs sm:text-sm text-muted-foreground">
+                            {
+                              section.cards.filter((c) => c.ownedInCollection > 0)
+                                .length
+                            }{" "}
+                            de {section.cards.length} alternativas visibles en tu
+                            colección ({Math.round(section.cards.filter(c => c.ownedInCollection > 0).length / (section.cards.length || 1) * 100)}%)
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="w-20 sm:w-24">
+                              <Progress
+                                value={section.completionPercentage}
+                                indicatorClassName={
                                   isSectionComplete
-                                    ? "text-emerald-400"
-                                    : "text-primary"
-                                }`}
-                              >
-                                {section.completionTotalCards > 0
-                                  ? `${section.ownedCards}/${section.completionTotalCards} (${section.completionPercentage}%)`
-                                  : `${section.totalCardsCount} básicas (100%)`}
-                              </span>
+                                    ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+                                    : "bg-primary"
+                                }
+                                className="h-2 bg-accent"
+                              />
                             </div>
-
-
+                            <span
+                              className={`font-mono font-semibold ${
+                                isSectionComplete
+                                  ? "text-emerald-400"
+                                  : "text-primary"
+                              }`}
+                            >
+                              {section.completionTotalCards > 0
+                                ? `${section.ownedCards}/${section.completionTotalCards} (${section.completionPercentage}%)`
+                                : `${section.totalCardsCount} básicas (100%)`}
+                            </span>
                           </div>
-                        </>
-                      )}
-                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-mono" aria-label={`Valor de ${section.label}`}>
-                        {priceSummary ? <>
-                          <span className="text-primary">{readOnly ? "Total alternativas" : "Total"}: {section.sectionTotalPrice.toFixed(2)} {section.currencySymbol}</span>
-                          <span className="text-emerald-400">En colección: {section.sectionOwnedPrice.toFixed(2)} {section.currencySymbol}</span>
-                          <span className="text-rose-400">Faltante: {section.sectionMissingPrice.toFixed(2)} {section.currencySymbol}</span>
-                          {section.unpricedCards > 0 && <span className="text-muted-foreground">Parcial · {section.unpricedCards} sin precio</span>}
-                        </> : <span className="text-muted-foreground">Precios no disponibles</span>}
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono" aria-label={`Valor de ${section.label}`}>
+                          {priceSummary ? (
+                            <>
+                              <span className="text-primary font-medium">
+                                {readOnly ? "Total alternativas" : "Total"}: {section.sectionTotalPrice.toFixed(2)} {section.currencySymbol}
+                              </span>
+                              <span className="text-emerald-400">
+                                En colección: {section.sectionOwnedPrice.toFixed(2)} {section.currencySymbol}
+                              </span>
+                              <span className="text-rose-400">
+                                Faltante: {section.sectionMissingPrice.toFixed(2)} {section.currencySymbol}
+                              </span>
+                              {section.unpricedCards > 0 && (
+                                <span className="text-muted-foreground text-[11px]">
+                                  Parcial · {section.unpricedCards} sin precio
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">Precios no disponibles</span>
+                          )}
+                        </div>
                       </div>
                     </button>
 

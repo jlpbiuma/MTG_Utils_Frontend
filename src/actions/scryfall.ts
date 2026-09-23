@@ -23,12 +23,22 @@ export interface ScryfallCardResult {
     name: string;
     mana_cost?: string;
     type_line?: string;
+    oracle_text?: string;
     image_uris?: {
       small?: string;
       normal?: string;
       large?: string;
       art_crop?: string;
     };
+  }>;
+  keywords?: string[];
+  all_parts?: Array<{
+    id: string;
+    object?: string;
+    component: string;
+    name: string;
+    type_line?: string;
+    uri?: string;
   }>;
 }
 

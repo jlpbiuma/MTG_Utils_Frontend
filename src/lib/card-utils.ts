@@ -326,3 +326,83 @@ export function groupCardsByType<
 
   return sections.sort((a, b) => a.order - b.order);
 }
+
+export interface PartnerInfo {
+  hasPartner: boolean;
+  specificPartner: string | null;
+  partnerType?: "specific" | "generic" | "friends_forever" | "doctors_companion";
+}
+
+/**
+ * Parses oracle text (and optional all_parts / keywords) to identify whether
+ * a card has the Partner mechanic, and if it specifies a partner by name
+ * (e.g. "Partner with Okaun, Eye of Chaos" on Zndrsplt).
+ */
+export function getPartnerInfo(
+  oracleText?: string | null,
+  allParts?: Array<{ name: string; component?: string }>
+): PartnerInfo {
+  if (!oracleText && (!allParts || allParts.length === 0)) {
+    return { hasPartner: false, specificPartner: null };
+  }
+
+  const text = oracleText || "";
+
+  // 1. Check for specific partner: "Partner with <Card Name>"
+  // Handles:
+  // "Partner with Okaun, Eye of Chaos (When this creature enters..."
+  // "Partner with Okaun, Eye of Chaos\n..."
+  const specificMatch = text.match(/partner with\s+([^(\n\r]+?)(?:\s*\(|$)/i);
+  if (specificMatch && specificMatch[1]?.trim()) {
+    return {
+      hasPartner: true,
+      specificPartner: specificMatch[1].trim(),
+      partnerType: "specific",
+    };
+  }
+
+  // Fallback: check all_parts for combo_piece or partner if not found by regex
+  if (allParts && allParts.length > 0) {
+    const relatedPartner = allParts.find(
+      (part) =>
+        (part.component === "combo_piece" || part.component === "partner") &&
+        text.toLowerCase().includes("partner with")
+    );
+    if (relatedPartner?.name) {
+      return {
+        hasPartner: true,
+        specificPartner: relatedPartner.name.trim(),
+        partnerType: "specific",
+      };
+    }
+  }
+
+  const lower = text.toLowerCase();
+  if (lower.includes("partner with")) {
+    const after = text.split(/partner with\s+/i)[1];
+    if (after) {
+      const namePart = after.split(/[\n\r(]/)[0]?.trim();
+      if (namePart) {
+        return {
+          hasPartner: true,
+          specificPartner: namePart,
+          partnerType: "specific",
+        };
+      }
+    }
+  }
+
+  if (lower.includes("friends forever")) {
+    return { hasPartner: true, specificPartner: null, partnerType: "friends_forever" };
+  }
+
+  if (lower.includes("doctor's companion")) {
+    return { hasPartner: true, specificPartner: null, partnerType: "doctors_companion" };
+  }
+
+  if (lower.includes("partner")) {
+    return { hasPartner: true, specificPartner: null, partnerType: "generic" };
+  }
+
+  return { hasPartner: false, specificPartner: null };
+}

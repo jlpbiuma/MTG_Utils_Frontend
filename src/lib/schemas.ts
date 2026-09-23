@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Currency } from "@/lib/pricing/types";
+import { Currency, PriceSummary } from "@/lib/pricing/types";
 
 export const DeckCreateSchema = z.object({
   name: z.string().min(1, "El nombre del mazo es obligatorio").max(100),
@@ -128,6 +128,7 @@ export interface DeckCardWithOwnership {
 
 export interface DeckDetailWithStats extends DeckWithCompletion {
   cards: DeckCardWithOwnership[];
+  priceSummary?: PriceSummary | null;
 }
 
 export interface EdhrecCardRecommendation {
