@@ -465,12 +465,22 @@ export async function moveCardToSideboard(
   return { success: res.status === "success", cardId: res.cardId, merged: res.merged };
 }
 
+export type CommanderRecommendationsSortBy =
+  | "completion"
+  | "rank"
+  | "name"
+  | "owned_value"
+  | "missing_value"
+  | "synergy"
+  | "top_cards";
+
 export interface GetEdhrecRecommendationsParams {
   search?: string;
   colors?: string;
   top100Only?: boolean;
   ownedCommanderOnly?: boolean;
-  sortBy?: "completion" | "rank" | "name";
+  sortBy?: CommanderRecommendationsSortBy;
+  sortDir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 }
@@ -485,6 +495,7 @@ export async function getEdhrecCommanderRecommendations(
   if (params.top100Only) searchParams.set("top100_only", "true");
   if (params.ownedCommanderOnly) searchParams.set("owned_commander_only", "true");
   if (params.sortBy) searchParams.set("sort_by", params.sortBy);
+  if (params.sortDir) searchParams.set("sort_dir", params.sortDir);
   if (params.page) searchParams.set("page", params.page.toString());
   if (params.pageSize) searchParams.set("page_size", params.pageSize.toString());
 

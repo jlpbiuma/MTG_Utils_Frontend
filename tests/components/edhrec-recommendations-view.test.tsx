@@ -294,6 +294,76 @@ describe("EdhrecRecommendationsView", () => {
       expect(getRecsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           sortBy: "rank",
+          sortDir: "asc",
+        })
+      );
+    });
+  });
+
+  it("should support sorting by valor en colección, valor faltante, sinergia and top cards", async () => {
+    const getRecsSpy = vi.mocked(deckActions.getEdhrecCommanderRecommendations).mockResolvedValue(mockResponse);
+
+    render(<EdhrecRecommendationsView />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Atraxa, Praetors' Voice")).toBeInTheDocument();
+    });
+
+    // 1. Sort by valor en colección
+    const ownedValueBtn = screen.getByRole("button", { name: /Valor en colección/i });
+    fireEvent.click(ownedValueBtn);
+    await waitFor(() => {
+      expect(getRecsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sortBy: "owned_value",
+          sortDir: "desc",
+        })
+      );
+    });
+
+    // 2. Click again to toggle direction (asc)
+    fireEvent.click(ownedValueBtn);
+    await waitFor(() => {
+      expect(getRecsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sortBy: "owned_value",
+          sortDir: "asc",
+        })
+      );
+    });
+
+    // 3. Sort by valor faltante
+    const missingValueBtn = screen.getByRole("button", { name: /Valor faltante/i });
+    fireEvent.click(missingValueBtn);
+    await waitFor(() => {
+      expect(getRecsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sortBy: "missing_value",
+          sortDir: "asc",
+        })
+      );
+    });
+
+    // 4. Sort by sinergia
+    const synergyBtn = screen.getByRole("button", { name: /Sinergia/i });
+    fireEvent.click(synergyBtn);
+    await waitFor(() => {
+      expect(getRecsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sortBy: "synergy",
+          sortDir: "desc",
+        })
+      );
+    });
+
+    // 5. Sort by top cards
+    const topCardsBtn = screen.getByRole("button", { name: /Top Cards/i });
+    fireEvent.click(topCardsBtn);
+    await waitFor(() => {
+      expect(getRecsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sortBy: "top_cards",
+          sortDir: "desc",
         })
       );
     });

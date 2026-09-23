@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   Plus,
   ArrowUpDown,
+  ArrowDown,
+  ArrowUp,
   Sparkles,
   Crown,
   ChevronLeft,
@@ -24,7 +26,10 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { ColorIdentityPips } from "@/components/color-identity-pips";
 import { CardImage as Image } from "@/components/card-image";
 import { CreateDeckDialog } from "@/components/create-deck-dialog";
-import { getEdhrecCommanderRecommendations } from "@/actions/decks";
+import {
+  getEdhrecCommanderRecommendations,
+  CommanderRecommendationsSortBy,
+} from "@/actions/decks";
 import {
   CommanderRecommendationsListResponse,
 } from "@/lib/schemas";
@@ -37,7 +42,8 @@ export function EdhrecRecommendationsView() {
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [top100Only, setTop100Only] = useState(false);
   const [ownedCommanderOnly, setOwnedCommanderOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<"completion" | "rank" | "name">("completion");
+  const [sortBy, setSortBy] = useState<CommanderRecommendationsSortBy>("completion");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [reloadTrigger, setReloadTrigger] = useState(0);
 
@@ -54,6 +60,7 @@ export function EdhrecRecommendationsView() {
       top100Only,
       ownedCommanderOnly,
       sortBy,
+      sortDir,
       page,
       pageSize: 24,
     })
@@ -74,7 +81,7 @@ export function EdhrecRecommendationsView() {
     return () => {
       cancelled = true;
     };
-  }, [page, sortBy, top100Only, ownedCommanderOnly, selectedColors, submittedSearch, reloadTrigger]);
+  }, [page, sortBy, sortDir, top100Only, ownedCommanderOnly, selectedColors, submittedSearch, reloadTrigger]);
 
   const handleRefresh = () => {
     setLoading(true);
@@ -87,6 +94,21 @@ export function EdhrecRecommendationsView() {
     setLoading(true);
     setPage(1);
     setSubmittedSearch(search);
+  };
+
+  const handleSortChange = (mode: CommanderRecommendationsSortBy) => {
+    setLoading(true);
+    setPage(1);
+    if (sortBy === mode) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(mode);
+      if (mode === "rank" || mode === "name" || mode === "missing_value") {
+        setSortDir("asc");
+      } else {
+        setSortDir("desc");
+      }
+    }
   };
 
   const toggleColor = (c: string) => {
@@ -105,6 +127,7 @@ export function EdhrecRecommendationsView() {
     setTop100Only(false);
     setOwnedCommanderOnly(false);
     setSortBy("completion");
+    setSortDir("desc");
     setPage(1);
   };
 
@@ -228,36 +251,46 @@ export function EdhrecRecommendationsView() {
           </div>
 
           {/* Sort Selector */}
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1 text-muted-foreground font-medium">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+            <span className="flex items-center gap-1 text-muted-foreground font-medium shrink-0">
               <ArrowUpDown className="h-3.5 w-3.5 text-primary" />
               Ordenar por:
             </span>
             {(
               [
                 ["completion", "Completitud"],
+                ["owned_value", "Valor en colección"],
+                ["missing_value", "Valor faltante"],
+                ["synergy", "Sinergia"],
+                ["top_cards", "Top Cards"],
                 ["rank", "Popularidad"],
                 ["name", "Nombre"],
               ] as const
-            ).map(([mode, label]) => (
-              <Button
-                key={mode}
-                size="sm"
-                variant={sortBy === mode ? "secondary" : "ghost"}
-                onClick={() => {
-                  setLoading(true);
-                  setSortBy(mode);
-                  setPage(1);
-                }}
-                className={`h-7 px-2.5 text-xs ${
-                  sortBy === mode
-                    ? "bg-primary/20 text-primary font-semibold border border-primary/30"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {label}
-              </Button>
-            ))}
+            ).map(([mode, label]) => {
+              const isActive = sortBy === mode;
+              return (
+                <Button
+                  key={mode}
+                  size="sm"
+                  variant={isActive ? "secondary" : "ghost"}
+                  onClick={() => handleSortChange(mode)}
+                  className={`h-7 px-2.5 text-xs flex items-center gap-1 transition-all ${
+                    isActive
+                      ? "bg-primary/20 text-primary font-semibold border border-primary/30"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span>{label}</span>
+                  {isActive && (
+                    sortDir === "asc" ? (
+                      <ArrowUp className="h-3 w-3 text-primary shrink-0" />
+                    ) : (
+                      <ArrowDown className="h-3 w-3 text-primary shrink-0" />
+                    )
+                  )}
+                </Button>
+              );
+            })}
           </div>
         </div>
       </div>
