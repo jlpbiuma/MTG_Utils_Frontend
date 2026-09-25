@@ -12,9 +12,10 @@ import {
   ReferenceLine,
 } from "recharts";
 import type { PrintingPriceSeries, CardExpansionRelease } from "@/lib/pricing/types";
-import { Sparkles, Calendar, Layers, Eye, EyeOff } from "lucide-react";
+import { Sparkles, Eye, EyeOff } from "lucide-react";
 
 const SERIES_COLORS = [
+  "#f97316", // MTGGoldfish Orange
   "#38bdf8", // Sky blue
   "#f43f5e", // Rose
   "#10b981", // Emerald
@@ -24,7 +25,6 @@ const SERIES_COLORS = [
   "#ec4899", // Pink
   "#84cc16", // Lime
   "#6366f1", // Indigo
-  "#f97316", // Orange
   "#14b8a6", // Teal
   "#94a3b8", // Slate
 ];
@@ -36,6 +36,7 @@ interface PriceHistoryChartProps {
   currencySymbol?: string;
   className?: string;
   height?: number;
+  onSelectPrinting?: (printingId: string) => void;
 }
 
 function seriesKey(s: PrintingPriceSeries): string {
@@ -50,6 +51,7 @@ export function PriceHistoryChart({
   currencySymbol = "€",
   className = "",
   height = 300,
+  onSelectPrinting,
 }: PriceHistoryChartProps) {
   const [showExpansions, setShowExpansions] = useState(true);
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
@@ -69,7 +71,7 @@ export function PriceHistoryChart({
       for (const point of s.points) {
         if (point.trendPrice == null) continue;
         const dateKey = new Date(point.recordedAt).toISOString().slice(0, 10);
-        const row = byDate.get(dateKey) ?? { date: dateKey };
+        const row = byDate.get(dateKey) ?? { date: dateKey, timestamp: Date.parse(dateKey) };
         row[key] = Number(point.trendPrice);
         byDate.set(dateKey, row);
       }
@@ -81,47 +83,40 @@ export function PriceHistoryChart({
     return { chartData: sorted, dateList: dates };
   }, [activeSeries]);
 
-  // Map each expansion release to the closest date in chartData
-  const expansionMarkers = useMemo(() => {
-    if (!showExpansions || dateList.length === 0 || expansions.length === 0) return [];
-
-    const minDate = dateList[0];
-    const maxDate = dateList[dateList.length - 1];
-
-    const markers: Array<{
-      expansion: CardExpansionRelease;
-      chartDate: string;
-      exactDate: string;
-    }> = [];
-
-    for (const exp of expansions) {
-      if (!exp.releasedAt) continue;
-      const expDate = exp.releasedAt.slice(0, 10);
-
-      // Only show markers for expansions within or near the chart timeline
-      if (expDate < minDate || expDate > maxDate) continue;
-
-      // Find closest date in dateList
-      let closestDate = dateList[0];
-      let minDiff = Math.abs(new Date(expDate).getTime() - new Date(closestDate).getTime());
-
-      for (const d of dateList) {
-        const diff = Math.abs(new Date(expDate).getTime() - new Date(d).getTime());
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestDate = d;
+  // Compute min and max price for Y-positioning and scaling
+  const { minPrice, maxPrice } = useMemo(() => {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const row of chartData) {
+      for (const s of activeSeries) {
+        const k = seriesKey(s);
+        if (hiddenSeries.has(k)) continue;
+        const val = row[k];
+        if (typeof val === "number" && !isNaN(val)) {
+          if (val < min) min = val;
+          if (val > max) max = val;
         }
       }
-
-      markers.push({
-        expansion: exp,
-        chartDate: closestDate,
-        exactDate: expDate,
-      });
     }
+    if (min === Infinity) min = 0;
+    if (max === -Infinity) max = 1;
+    const padding = (max - min) * 0.1 || 0.1;
+    return {
+      minPrice: Math.max(0, min - padding * 0.5),
+      maxPrice: max + padding,
+    };
+  }, [chartData, activeSeries, hiddenSeries]);
 
-    return markers;
+  // Releases use their actual timestamp, including days with no price sample.
+  const expansionMarkers = useMemo(() => {
+    if (!showExpansions || !dateList.length) return [];
+    return expansions.filter((exp) => {
+      const date = exp.releasedAt?.slice(0, 10);
+      return date && date >= dateList[0] && date <= dateList[dateList.length - 1];
+    }).toSorted((a, b) => a.releasedAt!.localeCompare(b.releasedAt!));
   }, [showExpansions, dateList, expansions]);
+
+  const releaseDates = [...new Set(expansionMarkers.map((exp) => exp.releasedAt!.slice(0, 10)))];
 
   const toggleSeries = (key: string) => {
     setHiddenSeries((prev) => {
@@ -129,7 +124,6 @@ export function PriceHistoryChart({
       if (next.has(key)) {
         next.delete(key);
       } else {
-        // Keep at least one series visible
         if (next.size < activeSeries.length - 1) {
           next.add(key);
         }
@@ -193,66 +187,48 @@ export function PriceHistoryChart({
           )}
         </div>
 
-        {/* Expansion / Reprints toggle */}
-        {expansions.length > 0 && (
-          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none">
+        {/* Expansion / Reprints toggle (MTGGoldfish style) */}
+        <div className="flex items-center gap-3">
+          <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showExpansions}
-              onChange={(e) => setShowExpansions(e.target.checked)}
-              className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 bg-background"
+              onChange={(e) => { setShowExpansions(e.target.checked); setHoveredExpansion(null); }}
+              className="rounded border-border text-orange-500 focus:ring-orange-500 h-3.5 w-3.5 bg-background"
             />
             <span className="flex items-center gap-1 font-medium">
-              <Sparkles className="h-3 w-3 text-amber-400" />
-              Marcadores de expansiones / reprints
+              <Sparkles className="h-3 w-3 text-orange-400" />
+              Lanzamientos de expansión ({expansionMarkers.length})
             </span>
           </label>
-        )}
-      </div>
 
-      {/* Hovered expansion preview pill */}
-      {hoveredExpansion && (
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 animate-in fade-in duration-150">
-          <img
-            src={`https://svgs.scryfall.io/sets/${hoveredExpansion.setCode.toLowerCase()}.svg`}
-            alt={hoveredExpansion.setCode}
-            className="w-4 h-4 object-contain invert dark:invert-0"
-            onError={(e) => {
-              (e.currentTarget as HTMLElement).style.display = "none";
-            }}
-          />
-          <span className="font-semibold">{hoveredExpansion.setName}</span>
-          <span className="text-amber-300/70 font-mono">
-            [{hoveredExpansion.setCode.toUpperCase()} #{hoveredExpansion.collectorNumber}]
-          </span>
-          {hoveredExpansion.releasedAt && (
-            <span className="text-amber-300/70">
-              · Lanzamiento:{" "}
-              {new Date(hoveredExpansion.releasedAt).toLocaleDateString("es-ES", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })}
+          <div className="hidden sm:flex items-center gap-2.5 text-[11px] text-muted-foreground pl-2 border-l border-border/60">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-orange-500 inline-block" />
+              Nueva expansión
             </span>
-          )}
-          {hoveredExpansion.trendPrice != null && (
-            <span className="ml-auto font-mono font-bold text-foreground">
-              {hoveredExpansion.trendPrice.toFixed(2)} {currencySymbol}
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+              Versión carta
             </span>
-          )}
+          </div>
         </div>
-      )}
+      </div>
 
       {/* Main Chart Area */}
       <div className="w-full relative" style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 24, right: 16, left: 0, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#222733" />
+            <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#222733" strokeOpacity={0.6} />
             <XAxis
-              dataKey="date"
+              dataKey="timestamp"
+              type="number"
+              scale="time"
+              domain={["dataMin", "dataMax"]}
+              minTickGap={30}
               tick={{ fill: "#8b929e", fontSize: 11 }}
               tickFormatter={(v) => {
-                const d = new Date(String(v));
+                const d = new Date(Number(v));
                 return Number.isNaN(d.getTime())
                   ? String(v)
                   : d.toLocaleDateString("es-ES", { day: "2-digit", month: "short" });
@@ -260,6 +236,7 @@ export function PriceHistoryChart({
               stroke="#222733"
             />
             <YAxis
+              domain={[minPrice, maxPrice]}
               tick={{ fill: "#8b929e", fontSize: 11 }}
               stroke="#222733"
               width={60}
@@ -284,7 +261,7 @@ export function PriceHistoryChart({
                 String(name),
               ]}
               labelFormatter={(label) => {
-                const d = new Date(String(label));
+                const d = new Date(Number(label));
                 return Number.isNaN(d.getTime())
                   ? String(label)
                   : d.toLocaleDateString("es-ES", {
@@ -295,22 +272,19 @@ export function PriceHistoryChart({
               }}
             />
 
-            {/* MTGGoldfish Expansion Markers (Reference Lines) */}
-            {expansionMarkers.map(({ expansion: exp, chartDate }) => (
-              <ReferenceLine
-                key={`exp-${exp.setCode}-${exp.collectorNumber}`}
-                x={chartDate}
-                stroke="#f59e0b"
-                strokeWidth={1.5}
-                strokeDasharray="2 2"
-                label={
-                  <CustomExpansionMarker
-                    expansion={exp}
-                    onHover={setHoveredExpansion}
-                  />
-                }
-              />
-            ))}
+            {releaseDates.map((date) => {
+              const highlighted = hoveredExpansion?.releasedAt?.slice(0, 10) === date;
+              return (
+                <ReferenceLine
+                  key={date}
+                  x={Date.parse(date)}
+                  stroke={highlighted ? "#f59e0b" : "#64748b"}
+                  strokeOpacity={highlighted ? 1 : 0.4}
+                  strokeWidth={highlighted ? 2 : 1}
+                  strokeDasharray="4 4"
+                />
+              );
+            })}
 
             {/* Line for each printing series */}
             {activeSeries.map((s, idx) => {
@@ -320,18 +294,18 @@ export function PriceHistoryChart({
 
               const isCurrent = s.printingId === activePrintingId;
               const color = isCurrent
-                ? "#eab308"
-                : SERIES_COLORS[idx % SERIES_COLORS.length];
+                ? "#f97316" // MTGGoldfish signature orange
+                : SERIES_COLORS[(idx + 1) % SERIES_COLORS.length];
 
               return (
                 <Line
                   key={s.printingId}
-                  type="monotone"
+                  type="linear"
                   dataKey={key}
                   name={key}
                   stroke={color}
                   strokeWidth={isCurrent ? 2.5 : 1.8}
-                  dot={{ r: isCurrent ? 3.5 : 2.5, fill: color }}
+                  dot={false}
                   activeDot={{ r: 5, stroke: "#000", strokeWidth: 2 }}
                   connectNulls
                   isAnimationActive={false}
@@ -342,6 +316,41 @@ export function PriceHistoryChart({
         </ResponsiveContainer>
       </div>
 
+      {expansionMarkers.length > 0 && (
+        <section aria-label="Lanzamientos en el período" className="rounded-lg border border-border bg-secondary/20 p-3 space-y-2">
+          <p className="text-[11px] text-muted-foreground">Lanzamientos · pasa el cursor o enfoca una expansión para localizar su fecha</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {expansionMarkers.map((exp) => (
+              <button
+                key={`${exp.setCode}-${exp.releasedAt}-${exp.printingId || "set"}`}
+                type="button"
+                aria-label={`${exp.setCode.toUpperCase()} ${exp.setName} · Lanzamiento ${exp.releasedAt!.slice(0, 10)}${exp.hasPrinting ? " · Versión de esta carta" : ""}`}
+                onMouseEnter={() => setHoveredExpansion(exp)}
+                onMouseLeave={() => setHoveredExpansion(null)}
+                onFocus={() => setHoveredExpansion(exp)}
+                onBlur={() => setHoveredExpansion(null)}
+                onClick={() => {
+                  setHoveredExpansion(exp);
+                  if (exp.printingId) onSelectPrinting?.(exp.printingId);
+                }}
+                className={`flex min-h-11 items-center gap-2 rounded-md border p-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${hoveredExpansion === exp ? "border-amber-500/60 bg-amber-500/10" : "border-border hover:bg-secondary"}`}
+              >
+                <span className={`shrink-0 rounded border px-1.5 py-1 font-mono text-[10px] ${exp.hasPrinting ? "text-amber-400 border-amber-400/30" : "text-orange-400 border-orange-400/30"}`}>
+                  {exp.setCode.toUpperCase()}
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-medium text-foreground break-words">{exp.setName}</span>
+                  <span className="block text-muted-foreground">
+                    {new Date(exp.releasedAt!).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })}
+                    {exp.hasPrinting ? " · Versión de esta carta" : " · Nueva expansión"}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Interactive Legend with toggleable series */}
       <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] max-h-24 overflow-y-auto">
         {activeSeries.map((s, idx) => {
@@ -349,8 +358,8 @@ export function PriceHistoryChart({
           const isHidden = hiddenSeries.has(key);
           const isCurrent = s.printingId === activePrintingId;
           const color = isCurrent
-            ? "#eab308"
-            : SERIES_COLORS[idx % SERIES_COLORS.length];
+            ? "#f97316"
+            : SERIES_COLORS[(idx + 1) % SERIES_COLORS.length];
 
           return (
             <button
@@ -361,7 +370,7 @@ export function PriceHistoryChart({
                 isHidden
                   ? "bg-secondary/30 border-border/40 text-muted-foreground/50 line-through opacity-60"
                   : isCurrent
-                  ? "bg-amber-500/15 border-amber-500/50 text-amber-300 font-semibold shadow-xs"
+                  ? "bg-orange-500/15 border-orange-500/50 text-orange-300 font-semibold shadow-xs"
                   : "bg-secondary/80 border-border text-foreground hover:bg-accent"
               }`}
               title={`Clic para ${isHidden ? "mostrar" : "ocultar"} ${key}`}
@@ -381,51 +390,5 @@ export function PriceHistoryChart({
         })}
       </div>
     </div>
-  );
-}
-
-interface CustomExpansionMarkerProps {
-  viewBox?: { x: number; y: number; width?: number; height?: number };
-  expansion: CardExpansionRelease;
-  onHover: (exp: CardExpansionRelease | null) => void;
-}
-
-function CustomExpansionMarker({
-  viewBox,
-  expansion,
-  onHover,
-}: CustomExpansionMarkerProps) {
-  if (!viewBox) return null;
-  const { x } = viewBox;
-  const setCode = expansion.setCode.toLowerCase();
-
-  return (
-    <g
-      transform={`translate(${x - 11}, 2)`}
-      className="cursor-pointer"
-      onMouseEnter={() => onHover(expansion)}
-      onMouseLeave={() => onHover(null)}
-    >
-      <circle
-        cx="11"
-        cy="11"
-        r="11"
-        fill="#18181b"
-        stroke="#f59e0b"
-        strokeWidth="1.5"
-        className="transition-transform hover:scale-125"
-      />
-      <image
-        href={`https://svgs.scryfall.io/sets/${setCode}.svg`}
-        x="3"
-        y="3"
-        width="16"
-        height="16"
-        className="invert dark:invert-0"
-        onError={(e) => {
-          (e.currentTarget as SVGElement).style.display = "none";
-        }}
-      />
-    </g>
   );
 }

@@ -51,6 +51,7 @@ export interface CardExpansionRelease {
   collectorNumber?: string | null;
   printingId?: string | null;
   trendPrice?: number | null;
+  hasPrinting?: boolean | null;
 }
 
 export interface PrintingPriceSeries {

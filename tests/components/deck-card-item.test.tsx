@@ -22,12 +22,23 @@ describe("DeckCardItem Component", () => {
     completionPercentage: 75,
   };
 
-  it("should render deck name, format, and description", () => {
+  it("should render deck name and description without Commander / EDH format tag", () => {
     render(<DeckCardItem deck={baseDeck} />);
 
     expect(screen.getByText("Atris Blink")).toBeInTheDocument();
-    expect(screen.getByText("Commander")).toBeInTheDocument();
+    expect(screen.queryByText("Commander")).not.toBeInTheDocument();
+    expect(screen.queryByText("Commander / EDH")).not.toBeInTheDocument();
     expect(screen.getByText("Reanimate and blink ETB value")).toBeInTheDocument();
+  });
+
+  it("should render format tag for non-Commander decks", () => {
+    const modernDeck: DeckWithCompletion = {
+      ...baseDeck,
+      format: "Modern",
+    };
+    render(<DeckCardItem deck={modernDeck} />);
+
+    expect(screen.getByText("Modern")).toBeInTheDocument();
   });
 
   it("should display completion percentage and missing count for incomplete deck", () => {

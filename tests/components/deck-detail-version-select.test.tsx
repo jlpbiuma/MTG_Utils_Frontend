@@ -33,6 +33,14 @@ vi.mock("@/actions/decks", () => ({
   setDeckCommander: vi.fn(),
 }));
 
+vi.mock("@/actions/collection", () => ({
+  updateCollectionCardVersion: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock("@/actions/wants", () => ({
+  updateWantCardVersion: vi.fn().mockResolvedValue({ success: true }),
+}));
+
 describe("DeckDetailView Version Selection & Stability", () => {
   const terraPrintings: scryfallActions.CardPrintingDetail[] = [
     {

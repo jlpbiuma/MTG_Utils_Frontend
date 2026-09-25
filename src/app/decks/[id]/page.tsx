@@ -1,20 +1,11 @@
-import { notFound } from "next/navigation";
-import { getDeckDetail } from "@/actions/decks";
-import { DeckDetailView } from "@/components/deck-detail-view";
-
-interface DeckDetailPageProps {
-  params: Promise<{ id: string }>;
-}
+import { DeckTabPage } from "./deck-tab-page";
 
 export const dynamic = "force-dynamic";
 
-export default async function DeckDetailPage({ params }: DeckDetailPageProps) {
-  const { id } = await params;
-  const deck = await getDeckDetail(id);
-
-  if (!deck) {
-    notFound();
-  }
-
-  return <DeckDetailView initialDeck={deck} />;
+export default async function DeckCardsPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return <DeckTabPage params={params} tab="cards" />;
 }

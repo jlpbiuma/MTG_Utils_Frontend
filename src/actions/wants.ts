@@ -129,6 +129,27 @@ export async function updateWantQuantity(cardId: string, quantity: number) {
   return res;
 }
 
+export async function updateWantCardVersion(
+  cardId: string,
+  data: {
+    cardScryfallId: string;
+    imageUri?: string | null;
+    setCode?: string | null;
+    collectorNumber?: string | null;
+  }
+): Promise<{ success: boolean }> {
+  const userId = await getCurrentUserId();
+  await backendFetch(`/api/wants/${cardId}/version`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+    userId,
+  });
+
+  revalidatePath("/wants");
+  revalidatePath("/decks");
+  return { success: true };
+}
+
 export async function deleteWantCard(cardId: string) {
   const userId = await getCurrentUserId();
   await backendFetch(`/api/wants/${cardId}`, {

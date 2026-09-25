@@ -3,6 +3,8 @@ import { describe, it, expect, vi } from "vitest";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import * as scryfallActions from "@/actions/scryfall";
 import * as deckActions from "@/actions/decks";
+import * as collectionActions from "@/actions/collection";
+import * as wantActions from "@/actions/wants";
 
 vi.mock("@/actions/scryfall", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/actions/scryfall")>();
@@ -14,6 +16,14 @@ vi.mock("@/actions/scryfall", async (importOriginal) => {
 
 vi.mock("@/actions/decks", () => ({
   updateDeckCardVersion: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock("@/actions/collection", () => ({
+  updateCollectionCardVersion: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock("@/actions/wants", () => ({
+  updateWantCardVersion: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 describe("CardDetailDialog Component (Spanish MTG Details)", () => {
@@ -214,6 +224,75 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
     // Feedback displayed
     expect(
       screen.getByText(/seleccionada como estándar del mazo/i)
+    ).toBeInTheDocument();
+  });
+
+  it("persists collection version when collectionCardId is provided", async () => {
+    vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
+    const onVersionSelect = vi.fn();
+
+    render(
+      <CardDetailDialog
+        isOpen={true}
+        cardName="Lightning Bolt"
+        cardId="bolt-123"
+        collectionCardId="col-99"
+        onVersionSelect={onVersionSelect}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Masters 25")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Masters 25").closest("button")!);
+
+    await waitFor(() => {
+      expect(collectionActions.updateCollectionCardVersion).toHaveBeenCalledWith("col-99", {
+        cardScryfallId: "bolt-2ba",
+        imageUri: "https://example.com/bolt-2ba.jpg",
+        setCode: "2ba",
+        collectorNumber: expect.anything(),
+      });
+    });
+
+    expect(onVersionSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "bolt-2ba" })
+    );
+    expect(
+      screen.getByText(/seleccionada como estándar de la colección/i)
+    ).toBeInTheDocument();
+  });
+
+  it("persists want version when wantCardId is provided", async () => {
+    vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
+
+    render(
+      <CardDetailDialog
+        isOpen={true}
+        cardName="Lightning Bolt"
+        cardId="bolt-123"
+        wantCardId="want-55"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Masters 25")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Masters 25").closest("button")!);
+
+    await waitFor(() => {
+      expect(wantActions.updateWantCardVersion).toHaveBeenCalledWith("want-55", {
+        cardScryfallId: "bolt-2ba",
+        imageUri: "https://example.com/bolt-2ba.jpg",
+        setCode: "2ba",
+        collectorNumber: expect.anything(),
+      });
+    });
+
+    expect(
+      screen.getByText(/seleccionada como estándar del want/i)
     ).toBeInTheDocument();
   });
 

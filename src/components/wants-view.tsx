@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { CardImage as Image } from "@/components/card-image";
 import {
   Heart,
@@ -36,6 +36,8 @@ import { PriceFilter } from "@/components/price-filter";
 import type { SortField, SortDirection } from "@/lib/sorting";
 import { normalizeCardName } from "@/lib/card-utils";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
+import type { CardPrintingDetail } from "@/actions/scryfall";
+import { injectPrintingQuote } from "@/lib/printing-quote";
 import { RequestedDecksBadge } from "@/components/requested-decks-badge";
 import { filterWantCards } from "@/lib/want-filters";
 import { CARD_TYPE_GROUPS } from "@/lib/card-utils";
@@ -68,6 +70,7 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [colorlessOnly, setColorlessOnly] = useState(false);
   const [typeKey, setTypeKey] = useState("");
+  const skippedInitialRef = useRef(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(searchQuery), 300);
@@ -93,8 +96,13 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
   }, [debouncedQuery, sortField, sortDirection, isGroupedByType, priceProvider]);
 
   useEffect(() => {
+    // Avoid re-fetching the SSR payload on first mount.
+    if (!skippedInitialRef.current) {
+      skippedInitialRef.current = true;
+      if (initialView != null) return;
+    }
     loadView();
-  }, [loadView]);
+  }, [loadView, initialView]);
 
   const loadPrices = useCallback(
     async (providerToLoad = priceProvider, bypassCache = false) => {
@@ -190,6 +198,56 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
     } finally {
       setBusyId(null);
     }
+  };
+
+  const patchCardInView = (cardId: string, patch: Partial<WantCardDTO>) => {
+    setView((prev) => {
+      if (!prev) return prev;
+      const patchList = (cards: WantCardDTO[]) =>
+        cards.map((c) => (c.id === cardId ? { ...c, ...patch } : c));
+      return {
+        ...prev,
+        cards: patchList(prev.cards || []),
+        sections: (prev.sections || []).map((sec) => ({
+          ...sec,
+          cards: patchList(sec.cards || []),
+        })),
+      };
+    });
+  };
+
+  const handleVersionSelect = async (version: CardPrintingDetail) => {
+    if (!selectedCardForDetail) return;
+    const newImageUri =
+      version.image_uri || version.image_uri_large || version.image_uri_small || null;
+    const previousScryfallId = selectedCardForDetail.cardScryfallId;
+    patchCardInView(selectedCardForDetail.id, {
+      cardScryfallId: version.id,
+      imageUri: newImageUri,
+      setCode: version.set_code,
+      collectorNumber: version.collector_number,
+    });
+    setSelectedCardForDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            cardScryfallId: version.id,
+            imageUri: newImageUri,
+            setCode: version.set_code,
+            collectorNumber: version.collector_number,
+          }
+        : null,
+    );
+    setPriceSummary((prev) =>
+      injectPrintingQuote(
+        prev,
+        version,
+        selectedCardForDetail.cardName,
+        selectedCardForDetail.quantity,
+        priceProvider,
+        previousScryfallId,
+      ),
+    );
   };
 
   const parsedMin = minPrice.trim() === "" ? null : Number(minPrice);
@@ -662,6 +720,8 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
           ownedInCollection={0}
           requestedInDecks={selectedCardForDetail.requestedInDecks}
           requestedInDecksCount={selectedCardForDetail.requestedInDecksCount}
+          wantCardId={selectedCardForDetail.id}
+          onVersionSelect={handleVersionSelect}
         />
       )}
     </div>

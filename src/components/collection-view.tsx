@@ -12,12 +12,8 @@ import {
   Image as ImageIcon,
   FolderTree,
   LayoutGrid,
-  TrendingUp,
-  Moon,
-  FlaskConical,
   Eye,
 } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CollectionValueChart } from "@/components/collection-value-chart";
 import { DormantCardsTab } from "@/components/dormant-cards-tab";
 import { SimulatedCollectionsTab } from "@/components/simulated-collections-tab";
@@ -52,14 +48,21 @@ import {
 } from "@/actions/pricing";
 import { normalizeCardName } from "@/lib/card-utils";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
+import type { CardPrintingDetail } from "@/actions/scryfall";
+import { injectPrintingQuote } from "@/lib/printing-quote";
 import { RequestedDecksBadge } from "@/components/requested-decks-badge";
 
 interface CollectionViewProps {
+  activeTab?: "inventory" | "value-history" | "dormant" | "simulated";
   initialView?: CollectionQueryResponse | null;
   initialStats: { uniqueCards: number; totalCards: number; decksCount?: number };
 }
 
-export function CollectionView({ initialView, initialStats }: CollectionViewProps) {
+export function CollectionView({
+  activeTab = "inventory",
+  initialView,
+  initialStats,
+}: CollectionViewProps) {
   // The whole collection, already filtered/sorted/grouped on the backend.
   const [view, setView] = useState<CollectionQueryResponse | null>(
     initialView ?? null
@@ -114,10 +117,15 @@ export function CollectionView({ initialView, initialStats }: CollectionViewProp
           const json = await res.json();
           if (json.summary) {
             setPriceSummary(json.summary);
+          } else {
+            setPriceSummary(null);
           }
+        } else {
+          setPriceSummary(null);
         }
       } catch (err) {
         console.error("Failed to load collection prices:", err);
+        setPriceSummary(null);
       } finally {
         setIsLoadingPrices(false);
       }
@@ -126,8 +134,10 @@ export function CollectionView({ initialView, initialStats }: CollectionViewProp
   );
 
   useEffect(() => {
-    loadPrices(priceProvider, false);
-  }, [priceProvider, loadPrices]);
+    if (activeTab === "inventory") {
+      loadPrices(priceProvider, false);
+    }
+  }, [activeTab, priceProvider, loadPrices]);
 
   // Debounce the search input before running the backend query.
   useEffect(() => {
@@ -145,6 +155,9 @@ export function CollectionView({ initialView, initialStats }: CollectionViewProp
       direction: sortDirection,
       grouped,
       priceProvider,
+      ...(grouped || debouncedQuery
+        ? {}
+        : { page: 1, limit: 200 }),
     };
     setIsLoadingView(true);
     try {
@@ -209,6 +222,59 @@ export function CollectionView({ initialView, initialStats }: CollectionViewProp
     } finally {
       setBusyId(null);
     }
+  };
+
+  const patchCardInView = (
+    cardId: string,
+    patch: Partial<CollectionCardDTO>,
+  ) => {
+    setView((prev) => {
+      if (!prev) return prev;
+      const patchList = (cards: CollectionCardDTO[]) =>
+        cards.map((c) => (c.id === cardId ? { ...c, ...patch } : c));
+      return {
+        ...prev,
+        cards: patchList(prev.cards || []),
+        sections: (prev.sections || []).map((sec) => ({
+          ...sec,
+          cards: patchList(sec.cards || []),
+        })),
+      };
+    });
+  };
+
+  const handleVersionSelect = async (version: CardPrintingDetail) => {
+    if (!selectedCardForDetail) return;
+    const newImageUri =
+      version.image_uri || version.image_uri_large || version.image_uri_small || null;
+    const previousScryfallId = selectedCardForDetail.cardScryfallId;
+    patchCardInView(selectedCardForDetail.id, {
+      cardScryfallId: version.id,
+      imageUri: newImageUri,
+      setCode: version.set_code,
+      collectorNumber: version.collector_number,
+    });
+    setSelectedCardForDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            cardScryfallId: version.id,
+            imageUri: newImageUri,
+            setCode: version.set_code,
+            collectorNumber: version.collector_number,
+          }
+        : null,
+    );
+    setPriceSummary((prev) =>
+      injectPrintingQuote(
+        prev,
+        version,
+        selectedCardForDetail.cardName,
+        selectedCardForDetail.quantity,
+        priceProvider,
+        previousScryfallId,
+      ),
+    );
   };
 
   const handleRunWeeklyWorker = async () => {
@@ -444,29 +510,9 @@ export function CollectionView({ initialView, initialStats }: CollectionViewProp
         </div>
       </div>
 
-      {/* Tabs for Collection sections */}
-      <Tabs defaultValue="inventory" className="w-full space-y-6">
-        <TabsList className="bg-secondary/70 p-1 border border-border">
-          <TabsTrigger value="inventory" className="gap-2">
-            <Library className="h-4 w-4" />
-            <span>Inventario</span>
-          </TabsTrigger>
-          <TabsTrigger value="value-history" className="gap-2">
-            <TrendingUp className="h-4 w-4" />
-            <span>Evolución de Valor</span>
-          </TabsTrigger>
-          <TabsTrigger value="dormant" className="gap-2">
-            <Moon className="h-4 w-4" />
-            <span>Cartas Dormidas</span>
-          </TabsTrigger>
-          <TabsTrigger value="simulated" className="gap-2">
-            <FlaskConical className="h-4 w-4" />
-            <span>Colecciones Simuladas</span>
-          </TabsTrigger>
-        </TabsList>
-
-
-        <TabsContent value="inventory" className="space-y-6 mt-0">
+      {/* Tab panels — nav lives in collection layout as subroutes */}
+      {activeTab === "inventory" ? (
+        <div className="space-y-6">
           {/* Dynamic Pricing Selector & Total Collection Value */}
           <PricingProviderSelector
         currentProvider={priceProvider}
@@ -693,20 +739,20 @@ export function CollectionView({ initialView, initialStats }: CollectionViewProp
           onPageChange={handlePageChange}
         />
       )}
-        </TabsContent>
+        </div>
+      ) : null}
 
-        <TabsContent value="value-history" className="mt-0">
-          <CollectionValueChart provider={priceProvider} />
-        </TabsContent>
+      {activeTab === "value-history" ? (
+        <CollectionValueChart provider={priceProvider} />
+      ) : null}
 
-        <TabsContent value="dormant" className="mt-0">
-          <DormantCardsTab provider={priceProvider} />
-        </TabsContent>
+      {activeTab === "dormant" ? (
+        <DormantCardsTab provider={priceProvider} />
+      ) : null}
 
-        <TabsContent value="simulated" className="mt-0">
-          <SimulatedCollectionsTab provider={priceProvider} />
-        </TabsContent>
-      </Tabs>
+      {activeTab === "simulated" ? (
+        <SimulatedCollectionsTab provider={priceProvider} />
+      ) : null}
 
 
       {selectedCardForDetail && (
@@ -720,6 +766,8 @@ export function CollectionView({ initialView, initialStats }: CollectionViewProp
           typeLine={selectedCardForDetail.typeLine}
           quantity={selectedCardForDetail.quantity}
           ownedInCollection={selectedCardForDetail.quantity}
+          collectionCardId={selectedCardForDetail.id}
+          onVersionSelect={handleVersionSelect}
         />
       )}
     </div>

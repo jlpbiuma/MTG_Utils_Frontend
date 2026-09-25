@@ -8,6 +8,7 @@ const navLinks = [
   { href: "/collection", label: "Colección" },
   { href: "/priorities", label: "Prioridades" },
   { href: "/wants", label: "Wants" },
+  { href: "/matches", label: "Oportunidades" },
   { href: "/prices", label: "Precios" },
   { href: "/account", label: "Cuenta" },
 ] as const;

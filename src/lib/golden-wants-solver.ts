@@ -1,5 +1,25 @@
 import type { PriorityItem } from "@/actions/priorities";
 
+export type PriceOpportunityFilter = "all" | "falling" | "historical_low" | "opportunities";
+
+export function priceChange(item: PriorityItem): number | null | undefined {
+  return item.priceChangePercent !== undefined ? item.priceChangePercent : item.change30dPercent;
+}
+
+export function matchesPriceOpportunity(item: PriorityItem, filter: PriceOpportunityFilter): boolean {
+  const falling = priceChange(item) != null && priceChange(item)! < 0;
+  if (filter === "falling") return falling;
+  if (filter === "historical_low") return item.atHistoricalLow === true;
+  if (filter === "opportunities") return falling || item.atHistoricalLow === true;
+  return true;
+}
+
+export function comparePriceOpportunities(a: PriorityItem, b: PriorityItem): number {
+  return Number(b.atHistoricalLow === true) - Number(a.atHistoricalLow === true)
+    || (priceChange(a) ?? Infinity) - (priceChange(b) ?? Infinity)
+    || a.price - b.price;
+}
+
 export type GoldenWantsStrategy = "complete_decks" | "max_completion";
 
 export interface GoldenWantsCartItem {
@@ -49,7 +69,9 @@ interface UnitItem {
 export function solveGoldenWants(
   items: PriorityItem[],
   budget: number,
-  strategy: GoldenWantsStrategy
+  strategy: GoldenWantsStrategy,
+  priceFilter: PriceOpportunityFilter = "all",
+  omittedIds: ReadonlySet<string> = new Set()
 ): GoldenWantsResult {
   const budgetCents = Math.max(0, Math.floor(budget * 100));
   if (budgetCents <= 0 || items.length === 0) {
@@ -63,26 +85,44 @@ export function solveGoldenWants(
     };
   }
 
+  interface DeckOverview {
+    name: string;
+    completion: number;
+    totalCards: number;
+    missingInDeck: number;
+    availableInCandidates: number;
+  }
+
   // Collect deck overview for all decks involved
-  const deckInitialMissing = new Map<string, { name: string; completion: number; count: number }>();
+  const deckInitialMissing = new Map<string, DeckOverview>();
   for (const item of items) {
     for (const d of item.decks) {
       if (!deckInitialMissing.has(d.deckId)) {
+        const totalCards = d.deckTotalCards && d.deckTotalCards > 0 ? d.deckTotalCards : 100;
+        const missingInDeck =
+          typeof d.deckMissingCards === "number" && d.deckMissingCards >= 0
+            ? d.deckMissingCards
+            : Math.max(0, Math.round(((100 - d.completionPercentage) / 100) * totalCards));
+
         deckInitialMissing.set(d.deckId, {
           name: d.deckName,
           completion: d.completionPercentage,
-          count: 0,
+          totalCards,
+          missingInDeck,
+          availableInCandidates: 0,
         });
       }
       const entry = deckInitialMissing.get(d.deckId)!;
-      entry.count += d.missingQuantity;
+      if (d.missingQuantity > 0) {
+        entry.availableInCandidates += d.missingQuantity;
+      }
     }
   }
 
   // Decompose cards into purchasable units: 1 single unit per card satisfies ALL decks that request it
   const units: UnitItem[] = [];
   for (const item of items) {
-    if (item.deficit <= 0) continue;
+    if (item.deficit <= 0 || omittedIds.has(item.cardScryfallId) || !matchesPriceOpportunity(item, priceFilter)) continue;
     const unitPrice = item.price > 0 ? item.price : 0.25; // default fallback if unpriced
     const costInCents = Math.max(1, Math.round(unitPrice * 100));
 
@@ -103,7 +143,8 @@ export function solveGoldenWants(
     if (strategy === "complete_decks") {
       score = Math.pow(highestDeckCompletion / 10, 3) * (1 + targetDecks.length * 1.5);
     } else {
-      score = (1 / Math.max(0.5, unitPrice)) * (1 + targetDecks.length * 0.75);
+      score = item.decks.reduce((gain, deck) =>
+        gain + (deck.missingQuantity > 0 ? 100 / Math.max(1, deck.deckTotalCards || 100) : 0), 0);
     }
 
     units.push({
@@ -135,19 +176,32 @@ export function solveGoldenWants(
 
   if (strategy === "complete_decks") {
     const sortedDeckIds = Array.from(deckInitialMissing.keys()).sort((a, b) => {
-      const compA = deckInitialMissing.get(a)?.completion ?? 0;
-      const compB = deckInitialMissing.get(b)?.completion ?? 0;
-      return compB - compA; // Highest completion first
+      const deckA = deckInitialMissing.get(a)!;
+      const deckB = deckInitialMissing.get(b)!;
+      if (deckB.completion !== deckA.completion) {
+        return deckB.completion - deckA.completion; // Highest completion first
+      }
+      return deckA.missingInDeck - deckB.missingInDeck; // Fewest missing cards first
     });
 
     const selectedUnitSet = new Set<string>();
     let currentSpendCents = 0;
 
     // First pass: try to fully finish decks in order of closeness
+    // A deck can ONLY be completed if ALL its missing cards are available in units and fit within budget
     for (const dId of sortedDeckIds) {
+      const deckInfo = deckInitialMissing.get(dId)!;
+      if (deckInfo.completion >= 100 || deckInfo.missingInDeck <= 0) continue;
+
       const neededUnits = units.filter(
         (u) => !selectedUnitSet.has(u.cardScryfallId) && u.targetDecks.some((d) => d.deckId === dId)
       );
+
+      // Only attempt to complete if ALL missing cards for this deck are present in candidates
+      if (neededUnits.length < deckInfo.missingInDeck) {
+        continue;
+      }
+
       const costToFinish = neededUnits.reduce((sum, u) => sum + u.costInCents, 0);
 
       if (costToFinish > 0 && currentSpendCents + costToFinish <= budgetCents) {
@@ -255,28 +309,33 @@ export function solveGoldenWants(
 
   for (const [deckId, info] of deckInitialMissing.entries()) {
     const fulfilled = fulfilledPerDeck.get(deckId) || 0;
-    const gained =
-      info.count > 0
-        ? Math.min(
-            100 - info.completion,
-            Math.round((fulfilled / Math.max(1, info.count)) * (100 - info.completion))
-          )
-        : 0;
-    const after = Math.min(100, info.completion + gained);
+    const trueMissing = info.missingInDeck;
+    const totalCards = Math.max(1, info.totalCards);
 
-    if (after >= 100 && info.completion < 100) {
+    const initialOwned = Math.max(0, totalCards - trueMissing);
+    const newOwned = Math.min(totalCards, initialOwned + fulfilled);
+
+    // Deck only completes to 100% if ALL missing cards in the deck are fulfilled
+    const isFullyCompleted = trueMissing > 0 && fulfilled >= trueMissing;
+    const after = isFullyCompleted
+      ? 100.0
+      : Math.min(99.9, Math.round((newOwned / totalCards) * 1000) / 10);
+
+    const gained = Math.max(0, Math.round((after - info.completion) * 10) / 10);
+
+    if (isFullyCompleted && info.completion < 100) {
       completedDecks.push({ deckId, deckName: info.name });
     }
 
-    if (fulfilled > 0 || info.completion > 0) {
+    if (fulfilled > 0 || (info.completion > 0 && info.completion < 100)) {
       projectedProgress.push({
         deckId,
         deckName: info.name,
-        before: info.completion,
+        before: Math.round(info.completion * 10) / 10,
         after,
         gainedPercentage: gained,
         cardsFulfilled: fulfilled,
-        totalMissingInitially: info.count,
+        totalMissingInitially: trueMissing,
       });
     }
   }

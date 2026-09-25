@@ -48,6 +48,7 @@ import { ConfirmDeleteDeckDialog } from "@/components/confirm-delete-deck-dialog
 import { DeckAnalyticsView } from "@/components/deck-analytics-view";
 import { DeckMulliganSimulator } from "@/components/deck-mulligan-simulator";
 import { MoxfieldDeckEditor } from "@/components/moxfield-deck-editor";
+import { injectPrintingQuote } from "@/lib/printing-quote";
 import { TabErrorBoundary } from "@/components/tab-error-boundary";
 import { ColorIdentityPips } from "@/components/color-identity-pips";
 import {
@@ -92,6 +93,7 @@ import {
 
 interface DeckDetailViewProps {
   initialDeck: DeckDetailWithStats;
+  initialTab?: "cards" | "editor" | "analytics_and_simulations" | "edhrec";
   recommendation?: {
     priceSummary: PriceSummary;
     unpricedCards: number;
@@ -105,6 +107,7 @@ interface DeckDetailViewProps {
 
 export function DeckDetailView({
   initialDeck,
+  initialTab = "cards",
   recommendation,
 }: DeckDetailViewProps) {
   const router = useRouter();
@@ -119,7 +122,11 @@ export function DeckDetailView({
   });
   const [activeTab, setActiveTab] = useState<
     "cards" | "editor" | "analytics_and_simulations" | "edhrec"
-  >("cards");
+  >(initialTab);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
   const [showCommanderModal, setShowCommanderModal] = useState(
     !initialDeck.commander,
   );
@@ -206,6 +213,9 @@ export function DeckDetailView({
       string | null;
     const targetCardId =
       selectedCardForDetail?.deckCardId || selectedCardForDetail?.id;
+    const previousScryfallId = selectedCardForDetail?.cardScryfallId;
+    const cardName = selectedCardForDetail?.cardName || "";
+    const quantity = selectedCardForDetail?.quantity ?? 1;
 
     if (targetCardId) {
       setCards((prev) =>
@@ -257,6 +267,17 @@ export function DeckDetailView({
             setCode: newSetCode,
           }
         : null,
+    );
+
+    setPriceSummary((prev) =>
+      injectPrintingQuote(
+        prev,
+        version,
+        cardName,
+        quantity,
+        priceProvider,
+        previousScryfallId,
+      ),
     );
 
     router.refresh();
@@ -1454,9 +1475,11 @@ export function DeckDetailView({
       )}
 
       {/* Top View Mode Switcher: Deck Cards vs Analytics vs Mulligan vs EDHREC */}
-      <div className="flex items-center gap-2 border-b border-border pb-2 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab("cards")}
+      <div className="flex items-center gap-2 border-b border-border pb-2 overflow-x-auto" role="tablist">
+        <Link
+          href={`/decks/${initialDeck.id}`}
+          role="tab"
+          aria-selected={activeTab === "cards"}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
             activeTab === "cards"
               ? "bg-accent text-foreground border border-border"
@@ -1471,12 +1494,14 @@ export function DeckDetailView({
           >
             {readOnly ? cards.length : initialDeck.totalCards}
           </Badge>
-        </button>
+        </Link>
 
         {!readOnly && (
           <>
-            <button
-              onClick={() => setActiveTab("editor")}
+            <Link
+              href={`/decks/${initialDeck.id}/editor`}
+              role="tab"
+              aria-selected={activeTab === "editor"}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
                 activeTab === "editor"
                   ? "bg-accent text-foreground border border-border"
@@ -1485,13 +1510,15 @@ export function DeckDetailView({
             >
               <SlidersHorizontal className="h-4 w-4 text-purple-400" />
               <span>Editar mazo</span>
-            </button>
+            </Link>
           </>
         )}
 
         {!readOnly && (
-          <button
-            onClick={() => setActiveTab("analytics_and_simulations")}
+          <Link
+            href={`/decks/${initialDeck.id}/analytics`}
+            role="tab"
+            aria-selected={activeTab === "analytics_and_simulations"}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
               activeTab === "analytics_and_simulations"
                 ? "bg-accent text-foreground border border-border"
@@ -1500,23 +1527,23 @@ export function DeckDetailView({
           >
             <BarChart3 className="h-4 w-4 text-primary" />
             <span>Estadística y simulaciones</span>
-          </button>
+          </Link>
         )}
 
         {!readOnly && (
-          <>
-            <button
-              onClick={() => setActiveTab("edhrec")}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
-                activeTab === "edhrec"
-                  ? "bg-primary/20 text-primary border border-primary/30"
-                  : "text-primary/80 hover:text-primary hover:bg-primary/10"
-              }`}
-            >
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span>Recomendaciones EDHREC</span>
-            </button>
-          </>
+          <Link
+            href={`/decks/${initialDeck.id}/edhrec`}
+            role="tab"
+            aria-selected={activeTab === "edhrec"}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
+              activeTab === "edhrec"
+                ? "bg-primary/20 text-primary border border-primary/30"
+                : "text-primary/80 hover:text-primary hover:bg-primary/10"
+            }`}
+          >
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span>Recomendaciones EDHREC</span>
+          </Link>
         )}
       </div>
 

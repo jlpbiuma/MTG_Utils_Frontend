@@ -5,6 +5,5 @@ export const dynamic = "force-dynamic";
 
 export default async function PrioritiesPage() {
   const initialData = await getPriorities();
-
-  return <PrioritiesView initialData={initialData} />;
+  return <PrioritiesView initialData={initialData} activeTab="table" />;
 }

@@ -125,7 +125,7 @@ export function PriceHistoryView({
         <CardDetailDialog
           isOpen={Boolean(selected)}
           onOpenChange={(open) => !open && setSelected(null)}
-          cardId={selected.printingId}
+          cardId={selected.catalogId || selected.printingId}
           cardName={selected.cardName}
           imageUri={selected.imageUri}
           defaultTab="prices"

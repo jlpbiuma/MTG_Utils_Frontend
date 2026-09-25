@@ -165,4 +165,25 @@ describe("PrioritiesView - Card Detail & Cheapest Reprint", () => {
       })
     );
   });
+  it.each(["Ver detalles de Sol Ring", "Ver imagen y detalles de Sol Ring"])(
+    "opens and closes the shared detail dialog from Golden Wants: %s",
+    (label) => {
+      render(<PrioritiesView initialData={samplePrioritiesResponse} activeTab="golden-wants" />);
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      expect(screen.getByTestId("dialog-card-name")).toHaveTextContent("Sol Ring");
+      expect(screen.getByTestId("dialog-card-id")).toHaveTextContent(sampleItem.cardScryfallId);
+      fireEvent.click(screen.getByText("Cerrar Dialog"));
+      expect(screen.queryByTestId("mock-card-detail-dialog")).not.toBeInTheDocument();
+    }
+  );
+
+  it("opens the requesting decks modal from the compact Golden Wants row", () => {
+    render(<PrioritiesView initialData={samplePrioritiesResponse} activeTab="golden-wants" />);
+    expect(screen.getByRole("button", { name: "Ver mazos que piden Sol Ring" })).toHaveTextContent("2 mazos");
+    fireEvent.click(screen.getByRole("button", { name: "Ver mazos que piden Sol Ring" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Urza Lord High" })).toHaveAttribute("href", "/decks/deck-1");
+    expect(screen.getByRole("link", { name: "Meren Reanimator" })).toHaveAttribute("href", "/decks/deck-2");
+  });
+
 });

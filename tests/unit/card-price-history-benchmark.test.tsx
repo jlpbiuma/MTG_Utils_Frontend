@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { CardDetailDialog, priceHistoryClientCache } from "@/components/card-detail-dialog";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  CardDetailDialog,
+  priceHistoryClientCache,
+  priceHistoryCacheKey,
+} from "@/components/card-detail-dialog";
 import * as pricingActions from "@/actions/pricing";
 import * as scryfallActions from "@/actions/scryfall";
 import type { CardPriceHistoryResponse } from "@/lib/pricing/types";
@@ -144,15 +148,23 @@ describe("Card Price History Caching & Optimization", () => {
     await waitFor(() => {
       expect(pricingActions.getCardPriceHistory).toHaveBeenCalledTimes(1);
     });
+    expect(pricingActions.getCardPriceHistory).toHaveBeenCalledWith(
+      sacredFoundryCatalogId,
+      "cardmarket",
+      30
+    );
 
-    // Check that client cache is populated with catalog ID and printing IDs
-    expect(priceHistoryClientCache.has(sacredFoundryCatalogId)).toBe(true);
-    expect(priceHistoryClientCache.has(sacredFoundryPrintingId)).toBe(true);
+    // Check that client cache is populated with catalog ID and printing IDs for the window
+    expect(priceHistoryClientCache.has(priceHistoryCacheKey(sacredFoundryCatalogId, 30))).toBe(true);
+    expect(priceHistoryClientCache.has(priceHistoryCacheKey(sacredFoundryPrintingId, 30))).toBe(true);
   });
 
   it("should not re-fetch price history when cached in client memory (0 network calls on re-opening)", async () => {
     // Pre-populate cache
-    priceHistoryClientCache.set(sacredFoundryCatalogId, mockPriceHistoryResponse);
+    priceHistoryClientCache.set(
+      priceHistoryCacheKey(sacredFoundryCatalogId, 30),
+      mockPriceHistoryResponse
+    );
 
     render(
       <CardDetailDialog
@@ -197,5 +209,46 @@ describe("Card Price History Caching & Optimization", () => {
 
     // Call count must remain 1 — no extra network calls!
     expect(pricingActions.getCardPriceHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("should refetch when the user selects a different history window", async () => {
+    const longWindow: CardPriceHistoryResponse = {
+      ...mockPriceHistoryResponse,
+      days: 365,
+    };
+    vi.mocked(pricingActions.getCardPriceHistory).mockImplementation(
+      async (_id, _provider, days = 30) =>
+        days === 365 ? longWindow : mockPriceHistoryResponse
+    );
+
+    render(
+      <CardDetailDialog
+        isOpen={true}
+        cardId={sacredFoundryCatalogId}
+        cardName="Sacred Foundry"
+        defaultTab="prices"
+      />
+    );
+
+    await waitFor(() => {
+      expect(pricingActions.getCardPriceHistory).toHaveBeenCalledWith(
+        sacredFoundryCatalogId,
+        "cardmarket",
+        30
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "1A" }));
+
+    await waitFor(() => {
+      expect(pricingActions.getCardPriceHistory).toHaveBeenCalledWith(
+        sacredFoundryCatalogId,
+        "cardmarket",
+        365
+      );
+    });
+    expect(priceHistoryClientCache.has(priceHistoryCacheKey(sacredFoundryCatalogId, 365))).toBe(
+      true
+    );
   });
 });

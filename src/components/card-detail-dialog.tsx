@@ -20,6 +20,8 @@ import {
   CardPrintingDetail,
 } from "@/actions/scryfall";
 import { updateDeckCardVersion } from "@/actions/decks";
+import { updateCollectionCardVersion } from "@/actions/collection";
+import { updateWantCardVersion } from "@/actions/wants";
 import { getCardPriceHistory } from "@/actions/pricing";
 import { PriceHistoryChart } from "@/components/price-history-chart";
 import type { CardPriceHistoryResponse } from "@/lib/pricing/types";
@@ -60,13 +62,45 @@ interface CardDetailDialogProps {
   trigger?: React.ReactNode;
   deckId?: string;
   deckCardId?: string;
+  collectionCardId?: string;
+  wantCardId?: string;
   isCommander?: boolean;
   onVersionSelect?: (version: CardPrintingDetail) => Promise<void> | void;
   defaultTab?: "versions" | "legalities" | "prices" | "rulings" | "collection";
 }
 
-// Client-side cache for card price history to avoid repeated network requests
+// Client-side cache for card price history to avoid repeated network requests.
+// Keys are `${cardId}:${days}` so each time window is cached independently.
 export const priceHistoryClientCache = new Map<string, CardPriceHistoryResponse>();
+
+export const PRICE_HISTORY_RANGES = [
+  { label: "7D", days: 7 },
+  { label: "30D", days: 30 },
+  { label: "90D", days: 90 },
+  { label: "1A", days: 365 },
+  { label: "3A", days: 1095 },
+  { label: "Todo", days: 3650 },
+] as const;
+
+export function priceHistoryCacheKey(cardId: string, days: number): string {
+  return `${cardId}:${days}`;
+}
+
+function cachePriceHistoryResponse(
+  targetCardId: string,
+  days: number,
+  res: CardPriceHistoryResponse
+) {
+  priceHistoryClientCache.set(priceHistoryCacheKey(targetCardId, days), res);
+  if (res.catalogId) {
+    priceHistoryClientCache.set(priceHistoryCacheKey(res.catalogId, days), res);
+  }
+  for (const s of res.series ?? []) {
+    if (s.printingId) {
+      priceHistoryClientCache.set(priceHistoryCacheKey(s.printingId, days), res);
+    }
+  }
+}
 
 export function CardDetailDialog({
   cardId,
@@ -85,6 +119,8 @@ export function CardDetailDialog({
   trigger,
   deckId,
   deckCardId,
+  collectionCardId,
+  wantCardId,
   isCommander,
   onVersionSelect,
   defaultTab = "versions",
@@ -103,6 +139,7 @@ export function CardDetailDialog({
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [priceHistory, setPriceHistory] = useState<CardPriceHistoryResponse | null>(null);
   const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
+  const [priceHistoryDays, setPriceHistoryDays] = useState(30);
   const [showAllVersions, setShowAllVersions] = useState(false);
 
   // Track the card name for which details were fetched so we don't re-fetch when selecting versions
@@ -114,6 +151,7 @@ export function CardDetailDialog({
       setDetails(null);
       setFeedbackMessage(null);
       setPriceHistory(null);
+      setPriceHistoryDays(30);
       setActiveTab(defaultTab);
       setShowAllVersions(false);
       return;
@@ -169,8 +207,10 @@ export function CardDetailDialog({
 
     if (!targetCardId) return;
 
-    // 1. Check client-side memory cache
-    const cached = priceHistoryClientCache.get(targetCardId);
+    // 1. Check client-side memory cache (keyed by card + window)
+    const cached = priceHistoryClientCache.get(
+      priceHistoryCacheKey(targetCardId, priceHistoryDays)
+    );
     if (cached) {
       setPriceHistory(cached);
       setPriceHistoryLoading(false);
@@ -179,21 +219,10 @@ export function CardDetailDialog({
 
     let cancelled = false;
     setPriceHistoryLoading(true);
-    getCardPriceHistory(targetCardId, "cardmarket", 30)
+    getCardPriceHistory(targetCardId, "cardmarket", priceHistoryDays)
       .then((res) => {
         if (!cancelled && res) {
-          // Store in client cache by targetCardId, catalogId, and all printing IDs
-          priceHistoryClientCache.set(targetCardId, res);
-          if (res.catalogId) {
-            priceHistoryClientCache.set(res.catalogId, res);
-          }
-          if (res.series) {
-            for (const s of res.series) {
-              if (s.printingId) {
-                priceHistoryClientCache.set(s.printingId, res);
-              }
-            }
-          }
+          cachePriceHistoryResponse(targetCardId, priceHistoryDays, res);
           setPriceHistory(res);
         }
       })
@@ -208,7 +237,7 @@ export function CardDetailDialog({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, activeTab, cardId, details?.id, selectedPrintingId]);
+  }, [isOpen, activeTab, cardId, details?.id, selectedPrintingId, priceHistoryDays]);
 
   // Filter printings to last 3 years by default
   const threeYearsAgoIso = React.useMemo(() => {
@@ -234,6 +263,10 @@ export function CardDetailDialog({
     return recentPrintings;
   }, [details?.printings, recentPrintings, showAllVersions]);
 
+  const canPersistVersion = Boolean(
+    (deckId && deckCardId) || collectionCardId || wantCardId
+  );
+
   const handleSelectVersion = async (printing: CardPrintingDetail, index?: number) => {
     const targetIdx =
       index !== undefined && index >= 0
@@ -244,7 +277,7 @@ export function CardDetailDialog({
     setSelectedPrintingId(printing.id);
     setFeedbackMessage(null);
 
-    // Call onVersionSelect immediately for instant optimistic update in the deck view
+    // Call onVersionSelect immediately for instant optimistic update in the listing
     if (onVersionSelect) {
       try {
         await onVersionSelect(printing);
@@ -253,26 +286,60 @@ export function CardDetailDialog({
       }
     }
 
+    const imageUri =
+      printing.image_uri || printing.image_uri_large || printing.image_uri_small;
+    const versionLabel = `${printing.set_code?.toUpperCase()} #${printing.collector_number}`;
+
     if (deckId && deckCardId) {
       setIsUpdatingVersion(true);
       try {
         await updateDeckCardVersion(deckId, deckCardId, {
           cardScryfallId: printing.id,
-          imageUri: printing.image_uri || printing.image_uri_large || printing.image_uri_small,
+          imageUri,
           setCode: printing.set_code,
           isCommander,
         });
-        setFeedbackMessage(
-          `Versión ${printing.set_code?.toUpperCase()} #${printing.collector_number} seleccionada como estándar del mazo`
-        );
+        setFeedbackMessage(`Versión ${versionLabel} seleccionada como estándar del mazo`);
       } catch (err) {
         console.error("Error al actualizar la versión del mazo:", err);
         setFeedbackMessage("Error al guardar la versión en el servidor");
       } finally {
         setIsUpdatingVersion(false);
       }
+    } else if (collectionCardId) {
+      setIsUpdatingVersion(true);
+      try {
+        await updateCollectionCardVersion(collectionCardId, {
+          cardScryfallId: printing.id,
+          imageUri,
+          setCode: printing.set_code,
+          collectorNumber: printing.collector_number,
+        });
+        setFeedbackMessage(`Versión ${versionLabel} seleccionada como estándar de la colección`);
+      } catch (err) {
+        console.error("Error al actualizar la versión de la colección:", err);
+        setFeedbackMessage("Error al guardar la versión en el servidor");
+      } finally {
+        setIsUpdatingVersion(false);
+      }
+    } else if (wantCardId) {
+      setIsUpdatingVersion(true);
+      try {
+        await updateWantCardVersion(wantCardId, {
+          cardScryfallId: printing.id,
+          imageUri,
+          setCode: printing.set_code,
+          collectorNumber: printing.collector_number,
+        });
+        setFeedbackMessage(`Versión ${versionLabel} seleccionada como estándar del want`);
+      } catch (err) {
+        console.error("Error al actualizar la versión del want:", err);
+        setFeedbackMessage("Error al guardar la versión en el servidor");
+      } finally {
+        setIsUpdatingVersion(false);
+      }
     } else {
-      setFeedbackMessage(`Versión seleccionada: ${printing.set_code?.toUpperCase()} #${printing.collector_number}`);
+      setFeedbackMessage(`Versión seleccionada: ${versionLabel}`);
     }
   };
 
@@ -635,8 +702,8 @@ export function CardDetailDialog({
 
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground ml-auto">
                       <span>
-                        {deckId
-                          ? "Haz clic para fijar versión del mazo."
+                        {canPersistVersion
+                          ? "Haz clic para fijar esta versión como estándar."
                           : "Haz clic para ver detalles y precios."}
                       </span>
                       {isUpdatingVersion && (
@@ -878,11 +945,33 @@ export function CardDetailDialog({
                     )}
 
                     <div className="pt-2 border-t border-border/70 space-y-2">
-                      <div className="flex items-center justify-between px-1">
-                        <span className="text-muted-foreground font-semibold uppercase tracking-wider">
-                          Histórico por printing (30 días)
-                        </span>
-                        <span className="text-muted-foreground">Cardmarket</span>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground font-semibold uppercase tracking-wider">
+                            Histórico por printing
+                          </span>
+                          <span className="text-muted-foreground">Cardmarket</span>
+                        </div>
+                        <div
+                          role="group"
+                          aria-label="Ventana temporal del histórico"
+                          className="flex items-center bg-background border border-border rounded-lg p-0.5 text-xs self-start sm:self-auto"
+                        >
+                          {PRICE_HISTORY_RANGES.map((opt) => (
+                            <button
+                              key={opt.days}
+                              type="button"
+                              onClick={() => setPriceHistoryDays(opt.days)}
+                              className={`px-2 py-1 rounded-md font-mono text-[11px] transition-all ${
+                                priceHistoryDays === opt.days
+                                  ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       {priceHistoryLoading ? (
                         <p className="text-center text-muted-foreground py-8">Cargando histórico…</p>
@@ -893,6 +982,7 @@ export function CardDetailDialog({
                           activePrintingId={currentPrint?.id}
                           currencySymbol="€"
                           height={280}
+                          onSelectPrinting={(id) => setSelectedPrintingId(id)}
                         />
                       )}
                     </div>

@@ -26,7 +26,6 @@ import { CardImage as Image } from "@/components/card-image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -65,11 +64,15 @@ const CARD_TYPES = [
 
 interface PrioritiesViewProps {
   initialData: PrioritiesResponse;
+  activeTab?: "table" | "golden-wants";
 }
 
-export function PrioritiesView({ initialData }: PrioritiesViewProps) {
+export function PrioritiesView({
+  initialData,
+  activeTab = "table",
+}: PrioritiesViewProps) {
   const [data, setData] = useState<PrioritiesResponse>(initialData);
-  const [sortMode, setSortMode] = useState<"demand" | "impact" | "completion">("demand");
+  const [sortMode, setSortMode] = useState<"demand" | "impact" | "completion" | "price_opportunity">("demand");
   const [reassignableOnly, setReassignableOnly] = useState<boolean>(false);
   const [hideOwned, setHideOwned] = useState<boolean>(true);
   const [cardType, setCardType] = useState<string>("all");
@@ -148,7 +151,7 @@ export function PrioritiesView({ initialData }: PrioritiesViewProps) {
 
   // Filter change handler
   const handleFilterChange = (
-    newSort: "demand" | "impact" | "completion",
+    newSort: "demand" | "impact" | "completion" | "price_opportunity",
     newReassignable: boolean,
     newHideOwned: boolean,
     newCardType: string
@@ -249,24 +252,45 @@ export function PrioritiesView({ initialData }: PrioritiesViewProps) {
         </div>
       </div>
 
-      {/* Tabs: Table/Grid vs Golden Wants */}
-      <Tabs defaultValue="table" className="space-y-6">
-        <TabsList className="bg-secondary p-1 border border-border">
-          <TabsTrigger value="table" className="gap-2">
+      {/* Tabs: Table/Grid vs Golden Wants — routed as subpaths */}
+      <div className="space-y-6">
+        <div
+          role="tablist"
+          className="inline-flex h-10 items-center justify-center rounded-md bg-secondary p-1 border border-border text-muted-foreground gap-1"
+        >
+          <Link
+            href="/priorities"
+            role="tab"
+            aria-selected={activeTab === "table"}
+            className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all ${
+              activeTab === "table"
+                ? "bg-background text-foreground shadow-sm"
+                : "hover:bg-background/50 hover:text-foreground"
+            }`}
+          >
             <Layers className="h-4 w-4" />
             <span>Prioridades de Cartas</span>
             <Badge variant="outline" className="ml-1 text-xs bg-background">
               {data.totalItems || filteredItems.length}
             </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="golden-wants" className="gap-2 text-amber-300 data-[state=active]:text-amber-950 data-[state=active]:bg-amber-400">
+          </Link>
+          <Link
+            href="/priorities/golden-wants"
+            role="tab"
+            aria-selected={activeTab === "golden-wants"}
+            className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all ${
+              activeTab === "golden-wants"
+                ? "bg-amber-400 text-amber-950 shadow-sm"
+                : "text-amber-300 hover:bg-background/50"
+            }`}
+          >
             <Sparkles className="h-4 w-4" />
             <span>Golden Wants (Optimizador Presupuesto)</span>
-          </TabsTrigger>
-        </TabsList>
+          </Link>
+        </div>
 
-        {/* TAB 1: Priorities Main Content */}
-        <TabsContent value="table" className="space-y-6 mt-0">
+        {activeTab === "table" ? (
+          <div className="space-y-6">
           {/* Controls Bar: Search, Filters, Sort, Card Type, and View Mode Toggle */}
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
             <div className="relative flex-1 max-w-md">
@@ -380,6 +404,13 @@ export function PrioritiesView({ initialData }: PrioritiesViewProps) {
                   }`}
                 >
                   Casi completos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFilterChange("price_opportunity", reassignableOnly, hideOwned, cardType)}
+                  className={`px-2.5 py-1 rounded font-medium transition-all ${sortMode === "price_opportunity" ? "bg-background text-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Oportunidad de precio
                 </button>
               </div>
             </div>
@@ -818,16 +849,19 @@ export function PrioritiesView({ initialData }: PrioritiesViewProps) {
             onPageChange={handlePageChange}
             itemLabel="cartas prioritarias"
           />
-        </TabsContent>
-
-        {/* TAB 2: Golden Wants */}
-        <TabsContent value="golden-wants" className="mt-0">
+          </div>
+        ) : (
           <GoldenWantsTab
-            items={data.items}
-            currencySymbol={data.currencySymbol}
+            onCardSelect={setSelectedCardForDetail}
+            onDecksSelect={setSelectedDecksModalItem}
+            items={initialData.items}
+            currencySymbol={initialData.currencySymbol}
+            priceWindowDays={initialData.priceWindowDays}
+            globalDeckCount={initialData.globalDeckCount}
+            globalCompletionBefore={initialData.globalCompletionBefore}
           />
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       {/* ========================================================================= */}
       {/* MODAL 1: Decks Requesting this Card with Net Completion Gain %            */}

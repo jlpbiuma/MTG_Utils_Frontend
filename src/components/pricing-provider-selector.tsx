@@ -86,11 +86,23 @@ export function PricingProviderSelector({
         <div className="flex flex-col">
           <span className="text-[11px] font-medium text-muted-foreground">Precio Neto Total ({PRICE_PROVIDERS[currentProvider]?.name})</span>
           <div className="flex items-baseline gap-1 mt-0.5">
-            <span className="text-xl font-semibold font-mono text-primary">
-              {summary ? summary.totalNetValue.toFixed(2) : "..."}
-            </span>
-            <span className="text-xs font-mono text-primary">{currencySymbol}</span>
+            {isLoading && !summary ? (
+              <span className="text-sm text-muted-foreground animate-pulse">Calculando precios…</span>
+            ) : (
+              <>
+                <span className="text-xl font-semibold font-mono text-primary">
+                  {summary ? summary.totalNetValue.toFixed(2) : "—"}
+                </span>
+                <span className="text-xs font-mono text-primary">{currencySymbol}</span>
+              </>
+            )}
           </div>
+          {isLoading && summary ? (
+            <span className="text-[10px] text-muted-foreground mt-0.5">Actualizando…</span>
+          ) : null}
+          {!isLoading && !summary && showValueSummary ? (
+            <span className="text-[10px] text-amber-600 mt-0.5">No se pudieron cargar los precios</span>
+          ) : null}
         </div>
 
         {/* Missing Cards Value (Cost to finish deck) */}
@@ -101,10 +113,16 @@ export function PricingProviderSelector({
               Coste Faltantes (Completar Mazo)
             </span>
             <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="text-xl font-semibold font-mono text-rose-400">
-                {summary ? (summary.totalMissingValue ?? 0).toFixed(2) : "..."}
-              </span>
-              <span className="text-xs font-mono text-rose-500">{currencySymbol}</span>
+              {isLoading && !summary ? (
+                <span className="text-sm text-muted-foreground animate-pulse">…</span>
+              ) : (
+                <>
+                  <span className="text-xl font-semibold font-mono text-rose-400">
+                    {summary ? (summary.totalMissingValue ?? 0).toFixed(2) : "—"}
+                  </span>
+                  <span className="text-xs font-mono text-rose-500">{currencySymbol}</span>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -116,15 +134,21 @@ export function PricingProviderSelector({
             Valor en Posesión
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
-            <span className="text-xl font-semibold font-mono text-emerald-400">
-              {summary
-                ? (
-                    summary.totalOwnedValue ??
-                    Math.max(0, summary.totalNetValue - (summary.totalMissingValue ?? 0))
-                  ).toFixed(2)
-                : "..."}
-            </span>
-            <span className="text-xs font-mono text-emerald-500">{currencySymbol}</span>
+            {isLoading && !summary ? (
+              <span className="text-sm text-muted-foreground animate-pulse">…</span>
+            ) : (
+              <>
+                <span className="text-xl font-semibold font-mono text-emerald-400">
+                  {summary
+                    ? (
+                        summary.totalOwnedValue ??
+                        Math.max(0, summary.totalNetValue - (summary.totalMissingValue ?? 0))
+                      ).toFixed(2)
+                    : "—"}
+                </span>
+                <span className="text-xs font-mono text-emerald-500">{currencySymbol}</span>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -61,6 +61,10 @@ export function DeckCardItem({ deck }: DeckCardItemProps) {
       ? Math.max(0, Math.round((deck.totalValue - missingValue) * 100) / 100)
       : 0);
 
+  const isCommanderFormat =
+    !currentFormat ||
+    /^(commander\s*(\/\s*edh)?|edh)$/i.test(currentFormat.trim());
+
   return (
     <Card className={`flex flex-col group hover:border-border transition-all duration-300 relative overflow-hidden ${isArchived ? "opacity-85 border-dashed" : ""}`}>
       {/* Subtle top indicator based on completion */}
@@ -77,9 +81,11 @@ export function DeckCardItem({ deck }: DeckCardItemProps) {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <Badge variant="outline" className="bg-background/60 text-[11px] font-mono border-border text-primary">
-              {currentFormat}
-            </Badge>
+            {!isCommanderFormat && (
+              <Badge variant="outline" className="bg-background/60 text-[11px] font-mono border-border text-primary">
+                {currentFormat}
+              </Badge>
+            )}
             {deck.totalCards !== 100 && (
               <Badge
                 variant="outline"

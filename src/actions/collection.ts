@@ -77,6 +77,27 @@ export async function updateCollectionQuantity(cardId: string, quantity: number)
   return res;
 }
 
+export async function updateCollectionCardVersion(
+  cardId: string,
+  data: {
+    cardScryfallId: string;
+    imageUri?: string | null;
+    setCode?: string | null;
+    collectorNumber?: string | null;
+  }
+): Promise<{ success: boolean }> {
+  const userId = await getCurrentUserId();
+  await backendFetch(`/api/collection/${cardId}/version`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+    userId,
+  });
+
+  revalidatePath("/collection");
+  revalidatePath("/decks");
+  return { success: true };
+}
+
 export async function deleteCollectionCard(cardId: string) {
   const userId = await getCurrentUserId();
 
@@ -177,6 +198,9 @@ export interface CollectionQueryResponse {
   currencySymbol: string;
   totalCards: number;
   uniqueCards: number;
+  page?: number;
+  limit?: number | null;
+  hasMore?: boolean;
   sections: CollectionQuerySection[];
   cards: CollectionCardDTO[];
 }
@@ -187,10 +211,12 @@ export interface GetCollectionQueryOptions {
   direction?: SortDirection;
   grouped?: boolean;
   priceProvider?: PriceProvider;
+  page?: number;
+  limit?: number;
 }
 
 /**
- * Fetches the WHOLE collection filtered, sorted and grouped on the backend,
+ * Fetches the collection filtered, sorted and grouped on the backend,
  * so no grouping/sorting/filtering is ever performed over partial frontend data.
  */
 export async function getCollectionQuery(options: GetCollectionQueryOptions = {}) {
@@ -202,9 +228,8 @@ export async function getCollectionQuery(options: GetCollectionQueryOptions = {}
   if (options.direction) params.set("direction", options.direction);
   if (options.grouped !== undefined) params.set("grouped", String(options.grouped));
   if (options.priceProvider) params.set("priceProvider", options.priceProvider);
-  if (params.has("query") || params.has("sort") || params.has("direction") || params.has("grouped")) {
-    params.sort();
-  }
+  if (options.page !== undefined) params.set("page", String(options.page));
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
 
   const queryString = params.toString() ? `?${params.toString()}` : "";
   return await backendFetch<CollectionQueryResponse>(
