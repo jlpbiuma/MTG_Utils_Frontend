@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { CardImage as Image } from "@/components/card-image";
 import { Crown, AlertCircle, Loader2, Sparkles, Search, RotateCw } from "lucide-react";
@@ -19,7 +19,7 @@ import { CardPreviewHover } from "@/components/card-preview-hover";
 import { DeckCardWithOwnership } from "@/lib/schemas";
 import { normalizeCardName, getPartnerInfo } from "@/lib/card-utils";
 import { setDeckCommander } from "@/actions/decks";
-import { getCardNamed, searchCards, ScryfallCardResult } from "@/actions/scryfall";
+import { getCardNamed, resolveCardsInBulk, searchCards, ScryfallCardResult } from "@/actions/scryfall";
 
 interface SelectCommanderDialogProps {
   deckId: string;
@@ -99,6 +99,7 @@ export function SelectCommanderDialog({
   onCommanderSelected,
   initialPartnerMode = false,
 }: SelectCommanderDialogProps) {
+  const cardDetails = useRef(new Map<string, ScryfallCardResult>());
   const [commanderInput, setCommanderInput] = useState(currentCommander || "");
   const [candidateFilter, setCandidateFilter] = useState("");
   const [loading, setLoading] = useState(false);
@@ -150,24 +151,36 @@ export function SelectCommanderDialog({
   useEffect(() => {
     if (!open || deckCards.length === 0) return;
     let cancelled = false;
-    const unresolved = deckCards;
-
-    Promise.all(
-      unresolved.map(async (card) => {
-        const details = await getCardNamed(card.cardName);
-        return [
-          card.id,
-          {
-            typeLine: details?.type_line,
-            imageUri: details?.image_uris?.normal,
-            faces: details?.card_faces?.map((face) => face.image_uris?.normal).filter((uri): uri is string => Boolean(uri)),
-            oracleText: details?.oracle_text || details?.card_faces?.map((f) => f.oracle_text).filter(Boolean).join("\n"),
-            allParts: details?.all_parts,
-          },
-        ] as const;
-      })
-    ).then((entries) => {
-      if (!cancelled) setResolvedCardMetadata(Object.fromEntries(entries));
+    // Known non-commanders need no remote metadata. Resolve candidates and
+    // cards with missing types in one action, rather than queueing one per card.
+    const unresolved = deckCards.filter((card) =>
+      !card.isSideboard &&
+      (card.canBeCommander ?? (!card.typeLine || isCommanderCandidate(card.typeLine)))
+    );
+    const names = [...new Set(unresolved.map((card) => card.cardName))]
+      .filter((name) => !cardDetails.current.has(normalizeCardName(name)));
+    const pending = names.length
+      ? resolveCardsInBulk(names.map((name) => ({ name })))
+      : Promise.resolve([]);
+    pending.then((details) => {
+      if (cancelled) return;
+      for (const detail of details) {
+        cardDetails.current.set(normalizeCardName(detail.name), detail);
+      }
+      const entries = unresolved.flatMap((card) => {
+        const detail = cardDetails.current.get(normalizeCardName(card.cardName));
+        if (!detail) return [];
+        return [[card.id, {
+          typeLine: card.typeLine || detail.type_line,
+          imageUri: card.imageUri || detail.image_uris?.normal,
+          faces: detail.card_faces?.map((face) => face.image_uris?.normal).filter((uri): uri is string => Boolean(uri)),
+          oracleText: detail.oracle_text || detail.card_faces?.map((face) => face.oracle_text).filter(Boolean).join("\n"),
+          allParts: detail.all_parts,
+        }]];
+      });
+      setResolvedCardMetadata(Object.fromEntries(entries));
+    }).catch(() => {
+      // Existing deck metadata stays usable; selection can resolve a missing card.
     });
 
     return () => { cancelled = true; };
@@ -267,7 +280,7 @@ export function SelectCommanderDialog({
           if (selectedCommander.specificPartnerName) {
             return null;
           }
-          const details = await getCardNamed(card.cardName);
+          const details = cardDetails.current.get(normalizeCardName(card.cardName)) ?? await getCardNamed(card.cardName);
           const oracle = details?.oracle_text || details?.card_faces?.map((f) => f.oracle_text).filter(Boolean).join("\n");
           const info = getPartnerInfo(oracle, details?.all_parts);
           return info.hasPartner ? card.id : null;
@@ -297,7 +310,7 @@ export function SelectCommanderDialog({
       setLoading(true);
       setError(null);
       try {
-        let card = await getCardNamed(name.trim());
+        let card = cardDetails.current.get(normalizeCardName(name)) ?? await getCardNamed(name.trim());
         if (!card) {
           const searchRes = await searchCards(name.trim());
           if (searchRes.data && searchRes.data.length > 0) {

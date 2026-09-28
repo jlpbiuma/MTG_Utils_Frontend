@@ -35,10 +35,13 @@ import {
   createSimulatedCollection,
   getSimulatedCollection,
   deleteSimulatedCollection,
+  updateSimulatedCardVersion,
   type SimulatedCollectionAnalysisResponse,
   type SimulatedCardAnalysisItem,
 } from "@/actions/simulated-collections";
-import { isBasicLand } from "@/lib/card-utils";
+import { SimulatedPurchaseComparison } from "@/components/simulated-purchase-comparison";
+import type { CardPrintingDetail } from "@/actions/scryfall";
+import { normalizeCardName, isBasicLand } from "@/lib/card-utils";
 
 interface SimulatedCollectionDialogProps {
   isOpen: boolean;
@@ -82,6 +85,7 @@ export function SimulatedCollectionDialog({
       getSimulatedCollection(collectionId, provider)
         .then((res) => {
           setAnalysis(res);
+          setRawText(res.rawText || "");
           setName(res.name);
           setDescription(res.description || "");
           setActiveStep("results");
@@ -132,7 +136,8 @@ export function SimulatedCollectionDialog({
     setIsLoading(true);
     setError(null);
     try {
-      const res = await analyzeRawSimulatedCollection(rawText, provider);
+      const res = await analyzeRawSimulatedCollection(rawText, provider,
+        ...(analysis?.rawText === rawText && analysis.printingOverrides ? [analysis.printingOverrides] : []));
       if (res.cards.length === 0) {
         setError("No se pudieron interpretar cartas válidas en el texto proporcionado.");
         setIsLoading(false);
@@ -147,6 +152,17 @@ export function SimulatedCollectionDialog({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSimulationVersion = async (version: CardPrintingDetail) => {
+    if (!analysis || !selectedCardForDetail) return;
+    const printingOverrides = { ...analysis.printingOverrides, [normalizeCardName(selectedCardForDetail.cardName)]: version.id };
+    const result = collectionId
+      ? await updateSimulatedCardVersion(collectionId, selectedCardForDetail.cardName, version.id, provider)
+      : await analyzeRawSimulatedCollection(rawText, provider, printingOverrides);
+    const updated = { ...result, name: analysis.name, description: analysis.description };
+    setAnalysis(updated);
+    setSelectedCardForDetail(current => current?.cardName === selectedCardForDetail.cardName ? updated.cards.find(card => card.cardName === current.cardName) || null : current);
   };
 
   // Save the simulated collection
@@ -172,7 +188,8 @@ export function SimulatedCollectionDialog({
         name.trim(),
         description.trim() || undefined,
         textToSave,
-        provider
+        provider,
+        ...(analysis.printingOverrides && Object.keys(analysis.printingOverrides).length ? [analysis.printingOverrides] : [])
       );
       setAnalysis(saved);
       onOpenChange(false);
@@ -291,7 +308,7 @@ export function SimulatedCollectionDialog({
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
                       <Boxes className="h-4 w-4 text-primary" />
-                      Listado de cartas a simular (Moxfield, Arena, Texto plano)
+                      Listado de cartas a simular (Cardmarket, Moxfield, Arena, Texto plano)
                     </label>
                     <label className="cursor-pointer text-xs text-primary hover:text-primary/80 flex items-center gap-1">
                       <Upload className="h-3.5 w-3.5" />
@@ -305,6 +322,7 @@ export function SimulatedCollectionDialog({
                     </label>
                   </div>
                   <textarea
+                    aria-label="Listado de cartas a simular"
                     rows={10}
                     placeholder={`1 Sol Ring\n2 Arcane Signet\n1 Demonic Tutor\n4 Lightning Bolt\n1 Rhystic Study`}
                     value={rawText}
@@ -312,7 +330,7 @@ export function SimulatedCollectionDialog({
                     className="w-full rounded-xl p-3.5 text-sm font-mono bg-secondary/40 border border-border focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all resize-y"
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Soporta formatos estándar de exportación: <code>1 Sol Ring</code> o <code>4x Lightning Bolt (CLB) 123</code>.
+                    Pega el carrito de Cardmarket tal cual, con nombres, cantidades y precios en euros (texto o tabla Markdown). También admite listas sin precios: <code>1 Sol Ring</code> o <code>4x Lightning Bolt (CLB) 123</code>.
                   </p>
                 </div>
               </div>
@@ -320,6 +338,7 @@ export function SimulatedCollectionDialog({
               /* Step 2: Live Analysis & Dashboard */
               analysis && (
                 <div className="space-y-6">
+                  {analysis.purchaseAnalysis && <SimulatedPurchaseComparison analysis={analysis.purchaseAnalysis} onCardDetails={name => setSelectedCardForDetail(analysis.cards.find(card => normalizeCardName(card.cardName) === normalizeCardName(name)) || null)} />}
                   {/* Hero Metric Cards */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     {/* Metric 1: Importe Económico Total */}
@@ -700,6 +719,8 @@ export function SimulatedCollectionDialog({
           typeLine={selectedCardForDetail.typeLine}
           quantity={selectedCardForDetail.quantity}
           ownedInCollection={selectedCardForDetail.copiesOwnedReal}
+          simulationVersionSelection
+          onVersionSelect={handleSimulationVersion}
         />
       )}
     </>

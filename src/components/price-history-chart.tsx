@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import type { PrintingPriceSeries, CardExpansionRelease } from "@/lib/pricing/types";
+import { CardImage } from "@/components/card-image";
 import { Sparkles, Eye, EyeOff } from "lucide-react";
 
 const SERIES_COLORS = [
@@ -274,6 +275,9 @@ export function PriceHistoryChart({
 
             {releaseDates.map((date) => {
               const highlighted = hoveredExpansion?.releasedAt?.slice(0, 10) === date;
+              const dateExpansions = expansionMarkers.filter(
+                (exp) => exp.releasedAt?.slice(0, 10) === date && exp.iconSvgUri,
+              );
               return (
                 <ReferenceLine
                   key={date}
@@ -282,6 +286,53 @@ export function PriceHistoryChart({
                   strokeOpacity={highlighted ? 1 : 0.4}
                   strokeWidth={highlighted ? 2 : 1}
                   strokeDasharray="4 4"
+                  label={dateExpansions.length > 0 ? {
+                    position: "insideTop",
+                    content: (props: { x?: string | number; y?: string | number }) => {
+                      if (typeof props.x !== "number" || typeof props.y !== "number") return null;
+                      const iconSize = 18;
+                      const gap = 3;
+                      const totalWidth = dateExpansions.length * iconSize + (dateExpansions.length - 1) * gap;
+                      return (
+                        <g
+                          aria-label={dateExpansions.map((exp) => exp.setName).join(", ")}
+                          role="img"
+                          transform={`translate(${props.x - totalWidth / 2},${props.y + 2})`}
+                        >
+                          {dateExpansions.map((exp, index) => (
+                            <g key={`${exp.setCode}-${index}`}>
+                              <rect
+                                x={index * (iconSize + gap)}
+                                y={0}
+                                width={iconSize}
+                                height={iconSize}
+                                rx={5}
+                                fill="#17130b"
+                                stroke="#f59e0b"
+                                strokeOpacity={0.65}
+                              />
+                              <foreignObject
+                                x={index * (iconSize + gap) + 3}
+                                y={3}
+                                width={iconSize - 6}
+                                height={iconSize - 6}
+                              >
+                                <CardImage
+                                  src={exp.iconSvgUri!}
+                                  alt=""
+                                  width={12}
+                                  height={12}
+                                  unoptimized
+                                  aria-hidden="true"
+                                  className="h-full w-full object-contain brightness-0 invert"
+                                />
+                              </foreignObject>
+                            </g>
+                          ))}
+                        </g>
+                      );
+                    },
+                  } : false}
                 />
               );
             })}

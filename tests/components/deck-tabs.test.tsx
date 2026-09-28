@@ -83,7 +83,7 @@ describe("DecksPage Tabs Navigation", () => {
   it("should render the 3 main tabs: Mis mazos, Archivados, and Recomendaciones EDHREC", async () => {
     vi.mocked(deckActions.getDecksWithCompletion).mockResolvedValue([activeDeck, archivedDeck]);
 
-    const ui = await DecksPage();
+    const ui = await DecksPage({});
     render(ui);
 
     // Verify Tab triggers
@@ -103,7 +103,7 @@ describe("DecksPage Tabs Navigation", () => {
   it("should calculate KPIs based only on active decks", async () => {
     vi.mocked(deckActions.getDecksWithCompletion).mockResolvedValue([activeDeck, archivedDeck]);
 
-    const ui = await DecksPage();
+    const ui = await DecksPage({});
     render(ui);
 
     // Total active decks KPI is 1
@@ -117,7 +117,7 @@ describe("DecksPage Tabs Navigation", () => {
   it("should display active deck in Mis mazos and switch to Archivados to see archived deck", async () => {
     vi.mocked(deckActions.getDecksWithCompletion).mockResolvedValue([activeDeck, archivedDeck]);
 
-    const ui = await DecksPage();
+    const ui = await DecksPage({});
     render(ui);
 
     // Active deck should be visible in active tab
@@ -135,7 +135,7 @@ describe("DecksPage Tabs Navigation", () => {
   it("should switch to Recomendaciones EDHREC tab and display EDHREC recommendations view", async () => {
     vi.mocked(deckActions.getDecksWithCompletion).mockResolvedValue([activeDeck]);
 
-    const ui = await DecksPage();
+    const ui = await DecksPage({});
     render(ui);
 
     const edhrecTab = screen.getByRole("tab", { name: /Recomendaciones EDHREC/i });

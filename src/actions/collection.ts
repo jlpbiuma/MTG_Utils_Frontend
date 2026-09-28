@@ -77,6 +77,15 @@ export async function updateCollectionQuantity(cardId: string, quantity: number)
   return res;
 }
 
+export async function updateCollectionAcquiredAt(cardId: string, acquiredAt: string) {
+  const userId = await getCurrentUserId();
+  const result = await backendFetch<CollectionCardDTO>(`/api/collection/${encodeURIComponent(cardId)}/acquired-at`, {
+    method: "PATCH", body: JSON.stringify({ acquiredAt }), userId,
+  });
+  revalidatePath("/collection");
+  return result;
+}
+
 export async function updateCollectionCardVersion(
   cardId: string,
   data: {
@@ -171,6 +180,7 @@ export interface CollectionCardDTO {
   manaCost?: string | null;
   typeLine?: string | null;
   imageUri?: string | null;
+  acquiredAt?: string | null;
   requestedInDecks?: DeckRequirement[];
   requestedInDecksCount?: number;
 }
@@ -278,4 +288,3 @@ export async function getDormantCards(options: {
     { method: "GET", userId }
   );
 }
-

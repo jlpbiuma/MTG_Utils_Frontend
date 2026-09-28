@@ -12,9 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ManaCost } from "@/components/mana-cost";
-import { searchCards, ScryfallCardResult } from "@/actions/scryfall";
+import type { ScryfallCardResult } from "@/actions/scryfall";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 
 interface CardSearchDialogProps {
@@ -50,23 +49,25 @@ export function CardSearchDialog({
   useEffect(() => {
     let cancelled = false;
     if (!open || query.trim().length < 2) {
-      setResults([]);
-      setLoading(false);
       return;
     }
-    setLoading(true);
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const res = await searchCards(query.trim(), 1);
+        const response = await fetch(`/api/scryfall/search?q=${encodeURIComponent(query.trim())}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("No se pudo buscar la carta");
+        const res: { data: ScryfallCardResult[] } = await response.json();
         if (!cancelled) setResults(res.data);
       } catch (err) {
-        console.error(err);
+        if (!cancelled) console.error(err);
         if (!cancelled) setResults([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
     }, 350);
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
   }, [query, open]);
 
   const handleAdd = async (card: ScryfallCardResult) => {
@@ -95,7 +96,11 @@ export function CardSearchDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      setOpen(isOpen);
+      setLoading(isOpen && query.trim().length >= 2);
+      if (!isOpen) setResults([]);
+    }}>
       <DialogTrigger asChild>
         <Button variant="mana" className="gap-2">
           <Plus className="h-4 w-4" />
@@ -117,7 +122,12 @@ export function CardSearchDialog({
               aria-label="Buscar cartas en Scryfall"
               placeholder="Escribe el nombre de la carta (ej: Black Lotus, Lightning Bolt, Atraxa...)"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setQuery(value);
+                setLoading(value.trim().length >= 2);
+                if (value.trim().length < 2) setResults([]);
+              }}
               className="pl-9 h-11 text-base"
               autoFocus
             />

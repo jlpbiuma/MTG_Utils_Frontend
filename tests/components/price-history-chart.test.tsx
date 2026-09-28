@@ -67,7 +67,7 @@ describe("PriceHistoryChart - MTGGoldfish Expansion Markers", () => {
       setCode: "mom",
       setName: "March of the Machine",
       releasedAt: "2023-04-21T00:00:00Z",
-      iconSvgUri: "https://svgs.scryfall.io/sets/mom.svg",
+      iconSvgUri: "http://192.168.0.4:8080/images/signed/rs:fill:64:64:0/minio-mom.webp",
       hasPrinting: false,
     },
     {
@@ -146,6 +146,17 @@ describe("PriceHistoryChart - MTGGoldfish Expansion Markers", () => {
     expect(container.querySelector(".recharts-reference-line-line")).toHaveAttribute("stroke", "#f59e0b");
     fireEvent.blur(marker);
     expect(container.querySelector(".recharts-reference-line-line")).toHaveAttribute("stroke", "#64748b");
+  });
+
+  it("shows each expansion icon centered on its release line at the top of the plot", () => {
+    const { container } = render(
+      <PriceHistoryChart series={mockSeries} expansions={mockExpansions} />,
+    );
+
+    const marker = screen.getByRole("img", { name: "March of the Machine" });
+    expect(marker).toBeInTheDocument();
+    expect(marker.querySelectorAll("foreignObject img")).toHaveLength(1);
+    expect(container.querySelector('foreignObject img[src*="minio-mom.webp"]')).toBeInTheDocument();
   });
 
 });

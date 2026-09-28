@@ -28,14 +28,20 @@ import {
   getSimulatedCollections,
   getSimulatedCollection,
   deleteSimulatedCollection,
+  updateSimulatedCardVersion,
+  addCardToSimulatedCollection,
+  removeCardFromSimulatedCollection,
   type SimulatedCollectionSummary,
   type SimulatedCollectionAnalysisResponse,
   type SimulatedCardAnalysisItem,
   type CandidateDeckInfo,
 } from "@/actions/simulated-collections";
-import { isBasicLand } from "@/lib/card-utils";
+import type { CardPrintingDetail } from "@/actions/scryfall";
+import { normalizeCardName, isBasicLand } from "@/lib/card-utils";
+import { SimulatedPurchaseComparison } from "@/components/simulated-purchase-comparison";
 import { SimulatedCollectionDialog } from "@/components/simulated-collection-dialog";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
+import { CardSearchDialog } from "@/components/card-search-dialog";
 import { CardPreviewHover } from "@/components/card-preview-hover";
 import { ManaCost } from "@/components/mana-cost";
 import { ColorIdentityPips } from "@/components/color-identity-pips";
@@ -48,12 +54,15 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
+import { simulationListCards, matchesSimulationFilter, sortSimulationCards, type SimulationFilter, type SimulationSort } from "@/lib/simulated-card-list";
+import { SimulatedCardTable, SimulationMembershipTags, SimulationPriceDetails } from "@/components/simulated-card-table";
+
 interface SimulatedCollectionsTabProps {
   provider?: string;
 }
 
-type CardFilterType = "all" | "useful" | "sellable" | "new" | "owned";
-type SortOption = "name-asc" | "name-desc" | "price-desc" | "price-asc" | "gain-desc" | "quantity-desc";
+type CardFilterType = SimulationFilter;
+type SortOption = SimulationSort;
 type ActiveViewTab = "cards" | "deck-growth";
 type DeckViewFormat = "list" | "grid";
 
@@ -87,6 +96,8 @@ export function SimulatedCollectionsTab({
   const [selectedAnalysis, setSelectedAnalysis] = useState<SimulatedCollectionAnalysisResponse | null>(null);
   const [isLoadingSelected, setIsLoadingSelected] = useState(false);
   const [selectedError, setSelectedError] = useState<string | null>(null);
+  const [cardMutationError, setCardMutationError] = useState<string | null>(null);
+  const [removingCardName, setRemovingCardName] = useState<string | null>(null);
 
   // Detail dialog & candidate decks modal state
   const [cardForDetail, setCardForDetail] = useState<SimulatedCardAnalysisItem | null>(null);
@@ -102,6 +113,7 @@ export function SimulatedCollectionsTab({
   // In-page search, filter and sort state
   const [searchQuery, setSearchQuery] = useState("");
   const [deckSearchQuery, setDeckSearchQuery] = useState("");
+  const [cardView, setCardView] = useState<"grid" | "list">("grid");
   const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
   const [sortOption, setSortOption] = useState<SortOption>("price-desc");
 
@@ -155,6 +167,44 @@ export function SimulatedCollectionsTab({
     };
   }, [selectedCollectionId, provider]);
 
+  const handleSimulationVersion = async (version: CardPrintingDetail) => {
+    if (!selectedCollectionId || !cardForDetail) return;
+    const updated = await updateSimulatedCardVersion(selectedCollectionId, cardForDetail.cardName, version.id, provider);
+    setSelectedAnalysis(updated);
+    setCardForDetail(current => current?.cardName === cardForDetail.cardName ? updated.cards.find(card => card.cardName === current.cardName) || null : current);
+    void fetchCollections();
+  };
+
+  const handleAddSimulationCard = async (card: { cardName: string; quantity: number }) => {
+    if (!selectedCollectionId) return;
+    setCardMutationError(null);
+    try {
+      const updated = await addCardToSimulatedCollection(selectedCollectionId, card.cardName, card.quantity, provider);
+      setSelectedAnalysis(updated);
+      void fetchCollections();
+    } catch (error) {
+      setCardMutationError(error instanceof Error ? error.message : "No se pudo importar la carta.");
+      throw error;
+    }
+  };
+
+  const handleRemoveSimulationCard = async (card: SimulatedCardAnalysisItem) => {
+    if (!selectedCollectionId || removingCardName) return;
+    if (!confirm(`¿Eliminar ${card.cardName} y todas sus copias de esta colección simulada?`)) return;
+    setRemovingCardName(card.cardName);
+    setCardMutationError(null);
+    try {
+      const updated = await removeCardFromSimulatedCollection(selectedCollectionId, card.cardName, provider);
+      setSelectedAnalysis(updated);
+      setCardForDetail(current => current?.cardName === card.cardName ? null : current);
+      void fetchCollections();
+    } catch (error) {
+      setCardMutationError(error instanceof Error ? error.message : "No se pudo eliminar la carta.");
+    } finally {
+      setRemovingCardName(null);
+    }
+  };
+
   const handleOpenNew = () => {
     setIsDialogOpen(true);
   };
@@ -166,6 +216,7 @@ export function SimulatedCollectionsTab({
     setCardFilter("all");
     setSortOption("price-desc");
     setActiveViewTab("cards");
+    setCardMutationError(null);
   };
 
   const handleDeleteFromList = async (e: React.MouseEvent, id: string) => {
@@ -194,53 +245,13 @@ export function SimulatedCollectionsTab({
     }
   };
 
-  // Filter and sort cards for the in-page view
+  const listCards = useMemo(() => selectedAnalysis ? simulationListCards(selectedAnalysis) : [], [selectedAnalysis]);
   const processedCards = useMemo(() => {
-    if (!selectedAnalysis) return [];
-
-    let cards = [...selectedAnalysis.cards];
-
-    // Search filter
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      cards = cards.filter((c) => c.cardName.toLowerCase().includes(q));
-    }
-
-    // Category filter
-    if (cardFilter === "useful") {
-      // User rule: Only cards that are NOT already in the collection, not basic lands, and are useful
-      cards = cards.filter((c) => c.usefulCopies > 0 && c.copiesOwnedReal === 0 && !isBasicLand(c.typeLine, c.cardName));
-    } else if (cardFilter === "sellable") {
-      // Cards that can be sold
-      cards = cards.filter((c) => c.sellableCopies > 0);
-    } else if (cardFilter === "new") {
-      cards = cards.filter((c) => c.copiesOwnedReal === 0);
-    } else if (cardFilter === "owned") {
-      cards = cards.filter((c) => c.copiesOwnedReal > 0);
-    }
-
-    // Sorting
-    cards.sort((a, b) => {
-      switch (sortOption) {
-        case "name-asc":
-          return a.cardName.localeCompare(b.cardName);
-        case "name-desc":
-          return b.cardName.localeCompare(a.cardName);
-        case "price-desc":
-          return b.totalPrice - a.totalPrice;
-        case "price-asc":
-          return a.totalPrice - b.totalPrice;
-        case "gain-desc":
-          return b.netCompletionGain - a.netCompletionGain;
-        case "quantity-desc":
-          return b.quantity - a.quantity;
-        default:
-          return 0;
-      }
-    });
-
-    return cards;
-  }, [selectedAnalysis, searchQuery, cardFilter, sortOption]);
+    const query = searchQuery.trim().toLowerCase();
+    return sortSimulationCards(listCards.filter(card =>
+      (!query || card.cardName.toLowerCase().includes(query)) && matchesSimulationFilter(card, cardFilter)
+    ), sortOption);
+  }, [listCards, searchQuery, cardFilter, sortOption]);
 
   // Pagination state (limit to 200 cards per page)
   const ITEMS_PER_PAGE = 200;
@@ -406,6 +417,7 @@ export function SimulatedCollectionsTab({
           </div>
         ) : (
           <>
+            {selectedAnalysis.purchaseAnalysis && <SimulatedPurchaseComparison analysis={selectedAnalysis.purchaseAnalysis} onCardDetails={name => setCardForDetail(selectedAnalysis.cards.find(card => normalizeCardName(card.cardName) === normalizeCardName(name)) || null)} />}
             {/* 4 Hero Metric Cards with Standardized Card Counts */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {/* Metric 1: Valor Total Lote */}
@@ -530,6 +542,7 @@ export function SimulatedCollectionsTab({
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
+                        aria-label="Buscar cartas simuladas"
                         placeholder="Filtrar cartas de tu colección simulada por nombre..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -539,19 +552,41 @@ export function SimulatedCollectionsTab({
 
                     {/* Sort selector */}
                     <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <CardSearchDialog
+                        title="Importar una carta a la colección simulada"
+                        triggerText="Importar carta"
+                        onAddCard={({ cardName, quantity }) => handleAddSimulationCard({ cardName, quantity })}
+                      />
                       <ArrowUpDown className="h-4 w-4 text-muted-foreground shrink-0" />
                       <select
+                        aria-label="Ordenar cartas simuladas"
                         value={sortOption}
                         onChange={(e) => setSortOption(e.target.value as SortOption)}
                         className="h-11 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                       >
-                        <option value="price-desc">Precio (Mayor a Menor)</option>
-                        <option value="price-asc">Precio (Menor a Mayor)</option>
+                        <option value="price-desc">Mercado total (Mayor a Menor)</option>
+                        <option value="unit-desc">Precio unitario (Mayor a Menor)</option>
+                        <option value="unit-asc">Precio unitario (Menor a Mayor)</option>
+                        <option value="purchase-desc">Precio compra total (Mayor a Menor)</option>
+                        <option value="purchase-asc">Precio compra total (Menor a Mayor)</option>
+                        <option value="difference-desc">Precio diferencial (Mayor a Menor)</option>
+                        <option value="difference-asc">Precio diferencial (Menor a Mayor)</option>
+                        <option value="price-asc">Mercado total (Menor a Mayor)</option>
                         <option value="gain-desc">Mayor ganancia neta (%)</option>
                         <option value="name-asc">Nombre (A - Z)</option>
                         <option value="name-desc">Nombre (Z - A)</option>
                         <option value="quantity-desc">Cantidad</option>
                       </select>
+                    </div>
+                  </div>
+
+                  {cardMutationError && <p role="alert" className="text-sm text-destructive">{cardMutationError}</p>}
+
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-muted-foreground">Unitario = mercado por copia · Compra y diferencial = total de las copias. Diferencial positivo = ahorro. Sin datos al final; varias versiones usan la media por copia.</p>
+                    <div role="group" aria-label="Vista de cartas" className="flex shrink-0 items-center rounded-lg border border-border bg-secondary p-1">
+                      <Button type="button" variant="ghost" aria-pressed={cardView === "grid"} onClick={() => setCardView("grid")} className={`min-h-11 gap-1.5 ${cardView === "grid" ? "bg-background shadow" : "text-muted-foreground"}`}><LayoutGrid className="h-4 w-4" aria-hidden="true" />Cuadrícula</Button>
+                      <Button type="button" variant="ghost" aria-pressed={cardView === "list"} onClick={() => setCardView("list")} className={`min-h-11 gap-1.5 ${cardView === "list" ? "bg-background shadow" : "text-muted-foreground"}`}><List className="h-4 w-4" aria-hidden="true" />Listado</Button>
                     </div>
                   </div>
 
@@ -565,6 +600,12 @@ export function SimulatedCollectionsTab({
                     >
                       Todas ({selectedAnalysis.cards.length})
                     </Button>
+
+                    {([ ["wants", "Wants"], ["decks", "En mazos"], ["unrelated", "Fuera de todo"] ] as const).map(([filter, label]) => (
+                      <Button key={filter} size="sm" variant={cardFilter === filter ? "secondary" : "outline"} aria-pressed={cardFilter === filter} onClick={() => setCardFilter(filter)} className="h-8 rounded-full border-border px-3 text-xs">
+                        {label} ({listCards.filter(card => matchesSimulationFilter(card, filter)).length})
+                      </Button>
+                    ))}
 
                     {/* Filter 'Aportan a mazos': Filters out cards already in real collection and basic lands */}
                     <Button
@@ -599,6 +640,7 @@ export function SimulatedCollectionsTab({
                     {/* Filter 'Ya en colección' */}
                     <Button
                       size="sm"
+                      aria-pressed={cardFilter === "owned"}
                       variant={cardFilter === "owned" ? "secondary" : "outline"}
                       onClick={() => setCardFilter("owned")}
                       className="h-8 text-xs px-3 rounded-full border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
@@ -631,8 +673,10 @@ export function SimulatedCollectionsTab({
                       Prueba a cambiar el filtro seleccionado o el texto de búsqueda.
                     </p>
                   </div>
+                ) : cardView === "list" ? (
+                  <SimulatedCardTable cards={paginatedCards} symbol={selectedAnalysis.currencySymbol} onDetails={setCardForDetail} onDecks={card => setCandidateDecksModal({ cardName: card.cardName, decks: card.candidateDecks })} onRemove={handleRemoveSimulationCard} removingCardName={removingCardName} />
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  <div aria-label="Cuadrícula de cartas simuladas" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {paginatedCards.map((card) => {
                       const isAlreadyOwned = card.copiesOwnedReal > 0;
                       const isSellable = card.sellableCopies > 0;
@@ -671,6 +715,16 @@ export function SimulatedCollectionsTab({
                                   {card.typeLine || "Card"}
                                 </span>
                                 <ManaCost manaCost={card.manaCost} />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label={`Eliminar ${card.cardName} de la colección simulada`}
+                                  title={`Eliminar ${card.cardName}`}
+                                  disabled={Boolean(removingCardName)}
+                                  onClick={(event) => { event.stopPropagation(); void handleRemoveSimulationCard(card); }}
+                                  className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                                ><Trash2 className="h-4 w-4" /></Button>
                               </div>
                             </div>
 
@@ -700,6 +754,7 @@ export function SimulatedCollectionsTab({
                             <div className="space-y-2.5 pt-1">
                               {/* Status & Quantity Tags Row */}
                               <div className="flex items-center gap-1.5 flex-wrap">
+                                <SimulationMembershipTags card={card} />
                                 {/* Quantity Badge */}
                                 <Badge
                                   variant="outline"
@@ -776,20 +831,7 @@ export function SimulatedCollectionsTab({
                                 </div>
                               )}
 
-                              {/* Pricing breakdown */}
-                              <div className="pt-2 border-t border-border flex items-center justify-between text-xs">
-                                <span className="text-[10px] text-muted-foreground font-medium">Cotización:</span>
-                                <div className="text-right">
-                                  <span className="font-mono font-semibold text-amber-400">
-                                    {card.totalPrice.toFixed(2)} {selectedAnalysis.currencySymbol}
-                                  </span>
-                                  {card.quantity > 1 && (
-                                    <span className="text-[10px] text-muted-foreground ml-1 font-mono">
-                                      ({card.unitPrice.toFixed(2)}/ud)
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
+                              <SimulationPriceDetails card={card} symbol={selectedAnalysis.currencySymbol} />
 
                               {/* Sellable Value breakdown (in Blue) */}
                               {isSellable && (
@@ -1051,6 +1093,8 @@ export function SimulatedCollectionsTab({
             typeLine={cardForDetail.typeLine}
             quantity={cardForDetail.quantity}
             ownedInCollection={cardForDetail.copiesOwnedReal}
+            simulationVersionSelection
+            onVersionSelect={handleSimulationVersion}
           />
         )}
 
@@ -1191,6 +1235,11 @@ export function SimulatedCollectionsTab({
                   </Button>
                 </div>
 
+                {coll.purchaseAnalysis && (
+                  <p className="text-sm text-foreground">
+                    Compra: {coll.purchaseAnalysis.totalPurchaseCost.toFixed(2)} € · Wants: {coll.purchaseAnalysis.wantsCompletionPercentage.toFixed(1)}%
+                  </p>
+                )}
                 {/* 4 Metric Boxes with Standardized Card Counts */}
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   {/* Valor Total */}

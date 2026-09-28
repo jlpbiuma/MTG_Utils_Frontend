@@ -20,6 +20,7 @@ vi.mock("@/actions/decks", () => ({
 
 vi.mock("@/actions/collection", () => ({
   updateCollectionCardVersion: vi.fn().mockResolvedValue({ success: true }),
+  updateCollectionAcquiredAt: vi.fn().mockResolvedValue({ acquiredAt: "2025-04-03T00:00:00Z" }),
 }));
 
 vi.mock("@/actions/wants", () => ({
@@ -182,6 +183,32 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
     expect(screen.getByText("No legal")).toBeInTheDocument();
   });
 
+  it("saves a manually entered acquisition date from the collection details tab", async () => {
+    vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
+    const onAcquiredAtChange = vi.fn();
+    render(<CardDetailDialog
+      isOpen cardName="Lightning Bolt" cardId="bolt-123" quantity={1}
+      collectionCardId="collection-1" defaultTab="collection"
+      onAcquiredAtChange={onAcquiredAtChange}
+    />);
+    const input = await screen.findByLabelText("Fecha de adquisición");
+    fireEvent.change(input, { target: { value: "2025-04-03" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar fecha" }));
+    await waitFor(() => expect(collectionActions.updateCollectionAcquiredAt).toHaveBeenCalledWith("collection-1", "2025-04-03"));
+    expect(onAcquiredAtChange).toHaveBeenCalledWith("2025-04-03T00:00:00Z");
+  });
+
+  it("offers an add-to-collection action for a missing card", async () => {
+    vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
+    const onAddToCollection = vi.fn().mockResolvedValue(undefined);
+    render(<CardDetailDialog
+      isOpen cardName="Lightning Bolt" cardId="bolt-123" quantity={0}
+      ownedInCollection={0} defaultTab="collection" onAddToCollection={onAddToCollection}
+    />);
+    fireEvent.click(await screen.findByRole("button", { name: "Añadir a la colección" }));
+    await waitFor(() => expect(onAddToCollection).toHaveBeenCalledOnce());
+  });
+
   it("should automatically select clicked version as standard and call onVersionSelect", async () => {
     vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
     const onVersionSelect = vi.fn();
@@ -315,6 +342,10 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
     expect(
       screen.getByText(/Al comienzo de tu mantenimiento, mira la primera carta/i)
     ).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Hurgador de secretos" })).toHaveAttribute(
+      "src",
+      expect.stringContaining(encodeURIComponent("https://example.com/delver-front.jpg")),
+    );
 
     // Flip face button
     const flipButton = screen.getByRole("button", { name: /Girar cara/i });
@@ -327,6 +358,18 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
     expect(screen.getByText("Aberración insectil")).toBeInTheDocument();
     expect(screen.getByText("3/2")).toBeInTheDocument();
     expect(screen.getByText("Vuela.")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Aberración insectil" })).toHaveAttribute(
+      "src",
+      expect.stringContaining(encodeURIComponent("https://example.com/delver-back.jpg")),
+    );
+
+    // Flip back and ensure the front artwork is restored too.
+    fireEvent.click(flipButton);
+    expect(screen.getByText("Hurgador de secretos")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Hurgador de secretos" })).toHaveAttribute(
+      "src",
+      expect.stringContaining(encodeURIComponent("https://example.com/delver-front.jpg")),
+    );
   });
 
   it("should keep selected version and image active without glitching or reverting to initial version", async () => {
@@ -373,4 +416,29 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
     expect(mainImage).toHaveAttribute("src", expect.stringContaining("bolt-2ba"));
     expect(mainImage).not.toHaveAttribute("src", expect.stringContaining("bolt-m10"));
   });
+  it("keeps the previous simulated version on failure and disables selection until recalculation finishes", async () => {
+    vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
+    let reject!: (error: Error) => void;
+    const onVersionSelect = vi.fn(() => new Promise<void>((_, fail) => { reject = fail; }));
+    render(<CardDetailDialog isOpen cardName="Lightning Bolt" cardId="bolt-123" simulationVersionSelection onVersionSelect={onVersionSelect} />);
+    const button = (await screen.findByText("Masters 25")).closest("button")!;
+    fireEvent.click(button);
+    expect(button).toBeDisabled();
+    reject(new Error("No se pudo guardar"));
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert")).toHaveTextContent("No se pudo guardar");
+    expect(screen.getByAltText("Relámpago")).toHaveAttribute("src", expect.stringContaining("bolt-m10"));
+    expect(button).not.toBeDisabled();
+    expect(screen.queryByText("Versión actualizada y precios de la simulación recalculados.")).not.toBeInTheDocument();
+  });
+
+  it("confirms recalculation after selecting a simulated version", async () => {
+    vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
+    const onVersionSelect = vi.fn().mockResolvedValue(undefined);
+    render(<CardDetailDialog isOpen cardName="Lightning Bolt" cardId="bolt-123" simulationVersionSelection onVersionSelect={onVersionSelect} />);
+    fireEvent.click((await screen.findByText("Masters 25")).closest("button")!);
+    await screen.findByText("Versión actualizada y precios de la simulación recalculados.");
+    expect(onVersionSelect).toHaveBeenCalledWith(singleFacedCard.printings![1]);
+  });
+
 });

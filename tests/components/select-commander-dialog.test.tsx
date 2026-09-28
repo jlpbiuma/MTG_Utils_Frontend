@@ -12,9 +12,8 @@ vi.mock("@/actions/decks", () => ({
   })),
 }));
 
-vi.mock("@/actions/scryfall", () => ({
-  searchCards: vi.fn().mockResolvedValue({ total_cards: 0, has_more: false, data: [] }),
-  getCardNamed: vi.fn().mockImplementation(async (name: string) => {
+vi.mock("@/actions/scryfall", () => {
+  const resolve = async (name: string) => {
     const isDihada = name === "Dihada, Binder of Wills";
     if (name === "Zndrsplt, Eye of Wisdom") {
       return {
@@ -53,9 +52,16 @@ vi.mock("@/actions/scryfall", () => ({
           }
         : {}),
     };
-  }),
-}));
+  };
+  return {
+    searchCards: vi.fn().mockResolvedValue({ total_cards: 0, has_more: false, data: [] }),
+    getCardNamed: vi.fn(resolve),
+    resolveCardsInBulk: vi.fn(async (identifiers: { name: string }[]) =>
+      Promise.all(identifiers.map(({ name }) => resolve(name)))),
+  };
+});
 
+import { getCardNamed, resolveCardsInBulk } from "@/actions/scryfall";
 import { DoubleFacePreview } from "@/components/select-commander-dialog";
 import { getPartnerInfo } from "@/lib/card-utils";
 import { setDeckCommander } from "@/actions/decks";
@@ -114,6 +120,21 @@ describe("SelectCommanderDialog Component", () => {
       missingCount: 0,
     },
   ];
+
+  it("batches only candidates and reuses metadata when selecting", async () => {
+    vi.mocked(getCardNamed).mockClear();
+    vi.mocked(resolveCardsInBulk).mockClear();
+    render(<SelectCommanderDialog deckId="deck-1" deckName="Test" open
+      onOpenChange={vi.fn()} deckCards={mockCards} currentCommander={null}
+      onCommanderSelected={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTitle("Carta transformable: ver ambas caras")).toBeInTheDocument());
+    expect(resolveCardsInBulk).toHaveBeenCalledTimes(1);
+    expect(resolveCardsInBulk).toHaveBeenCalledWith([{ name: "Niv-Mizzet, Parun" }]);
+    expect(getCardNamed).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Elegir" }));
+    await waitFor(() => expect(screen.getByText("Niv-Mizzet, Parun tiene Partner")).toBeInTheDocument());
+    expect(getCardNamed).not.toHaveBeenCalled();
+  });
 
   it("should render dialog title and exclude non-legendary creatures", () => {
     render(

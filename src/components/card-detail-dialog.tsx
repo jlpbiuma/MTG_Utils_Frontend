@@ -20,7 +20,7 @@ import {
   CardPrintingDetail,
 } from "@/actions/scryfall";
 import { updateDeckCardVersion } from "@/actions/decks";
-import { updateCollectionCardVersion } from "@/actions/collection";
+import { updateCollectionAcquiredAt, updateCollectionCardVersion } from "@/actions/collection";
 import { updateWantCardVersion } from "@/actions/wants";
 import { getCardPriceHistory } from "@/actions/pricing";
 import { PriceHistoryChart } from "@/components/price-history-chart";
@@ -63,8 +63,12 @@ interface CardDetailDialogProps {
   deckId?: string;
   deckCardId?: string;
   collectionCardId?: string;
+  acquiredAt?: string | null;
+  onAcquiredAtChange?: (acquiredAt: string) => void;
+  onAddToCollection?: () => Promise<void>;
   wantCardId?: string;
   isCommander?: boolean;
+  simulationVersionSelection?: boolean;
   onVersionSelect?: (version: CardPrintingDetail) => Promise<void> | void;
   defaultTab?: "versions" | "legalities" | "prices" | "rulings" | "collection";
 }
@@ -120,9 +124,13 @@ export function CardDetailDialog({
   deckId,
   deckCardId,
   collectionCardId,
+  acquiredAt,
+  onAcquiredAtChange,
+  onAddToCollection,
   wantCardId,
   isCommander,
   onVersionSelect,
+  simulationVersionSelection = false,
   defaultTab = "versions",
 }: CardDetailDialogProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
@@ -135,12 +143,47 @@ export function CardDetailDialog({
   const [activePrintIndex, setActivePrintIndex] = useState(0);
   const [selectedPrintingId, setSelectedPrintingId] = useState<string | undefined>(cardId);
   const [isUpdatingVersion, setIsUpdatingVersion] = useState(false);
+  const [versionError, setVersionError] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [priceHistory, setPriceHistory] = useState<CardPriceHistoryResponse | null>(null);
   const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
   const [priceHistoryDays, setPriceHistoryDays] = useState(30);
   const [showAllVersions, setShowAllVersions] = useState(false);
+  const [acquisitionDate, setAcquisitionDate] = useState(acquiredAt?.slice(0, 10) ?? "");
+  const [isSavingAcquisitionDate, setIsSavingAcquisitionDate] = useState(false);
+  const [acquisitionDateError, setAcquisitionDateError] = useState<string | null>(null);
+  const [isAddingToCollection, setIsAddingToCollection] = useState(false);
+  const [addToCollectionError, setAddToCollectionError] = useState<string | null>(null);
+
+  const saveAcquisitionDate = async () => {
+    if (!collectionCardId || !acquisitionDate) return;
+    setIsSavingAcquisitionDate(true);
+    setAcquisitionDateError(null);
+    try {
+      const result = await updateCollectionAcquiredAt(collectionCardId, acquisitionDate);
+      const savedDate = result.acquiredAt ?? `${acquisitionDate}T00:00:00Z`;
+      setAcquisitionDate(savedDate.slice(0, 10));
+      onAcquiredAtChange?.(savedDate);
+    } catch {
+      setAcquisitionDateError("No se pudo guardar la fecha de adquisición.");
+    } finally {
+      setIsSavingAcquisitionDate(false);
+    }
+  };
+
+  const addToCollection = async () => {
+    if (!onAddToCollection) return;
+    setIsAddingToCollection(true);
+    setAddToCollectionError(null);
+    try {
+      await onAddToCollection();
+    } catch {
+      setAddToCollectionError("No se pudo añadir la carta a tu colección.");
+    } finally {
+      setIsAddingToCollection(false);
+    }
+  };
 
   // Track the card name for which details were fetched so we don't re-fetch when selecting versions
   const fetchedCardRef = React.useRef<string | null>(null);
@@ -272,6 +315,23 @@ export function CardDetailDialog({
       index !== undefined && index >= 0
         ? index
         : (details?.printings?.findIndex((p) => p.id === printing.id) ?? 0);
+    if (simulationVersionSelection && onVersionSelect) {
+      setIsUpdatingVersion(true);
+      setFeedbackMessage(null);
+      setVersionError(false);
+      try {
+        await onVersionSelect(printing);
+        setActivePrintIndex(targetIdx >= 0 ? targetIdx : 0);
+        setSelectedPrintingId(printing.id);
+        setFeedbackMessage("Versión actualizada y precios de la simulación recalculados.");
+      } catch (error) {
+        setVersionError(true);
+        setFeedbackMessage(error instanceof Error ? error.message : "No se pudo actualizar la versión. Inténtalo de nuevo.");
+      } finally {
+        setIsUpdatingVersion(false);
+      }
+      return;
+    }
     // Immediately select and switch preview image without delay or glitch
     setActivePrintIndex(targetIdx >= 0 ? targetIdx : 0);
     setSelectedPrintingId(printing.id);
@@ -383,10 +443,14 @@ export function CardDetailDialog({
   const displayCollectorNumber = currentPrint?.collector_number || details?.collector_number;
   const displayRarity = currentPrint?.rarity || details?.rarity;
 
+  // The selected printing always represents the front face. Prefer the active
+  // face's own image for double-faced cards, including the front face, so
+  // changing faces actually updates the artwork.
+  const activeFaceImageUri = hasFaces
+    ? currentFace?.image_uris?.large || currentFace?.image_uris?.normal || currentFace?.image_uris?.png
+    : null;
   const displayImageUri =
-    (hasFaces && activeFaceIndex > 0
-      ? currentFace?.image_uris?.large || currentFace?.image_uris?.normal
-      : null) ||
+    activeFaceImageUri ||
     currentPrint?.image_uri_large ||
     currentPrint?.image_uri ||
     currentFace?.image_uris?.normal ||
@@ -657,8 +721,8 @@ export function CardDetailDialog({
                 {/* Versions Tab: First tab with visible miniatures & auto-select */}
                 <TabsContent value="versions" className="mt-3 space-y-3">
                   {feedbackMessage && (
-                    <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 text-xs">
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                    <div role={versionError ? "alert" : "status"} className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs ${versionError ? "border-destructive text-destructive" : "bg-emerald-950/50 border-emerald-500/40 text-emerald-300"}`}>
+                      {versionError ? <AlertCircle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />}
                       <span>{feedbackMessage}</span>
                     </div>
                   )}
@@ -702,7 +766,8 @@ export function CardDetailDialog({
 
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground ml-auto">
                       <span>
-                        {canPersistVersion
+                        {simulationVersionSelection ? "La versión se aplica a todas las copias de esta carta; se conserva el precio de compra."
+                          : canPersistVersion
                           ? "Haz clic para fijar esta versión como estándar."
                           : "Haz clic para ver detalles y precios."}
                       </span>
@@ -728,6 +793,7 @@ export function CardDetailDialog({
                           <button
                             key={p.id}
                             type="button"
+                            disabled={isUpdatingVersion}
                             onClick={() => {
                               const originalIdx = details?.printings?.findIndex((item) => item.id === p.id) ?? -1;
                               handleSelectVersion(p, originalIdx >= 0 ? originalIdx : undefined);
@@ -1020,6 +1086,28 @@ export function CardDetailDialog({
                 {/* Collection & Decks Status Tab */}
                 <TabsContent value="collection" className="mt-3">
                   <div className="p-4 rounded-xl border border-border/80 bg-card/30 text-xs space-y-3">
+                    {!collectionCardId && onAddToCollection && (
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background/50 p-3">
+                        <span className="text-sm text-muted-foreground">Esta carta aún no está en tu colección.</span>
+                        <Button type="button" size="sm" onClick={() => void addToCollection()} disabled={isAddingToCollection}>
+                          {isAddingToCollection ? "Añadiendo…" : "Añadir a la colección"}
+                        </Button>
+                        {addToCollectionError && <p role="alert" className="w-full text-destructive">{addToCollectionError}</p>}
+                      </div>
+                    )}
+                    {collectionCardId && (
+                      <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-background/50 p-3">
+                        <label className="grid gap-1.5 text-xs font-medium text-foreground">
+                          Fecha de adquisición
+                          <input type="date" aria-label="Fecha de adquisición" value={acquisitionDate} onChange={(event) => setAcquisitionDate(event.target.value)} className="h-9 rounded-md border border-input bg-background px-2 font-normal" />
+                          {!acquisitionDate && <span className="font-normal text-amber-400">Sin fecha registrada</span>}
+                        </label>
+                        <Button type="button" size="sm" onClick={() => void saveAcquisitionDate()} disabled={!acquisitionDate || isSavingAcquisitionDate}>
+                          {isSavingAcquisitionDate ? "Guardando…" : "Guardar fecha"}
+                        </Button>
+                        {acquisitionDateError && <p role="alert" className="w-full text-destructive">{acquisitionDateError}</p>}
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       <div className="p-2.5 rounded-lg bg-background/60 border border-border">
                         <span className="text-muted-foreground text-[11px]">En tu Colección</span>

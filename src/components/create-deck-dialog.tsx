@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createDeck } from "@/actions/decks";
+import { CommanderSearchInput } from "@/components/commander-search-input";
 
 const MTG_FORMATS = [
   "Commander / EDH",
@@ -141,7 +142,7 @@ export function CreateDeckDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-primary">
             <Layers className="h-5 w-5 text-primary" />
@@ -190,11 +191,9 @@ export function CreateDeckDialog({
               <Crown className="w-3.5 h-3.5 text-primary" />
               Comandante {format.includes("Commander") ? "*" : "(Opcional)"}
             </label>
-            <Input
-              placeholder="ej: Aragorn, the Uniter / Atraxa, Praetors' Voice"
+            <CommanderSearchInput
               value={commander}
-              onChange={(e) => setCommander(e.target.value)}
-              className="border-border focus-visible:ring-ring"
+              onChange={setCommander}
               required={format.includes("Commander")}
             />
             <p className="text-[11px] text-muted-foreground">

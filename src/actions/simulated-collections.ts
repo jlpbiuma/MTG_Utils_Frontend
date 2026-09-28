@@ -4,6 +4,66 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "./auth";
 import { backendFetch } from "@/lib/api-client";
 
+export interface PurchaseGroup {
+  key: string;
+  quantity: number;
+  purchaseCost: number;
+  marketValue: number;
+  comparedCost: number;
+  comparedMarketValue: number;
+  savings: number | null;
+  comparedCopies: number;
+  missingPurchasePriceCopies: number;
+  missingMarketPriceCopies: number;
+}
+
+export interface PurchaseCard {
+  cardName: string;
+  quantity: number;
+  collectorNumber?: string | null;
+  setName?: string | null;
+  sourceUrl?: string | null;
+  condition?: string | null;
+  isFoil: boolean;
+  purchaseUnitPrice: number | null;
+  purchaseTotal: number | null;
+  marketUnitPrice: number | null;
+  marketTotal: number | null;
+  savings: number | null;
+  referenceKind: "exact" | "approximate" | "unavailable";
+  referenceSet?: string | null;
+  referenceCollectorNumber?: string | null;
+  inWants: boolean;
+  inDecks: boolean;
+  copiesOwned: number;
+  wantsCoveredCopies: number;
+}
+
+export interface PurchaseAnalysis {
+  currency: string;
+  totalPurchaseCost: number;
+  totalMarketValue: number;
+  comparedPurchaseCost: number;
+  comparedMarketValue: number;
+  savings: number | null;
+  savingsPercentage: number | null;
+  comparedCopies: number;
+  missingPurchasePriceCopies: number;
+  missingMarketPriceCopies: number;
+  approximatePriceCopies: number;
+  wantsRequestedCopies: number;
+  wantsCoveredCopies: number;
+  wantsCompletionPercentage: number;
+  wantsRequestedCards: number;
+  wantsCompletedCards: number;
+  wantsPurchaseCost: number;
+  restPurchaseCost: number;
+  wantsValueMinusTotalCost: number | null;
+  warnings: string[];
+  groups: PurchaseGroup[];
+  cards: PurchaseCard[];
+}
+
 export interface CandidateDeckInfo {
   deckId: string;
   deckName: string;
@@ -16,6 +76,8 @@ export interface CandidateDeckInfo {
 }
 
 export interface SimulatedCardAnalysisItem {
+  selectedPrintingId?: string | null;
+  inWants?: boolean;
   cardName: string;
   cardScryfallId?: string | null;
   quantity: number;
@@ -38,6 +100,7 @@ export interface SimulatedCardAnalysisItem {
 }
 
 export interface SimulatedCollectionSummary {
+  purchaseAnalysis?: PurchaseAnalysis | null;
   id: string;
   name: string;
   description?: string | null;
@@ -56,6 +119,9 @@ export interface SimulatedCollectionSummary {
 }
 
 export interface SimulatedCollectionAnalysisResponse {
+  printingOverrides?: Record<string, string>;
+  rawText?: string | null;
+  purchaseAnalysis?: PurchaseAnalysis | null;
   id?: string | null;
   name: string;
   description?: string | null;
@@ -77,14 +143,15 @@ export interface SimulatedCollectionAnalysisResponse {
 
 export async function analyzeRawSimulatedCollection(
   rawText: string,
-  provider: string = "cardmarket"
+  provider: string = "cardmarket",
+  printingOverrides: Record<string, string> = {}
 ): Promise<SimulatedCollectionAnalysisResponse> {
   const userId = await getCurrentUserId();
   return await backendFetch<SimulatedCollectionAnalysisResponse>(
     "/api/simulated-collections/analyze-raw",
     {
       method: "POST",
-      body: JSON.stringify({ rawText, provider }),
+      body: JSON.stringify({ rawText, provider, printingOverrides }),
       userId,
     }
   );
@@ -94,14 +161,15 @@ export async function createSimulatedCollection(
   name: string,
   description: string | undefined,
   rawText: string,
-  provider: string = "cardmarket"
+  provider: string = "cardmarket",
+  printingOverrides: Record<string, string> = {}
 ): Promise<SimulatedCollectionAnalysisResponse> {
   const userId = await getCurrentUserId();
   const res = await backendFetch<SimulatedCollectionAnalysisResponse>(
     `/api/simulated-collections?provider=${encodeURIComponent(provider)}`,
     {
       method: "POST",
-      body: JSON.stringify({ name, description, rawText }),
+      body: JSON.stringify({ name, description, rawText, printingOverrides }),
       userId,
     }
   );
@@ -137,4 +205,41 @@ export async function deleteSimulatedCollection(id: string): Promise<void> {
     userId,
   });
   revalidatePath("/collection");
+}
+
+
+export async function updateSimulatedCardVersion(
+  collectionId: string, cardName: string, printingId: string, provider = "cardmarket"
+): Promise<SimulatedCollectionAnalysisResponse> {
+  const userId = await getCurrentUserId();
+  const response = await backendFetch<SimulatedCollectionAnalysisResponse>(
+    `/api/simulated-collections/${encodeURIComponent(collectionId)}/card-version?provider=${encodeURIComponent(provider)}`,
+    { method: "PUT", body: JSON.stringify({ cardName, printingId }), userId }
+  );
+  revalidatePath("/collection/simulated");
+  return response;
+}
+
+export async function addCardToSimulatedCollection(
+  collectionId: string, cardName: string, quantity = 1, provider = "cardmarket",
+): Promise<SimulatedCollectionAnalysisResponse> {
+  const userId = await getCurrentUserId();
+  const response = await backendFetch<SimulatedCollectionAnalysisResponse>(
+    `/api/simulated-collections/${encodeURIComponent(collectionId)}/cards?provider=${encodeURIComponent(provider)}`,
+    { method: "POST", body: JSON.stringify({ cardName, quantity }), userId },
+  );
+  revalidatePath("/collection/simulated");
+  return response;
+}
+
+export async function removeCardFromSimulatedCollection(
+  collectionId: string, cardName: string, provider = "cardmarket",
+): Promise<SimulatedCollectionAnalysisResponse> {
+  const userId = await getCurrentUserId();
+  const response = await backendFetch<SimulatedCollectionAnalysisResponse>(
+    `/api/simulated-collections/${encodeURIComponent(collectionId)}/cards?provider=${encodeURIComponent(provider)}`,
+    { method: "DELETE", body: JSON.stringify({ cardName }), userId },
+  );
+  revalidatePath("/collection/simulated");
+  return response;
 }

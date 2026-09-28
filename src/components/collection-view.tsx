@@ -757,6 +757,7 @@ export function CollectionView({
 
       {selectedCardForDetail && (
         <CardDetailDialog
+          key={selectedCardForDetail.id}
           isOpen={Boolean(selectedCardForDetail)}
           onOpenChange={(open) => !open && setSelectedCardForDetail(null)}
           cardId={selectedCardForDetail.cardScryfallId}
@@ -767,6 +768,11 @@ export function CollectionView({
           quantity={selectedCardForDetail.quantity}
           ownedInCollection={selectedCardForDetail.quantity}
           collectionCardId={selectedCardForDetail.id}
+          acquiredAt={selectedCardForDetail.acquiredAt}
+          onAcquiredAtChange={(acquiredAt) => {
+            patchCardInView(selectedCardForDetail.id, { acquiredAt });
+            setSelectedCardForDetail((card) => card ? { ...card, acquiredAt } : card);
+          }}
           onVersionSelect={handleVersionSelect}
         />
       )}

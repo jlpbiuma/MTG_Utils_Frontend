@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function DecksPage({ searchParams }: {
   searchParams?: Promise<{ tab?: string }>;
-} = {}) {
+}) {
   const tab = (await searchParams)?.tab;
   const allDecks = await getDecksWithCompletion();
 
