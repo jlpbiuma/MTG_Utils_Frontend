@@ -14,6 +14,7 @@ export interface Expansion {
   completionPercentage: number;
   totalValueEur: number;
   ownedValueEur: number;
+  missingValueEur: number;
 }
 
 export interface ExpansionValuePoint { date: string; totalValue: number; ownedValue: number }
@@ -39,6 +40,8 @@ export interface ExpansionCard {
   manaCost?: string | null;
   isOwned: boolean;
   ownedQuantity: number;
+  ownedElsewhere?: boolean;
+  otherPrintings?: Array<{ setCode: string; collectorNumber: string; quantity: number }>;
   collectionCardId?: string | null;
   acquiredAt?: string | null;
   acquisitionTrendAbsoluteChange?: number | null;

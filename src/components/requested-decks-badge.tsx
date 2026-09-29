@@ -38,7 +38,10 @@ export function RequestedDecksBadge({
         title={`Ver mazo: ${deck.deckName} (${deck.completionPercentage ?? 0}% completado)`}
       >
         <Layers className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-        <span className="truncate max-w-[150px]">Se pide en mazo: {deck.deckName}</span>
+        <span className="truncate max-w-[180px]">
+          Se pide en mazo: {deck.deckName}
+          {deck.isSideboard ? " · Sideboard" : ""}
+        </span>
       </Link>
     );
   }
@@ -81,7 +84,10 @@ export function RequestedDecksBadge({
                         C
                       </span>
                     )}
-                    <span className="text-foreground min-w-0 truncate">{req.deckName}</span>
+                    <span className="text-foreground min-w-0 truncate">
+                      {req.deckName}
+                      {req.isSideboard ? " · Sideboard" : ""}
+                    </span>
                   </span>
                   <span className="shrink-0 font-mono text-xs text-muted-foreground">
                     {req.completionPercentage ?? 0}% · {req.quantity}{" "}

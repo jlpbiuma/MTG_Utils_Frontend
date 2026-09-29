@@ -42,6 +42,8 @@ import { RequestedDecksBadge } from "@/components/requested-decks-badge";
 import { filterWantCards } from "@/lib/want-filters";
 import { CARD_TYPE_GROUPS } from "@/lib/card-utils";
 import { COLOR_ORDER } from "@/lib/deck-colors";
+import { addOrIncrementCard, decrementCardInCollectionByName } from "@/actions/collection";
+import { runBulkAction } from "@/lib/bulk-actions";
 
 interface WantsViewProps {
   initialView?: WantQueryResponse | null;
@@ -54,6 +56,9 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedWantIds, setSelectedWantIds] = useState<string[]>([]);
+  const [isBulkBusy, setIsBulkBusy] = useState(false);
+  const [bulkActionMessage, setBulkActionMessage] = useState<string | null>(null);
   const [selectedCardForDetail, setSelectedCardForDetail] =
     useState<WantCardDTO | null>(null);
   const [isGroupedByType, setIsGroupedByType] = useState(
@@ -284,6 +289,45 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
     };
   }, [view, wantFilters, priceSummary]);
 
+  const visibleWantCards = useMemo(() => displayedView?.grouped
+    ? displayedView.sections.flatMap((section) => section.cards)
+    : displayedView?.cards || [], [displayedView]);
+
+  const handleBulkWants = async (action: "collection" | "delete") => {
+    const chosen = visibleWantCards.filter((card) => selectedWantIds.includes(card.id));
+    if (!chosen.length) return;
+    const label = action === "collection" ? "añadir a tu colección" : "eliminar de wants";
+    if (!confirm(`¿${action === "collection" ? "Mover" : "Eliminar"} ${chosen.length} ${chosen.length === 1 ? "carta" : "cartas"} para ${label}?`)) return;
+    setIsBulkBusy(true);
+    setBulkActionMessage(null);
+    const selectedIds = new Set(chosen.map((card) => card.id));
+    setView((current) => current ? {
+      ...current,
+      cards: (current.cards || []).filter((card) => !selectedIds.has(card.id)),
+      sections: (current.sections || []).map((section) => ({ ...section, cards: section.cards.filter((card) => !selectedIds.has(card.id)) })),
+    } : current);
+    try {
+      const failures = await runBulkAction(chosen, async (card) => {
+        if (action === "collection") {
+          await addOrIncrementCard({ cardScryfallId: card.cardScryfallId, cardName: card.cardName, quantity: card.quantity, setCode: card.setCode, collectorNumber: card.collectorNumber, manaCost: card.manaCost, typeLine: card.typeLine, imageUri: card.imageUri });
+          try {
+            await deleteWantCard(card.id);
+          } catch (error) {
+            for (let copy = 0; copy < card.quantity; copy += 1) {
+              await decrementCardInCollectionByName(card.cardName).catch(() => undefined);
+            }
+            throw error;
+          }
+          return;
+        }
+        await deleteWantCard(card.id);
+      });
+      setSelectedWantIds([]);
+      await loadView();
+      setBulkActionMessage(failures.length ? `${chosen.length - failures.length} completadas; ${failures.length} no se pudieron procesar y siguen en Wants.` : `${chosen.length} cartas procesadas.`);
+    } finally { setIsBulkBusy(false); }
+  };
+
   const editionOptions = useMemo(() => {
     const source = view?.grouped
       ? view.sections.flatMap((section) => section.cards)
@@ -336,9 +380,10 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
         <div className="space-y-3">
           {/* Header row: category + quantity badge + price badge */}
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-md bg-secondary border border-border text-muted-foreground truncate max-w-[130px]">
+          <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-md bg-secondary border border-border text-muted-foreground truncate max-w-[130px]">
               {card.typeLine ? card.typeLine.split("—")[0].trim() : "Carta"}
-            </span>
+          </span>
+          <input type="checkbox" checked={selectedWantIds.includes(card.id)} onChange={(event) => setSelectedWantIds((ids) => event.target.checked ? [...ids, card.id] : ids.filter((id) => id !== card.id))} aria-label={`Seleccionar ${card.cardName}`} title={`Seleccionar ${card.cardName}`} className="h-5 w-5 shrink-0 cursor-pointer accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
 
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="font-mono font-semibold text-xs px-2 py-0.5 rounded-full bg-secondary border border-border text-primary shrink-0">
@@ -468,6 +513,12 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
             triggerText="Añadir carta"
           />
         </div>
+      </div>
+
+      <div aria-live="polite" className="text-sm text-muted-foreground">{bulkActionMessage}</div>
+      <div className={`fixed bottom-5 left-1/2 z-50 flex w-[min(94vw,34rem)] -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur transition-all duration-200 motion-reduce:transition-none ${selectedWantIds.length ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-6 opacity-0"}`} aria-hidden={!selectedWantIds.length}>
+        <span className="text-sm font-medium tabular-nums">{selectedWantIds.length} seleccionadas</span>
+        <div className="flex items-center gap-2"><Button size="sm" disabled={isBulkBusy || !selectedWantIds.length} onClick={() => handleBulkWants("collection")}>Mover a colección</Button><Button size="sm" variant="destructive" disabled={isBulkBusy || !selectedWantIds.length} onClick={() => handleBulkWants("delete")}>Eliminar</Button></div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

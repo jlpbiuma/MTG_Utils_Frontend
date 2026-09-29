@@ -1,8 +1,9 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WantsView } from "@/components/wants-view";
 import * as wantActions from "@/actions/wants";
 import type { WantCardDTO, WantQueryResponse } from "@/actions/wants";
+import * as collectionActions from "@/actions/collection";
 
 vi.mock("@/actions/wants", () => ({
   getWantQuery: vi.fn(),
@@ -10,6 +11,7 @@ vi.mock("@/actions/wants", () => ({
   updateWantQuantity: vi.fn(),
   deleteWantCard: vi.fn(),
 }));
+vi.mock("@/actions/collection", () => ({ addOrIncrementCard: vi.fn() }));
 
 global.fetch = vi.fn().mockResolvedValue({
   ok: true,
@@ -61,10 +63,35 @@ function flatResponse(cards: WantCardDTO[] = sampleCards): WantQueryResponse {
 describe("WantsView listing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal("confirm", vi.fn(() => true));
     vi.mocked(wantActions.getWantQuery).mockResolvedValue(flatResponse());
   });
 
-  it("lists every want card by name", async () => {
+  it("moves selected wants optimistically and continues after a card fails", async () => {
+    const failedCard = sampleCards[0];
+    const successfulCard = sampleCards[1];
+    let rejectFirstAdd!: (error: Error) => void;
+    vi.mocked(collectionActions.addOrIncrementCard).mockReturnValueOnce(new Promise((_, reject) => { rejectFirstAdd = reject; }));
+    vi.mocked(wantActions.getWantQuery).mockResolvedValue(flatResponse([failedCard]));
+    render(<WantsView initialView={flatResponse()} initialStats={{ uniqueCards: 2, totalCards: 3 }} />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Faeburrow Elder" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Sol Ring" }));
+    const tray = screen.getByText("2 seleccionadas").parentElement!;
+    expect(tray).toHaveClass("fixed", "bottom-5");
+    fireEvent.click(screen.getByRole("button", { name: "Mover a colección" }));
+    expect(screen.queryByText("Sol Ring")).not.toBeInTheDocument();
+    await act(async () => rejectFirstAdd(new Error("collection unavailable")));
+
+    await waitFor(() => expect(screen.getByText(/1 completadas; 1 no se pudieron procesar/i)).toBeInTheDocument());
+    expect(wantActions.deleteWantCard).toHaveBeenCalledTimes(1);
+    expect(wantActions.deleteWantCard).toHaveBeenCalledWith(successfulCard.id);
+    expect(collectionActions.addOrIncrementCard).toHaveBeenCalledTimes(2);
+    expect(screen.getAllByText("Faeburrow Elder").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Sol Ring")).not.toBeInTheDocument();
+  });
+
+  it("lists every want card from the server-rendered payload", () => {
     render(
       <WantsView
         initialView={flatResponse()}
@@ -77,9 +104,6 @@ describe("WantsView listing", () => {
     expect(screen.getAllByText("Sol Ring").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/lista de wants está vacía/i)).not.toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(wantActions.getWantQuery).toHaveBeenCalled();
-    });
     expect(screen.getAllByText("Faeburrow Elder").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("Sol Ring").length).toBeGreaterThanOrEqual(1);
   });
@@ -131,6 +155,8 @@ describe("WantsView listing", () => {
         initialStats={{ uniqueCards: 2, totalCards: 3 }}
       />
     );
+
+    fireEvent.click(screen.getByRole("button", { name: /Por Categoría/i }));
 
     await waitFor(() => {
       expect(wantActions.getWantQuery).toHaveBeenCalled();

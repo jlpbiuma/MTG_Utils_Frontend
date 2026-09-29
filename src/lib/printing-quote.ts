@@ -42,6 +42,7 @@ export function injectPrintingQuote(
   quantity: number = 1,
   provider: PriceProvider = "cardmarket",
   previousScryfallId?: string | null,
+  options: { updateTotals?: boolean; ownedQuantity?: number } = {},
 ): PriceSummary | null {
   const quote = quoteFromPrinting(printing, cardName, quantity, provider);
   if (!quote) return summary;
@@ -56,11 +57,34 @@ export function injectPrintingQuote(
   };
 
   const quotes = { ...base.quotes };
+  const previousQuote = (previousScryfallId && base.quotes[previousScryfallId]) ||
+    base.quotes[normalizeCardName(cardName)];
+  let totals = {};
+  if (options.updateTotals && summary) {
+    const previousSubtotal = previousQuote?.subtotal ??
+      (previousQuote
+        ? previousQuote.unitPrice.trend * (previousQuote.quantity ?? quantity)
+        : 0);
+    const previousUnitPrice = previousQuote?.unitPrice.trend ?? 0;
+    const ownedQuantity = Math.max(0, Math.min(quantity, options.ownedQuantity ?? quantity));
+    const missingQuantity = Math.max(0, quantity - ownedQuantity);
+    const round = (value: number) => Math.round(value * 100) / 100;
+    const nextTotal = round(base.totalNetValue + quote.subtotal - previousSubtotal);
+    totals = {
+      totalNetValue: nextTotal,
+      ...(base.totalOwnedValue !== undefined
+        ? { totalOwnedValue: round(base.totalOwnedValue + (quote.unitPrice.trend - previousUnitPrice) * ownedQuantity) }
+        : {}),
+      ...(base.totalMissingValue !== undefined
+        ? { totalMissingValue: round(base.totalMissingValue + (quote.unitPrice.trend - previousUnitPrice) * missingQuantity) }
+        : {}),
+    };
+  }
   if (previousScryfallId && previousScryfallId !== printing.id) {
     delete quotes[previousScryfallId];
   }
   quotes[printing.id] = quote;
   quotes[normalizeCardName(cardName)] = quote;
 
-  return { ...base, quotes };
+  return { ...base, ...totals, quotes };
 }

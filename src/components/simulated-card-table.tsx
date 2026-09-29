@@ -33,13 +33,15 @@ export function SimulationPriceDetails({ card, symbol }: { card: SimulationListC
   </dl>;
 }
 
-export function SimulatedCardTable({ cards, symbol, onDetails, onDecks, onRemove, removingCardName }: {
+export function SimulatedCardTable({ cards, symbol, onDetails, onDecks, onRemove, removingCardName, selectedNames, onToggleSelect }: {
   cards: SimulationListCard[];
   symbol: string;
   onDetails: (card: SimulationListCard) => void;
   onDecks: (card: SimulationListCard) => void;
   onRemove?: (card: SimulationListCard) => void;
   removingCardName?: string | null;
+  selectedNames?: string[];
+  onToggleSelect?: (card: SimulationListCard, checked: boolean) => void;
 }) {
   return <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
     <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
@@ -51,6 +53,7 @@ export function SimulatedCardTable({ cards, symbol, onDetails, onDecks, onRemove
         {cards.map(card => <tr key={card.cardName} className="align-top transition-colors hover:bg-secondary/30">
           <th scope="row" className="min-w-72 px-4 py-3 font-normal">
             <div className="flex items-start gap-3">
+              {onToggleSelect && <input type="checkbox" checked={selectedNames?.includes(card.cardName) ?? false} onChange={(event) => onToggleSelect(card, event.target.checked)} aria-label={`Seleccionar ${card.cardName}`} className="mt-2 h-4 w-4" />}
               <button type="button" onClick={() => onDetails(card)} aria-label={`Ver detalles de ${card.cardName}`} className="min-h-11 min-w-11 shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 {card.imageUri ? <CardImage src={card.imageUri} alt="" width={40} height={56} sizes="40px" className="h-14 w-10 rounded object-cover" /> : <span className="text-xs text-muted-foreground">MTG</span>}
               </button>

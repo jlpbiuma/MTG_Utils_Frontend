@@ -3,9 +3,9 @@ import { filterExpansions, getExpansionProgress, organizeExpansionCards, summari
 import type { Expansion, ExpansionCard } from "@/actions/expansions";
 
 const sets: Expansion[] = [
-  { code: "tst", name: "Test Expansion", setType: "expansion", cardCount: 4, ownedCount: 2, completionPercentage: 50, totalValueEur: 0, ownedValueEur: 0 },
-  { code: "plst", name: "The List", setType: "masters", cardCount: 500, ownedCount: 0, completionPercentage: 0, totalValueEur: 0, ownedValueEur: 0 },
-  { code: "promo", name: "Promo Pack", setType: "promo", cardCount: 10, ownedCount: 0, completionPercentage: 0, totalValueEur: 0, ownedValueEur: 0 },
+  { code: "tst", name: "Test Expansion", setType: "expansion", cardCount: 4, ownedCount: 2, completionPercentage: 50, totalValueEur: 0, ownedValueEur: 0, missingValueEur: 0 },
+  { code: "plst", name: "The List", setType: "masters", cardCount: 500, ownedCount: 0, completionPercentage: 0, totalValueEur: 0, ownedValueEur: 0, missingValueEur: 0 },
+  { code: "promo", name: "Promo Pack", setType: "promo", cardCount: 10, ownedCount: 0, completionPercentage: 0, totalValueEur: 0, ownedValueEur: 0, missingValueEur: 0 },
 ];
 const cards: ExpansionCard[] = [
   { id: "1", catalogId: "c1", setCode: "tst", collectorNumber: "2", cardName: "Beta", rarity: "rare", typeLine: "Creature — Human", priceCardmarketTrend: 5, priceTrendAbsoluteChange: 2, priceTrendPercentageChange: 10, isOwned: true, ownedQuantity: 2 },
@@ -22,6 +22,13 @@ describe("expansion catalog helpers", () => {
   it("counts each listed printing and guards empty expansions", () => {
     expect(getExpansionProgress(cards)).toEqual({ owned: 2, total: 3, percentage: 67 });
     expect(getExpansionProgress([])).toEqual({ owned: 0, total: 0, percentage: 0 });
+  });
+
+  it("counts a missing special-art printing separately from its owned base printing", () => {
+    expect(getExpansionProgress([
+      { ...cards[0], id: "base-art", catalogId: "same-card", isOwned: true },
+      { ...cards[0], id: "special-art", catalogId: "same-card", isOwned: false },
+    ])).toEqual({ owned: 1, total: 2, percentage: 50 });
   });
 
   it("filters, searches, sorts and groups cards without changing the source list", () => {

@@ -56,6 +56,8 @@ import {
 
 import { simulationListCards, matchesSimulationFilter, sortSimulationCards, type SimulationFilter, type SimulationSort } from "@/lib/simulated-card-list";
 import { SimulatedCardTable, SimulationMembershipTags, SimulationPriceDetails } from "@/components/simulated-card-table";
+import { addOrIncrementCard, decrementCardInCollectionByName } from "@/actions/collection";
+import { runBulkAction } from "@/lib/bulk-actions";
 
 interface SimulatedCollectionsTabProps {
   provider?: string;
@@ -98,6 +100,9 @@ export function SimulatedCollectionsTab({
   const [selectedError, setSelectedError] = useState<string | null>(null);
   const [cardMutationError, setCardMutationError] = useState<string | null>(null);
   const [removingCardName, setRemovingCardName] = useState<string | null>(null);
+  const [selectedSimulationNames, setSelectedSimulationNames] = useState<string[]>([]);
+  const [isBulkBusy, setIsBulkBusy] = useState(false);
+  const [bulkActionMessage, setBulkActionMessage] = useState<string | null>(null);
 
   // Detail dialog & candidate decks modal state
   const [cardForDetail, setCardForDetail] = useState<SimulatedCardAnalysisItem | null>(null);
@@ -205,6 +210,46 @@ export function SimulatedCollectionsTab({
     }
   };
 
+  const handleBulkSimulation = async (action: "collection" | "delete") => {
+    if (!selectedAnalysis || !selectedCollectionId) return;
+    const chosen = listCards.filter((card) => selectedSimulationNames.includes(card.cardName));
+    if (!chosen.length || !confirm(`¿${action === "collection" ? "Mover" : "Eliminar"} ${chosen.length} ${chosen.length === 1 ? "carta" : "cartas"} ${action === "collection" ? "a tu colección física" : "de esta simulación"}?`)) return;
+    const unresolved = action === "collection" ? chosen.find((card) => !card.cardScryfallId) : undefined;
+    if (unresolved) {
+      setCardMutationError(`No se pudo resolver la impresión de ${unresolved.cardName}.`);
+      return;
+    }
+    setIsBulkBusy(true);
+    setCardMutationError(null);
+    setBulkActionMessage(null);
+    const chosenNames = new Set(chosen.map((card) => card.cardName));
+    setSelectedAnalysis((current) => current ? { ...current, cards: current.cards.filter((card) => !chosenNames.has(card.cardName)) } : current);
+    try {
+      const failures = await runBulkAction(chosen, async (card) => {
+        if (action === "collection") {
+          await addOrIncrementCard({ cardScryfallId: card.cardScryfallId!, cardName: card.cardName, quantity: card.quantity, setCode: card.setCode, collectorNumber: card.collectorNumber, manaCost: card.manaCost, typeLine: card.typeLine, imageUri: card.imageUri });
+          try {
+            await removeCardFromSimulatedCollection(selectedCollectionId, card.cardName, provider);
+          } catch (error) {
+            for (let copy = 0; copy < card.quantity; copy += 1) {
+              await decrementCardInCollectionByName(card.cardName).catch(() => undefined);
+            }
+            throw error;
+          }
+          return;
+        }
+        await removeCardFromSimulatedCollection(selectedCollectionId, card.cardName, provider);
+      });
+      setSelectedSimulationNames([]);
+      setSelectedAnalysis(await getSimulatedCollection(selectedCollectionId, provider));
+      setBulkActionMessage(failures.length ? `${chosen.length - failures.length} completadas; ${failures.length} no se pudieron procesar y siguen en la simulación.` : `${chosen.length} cartas procesadas.`);
+      void fetchCollections();
+    } catch (error) {
+      setCardMutationError(error instanceof Error ? error.message : "No se pudo completar la acción.");
+      setSelectedAnalysis(await getSimulatedCollection(selectedCollectionId, provider));
+    } finally { setIsBulkBusy(false); }
+  };
+
   const handleOpenNew = () => {
     setIsDialogOpen(true);
   };
@@ -217,6 +262,7 @@ export function SimulatedCollectionsTab({
     setSortOption("price-desc");
     setActiveViewTab("cards");
     setCardMutationError(null);
+    setSelectedSimulationNames([]);
   };
 
   const handleDeleteFromList = async (e: React.MouseEvent, id: string) => {
@@ -581,6 +627,7 @@ export function SimulatedCollectionsTab({
                   </div>
 
                   {cardMutationError && <p role="alert" className="text-sm text-destructive">{cardMutationError}</p>}
+                  {bulkActionMessage && <p role="status" className="text-sm text-muted-foreground">{bulkActionMessage}</p>}
 
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-xs text-muted-foreground">Unitario = mercado por copia · Compra y diferencial = total de las copias. Diferencial positivo = ahorro. Sin datos al final; varias versiones usan la media por copia.</p>
@@ -674,7 +721,7 @@ export function SimulatedCollectionsTab({
                     </p>
                   </div>
                 ) : cardView === "list" ? (
-                  <SimulatedCardTable cards={paginatedCards} symbol={selectedAnalysis.currencySymbol} onDetails={setCardForDetail} onDecks={card => setCandidateDecksModal({ cardName: card.cardName, decks: card.candidateDecks })} onRemove={handleRemoveSimulationCard} removingCardName={removingCardName} />
+                  <SimulatedCardTable cards={paginatedCards} symbol={selectedAnalysis.currencySymbol} onDetails={setCardForDetail} onDecks={card => setCandidateDecksModal({ cardName: card.cardName, decks: card.candidateDecks })} onRemove={handleRemoveSimulationCard} removingCardName={removingCardName} selectedNames={selectedSimulationNames} onToggleSelect={(card, checked) => setSelectedSimulationNames(names => checked ? [...names, card.cardName] : names.filter(name => name !== card.cardName))} />
                 ) : (
                   <div aria-label="Cuadrícula de cartas simuladas" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {paginatedCards.map((card) => {
@@ -691,6 +738,7 @@ export function SimulatedCollectionsTab({
                           <div>
                             {/* PARTE SUPERIOR SOBRE LA CARTA: Nombre (izq) y Tipo + Maná (der) */}
                             <div className="flex items-center justify-between gap-2 mb-3 min-h-[28px]">
+                              <input type="checkbox" checked={selectedSimulationNames.includes(card.cardName)} onChange={(event) => setSelectedSimulationNames(names => event.target.checked ? [...names, card.cardName] : names.filter(name => name !== card.cardName))} aria-label={`Seleccionar ${card.cardName}`} title={`Seleccionar ${card.cardName}`} className="h-5 w-5 shrink-0 cursor-pointer accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
                               {/* Left: Card Name with Hover Preview */}
                               <div
                                 className="flex-1 min-w-0"
@@ -1080,6 +1128,11 @@ export function SimulatedCollectionsTab({
             )}
           </>
         )}
+
+        <div aria-live="polite" className={`fixed bottom-5 left-1/2 z-50 flex w-[min(94vw,34rem)] -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur transition-all duration-200 motion-reduce:transition-none ${activeViewTab === "cards" && selectedSimulationNames.length ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-6 opacity-0"}`} aria-hidden={activeViewTab !== "cards" || !selectedSimulationNames.length}>
+          <span className="text-sm font-medium tabular-nums">{selectedSimulationNames.length} seleccionadas</span>
+          <div className="flex items-center gap-2"><Button size="sm" disabled={isBulkBusy || !selectedSimulationNames.length} onClick={() => handleBulkSimulation("collection")}>Mover a colección</Button><Button size="sm" variant="destructive" disabled={isBulkBusy || !selectedSimulationNames.length} onClick={() => handleBulkSimulation("delete")}>Eliminar</Button></div>
+        </div>
 
         {/* Card Detail Dialog */}
         {cardForDetail && (

@@ -10,11 +10,25 @@ const decks = [
     completionPercentage: 42,
     colors: ["W", "U", "B", "G"],
   },
-  { deckId: "d2", deckName: "Tidus", quantity: 1, completionPercentage: 80 },
+  { deckId: "d2", deckName: "Tidus", quantity: 1, completionPercentage: 80, isSideboard: true },
   { deckId: "d3", deckName: "Y'shtola", quantity: 2, completionPercentage: 15.5 },
 ];
 
 describe("RequestedDecksBadge", () => {
+  it("marks a requesting deck when the card is in its sideboard", () => {
+    render(
+      <RequestedDecksBadge
+        cardName="Sol Ring"
+        decks={[{ deckId: "d2", deckName: "Tidus", quantity: 1, isSideboard: true }]}
+      />
+    );
+
+    expect(screen.getByRole("link", { name: /Tidus · Sideboard/i })).toHaveAttribute(
+      "href",
+      "/decks/d2"
+    );
+  });
+
   it("shows only the count until the label is clicked", () => {
     render(
       <RequestedDecksBadge cardName="Sol Ring" decks={decks} count={36} />
@@ -28,7 +42,7 @@ describe("RequestedDecksBadge", () => {
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("Atraxa")).toBeInTheDocument();
-    expect(screen.getByText("Tidus")).toBeInTheDocument();
+    expect(screen.getByText("Tidus · Sideboard")).toBeInTheDocument();
     expect(screen.getByText("Y'shtola")).toBeInTheDocument();
     expect(screen.getByText(/42% · 1 copia/i)).toBeInTheDocument();
     expect(screen.getByText(/15\.5% · 2 copias/i)).toBeInTheDocument();

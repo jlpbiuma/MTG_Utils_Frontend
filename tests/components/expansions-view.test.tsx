@@ -12,26 +12,27 @@ vi.mock("@/components/card-detail-dialog", () => ({
 describe("ExpansionsView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getExpansions.mockResolvedValue([{ code: "tst", name: "Test Expansion", setType: "expansion", cardCount: 3, ownedCount: 1, completionPercentage: 33, totalValueEur: 40, ownedValueEur: 12.5, iconSvgUri: "https://images.test/images/insecure/rs:fill:64:64:0/tst.webp" }]);
+    getExpansions.mockResolvedValue([{ code: "tst", name: "Test Expansion", setType: "expansion", cardCount: 2, ownedCount: 1, completionPercentage: 50, totalValueEur: 40, ownedValueEur: 12.5, missingValueEur: 27.5, iconSvgUri: "https://images.test/images/insecure/rs:fill:64:64:0/tst.webp" }]);
     getExpansionValueHistory.mockResolvedValue({ setCode: "tst", windowDays: 7, currency: "EUR", currencySymbol: "€", currentTotalValue: 40, currentOwnedValue: 12.5, points: [{ date: "2026-09-20", totalValue: 38, ownedValue: 10 }, { date: "2026-09-27", totalValue: 40, ownedValue: 12.5 }] });
     setExpansionMissingAcquisitionDates.mockResolvedValue({ updatedCount: 1 });
     addOrIncrementCard.mockResolvedValue({ id: "owned-2" });
     getExpansionCards.mockResolvedValue([
       { id: "1", catalogId: "c1", setCode: "tst", collectorNumber: "1", cardName: "Owned Card", rarity: "rare", priceTrendAbsoluteChange: 2, priceTrendPercentageChange: 10, isOwned: true, ownedQuantity: 1 },
-      { id: "2", catalogId: "c2", setCode: "tst", collectorNumber: "2", cardName: "Missing Card", rarity: "common", priceTrendAbsoluteChange: -1, priceTrendPercentageChange: -20, isOwned: false, ownedQuantity: 0 },
+      { id: "2", catalogId: "c2", setCode: "tst", collectorNumber: "2", cardName: "Missing Card", rarity: "common", priceTrendAbsoluteChange: -1, priceTrendPercentageChange: -20, isOwned: false, ownedQuantity: 0, ownedElsewhere: true, otherPrintings: [{ setCode: "lotr", collectorNumber: "221", quantity: 1 }, { setCode: "mcu", collectorNumber: "099", quantity: 2 }] },
     ]);
   });
 
   it("shows collection progress and opens an expansion with ownership filters", async () => {
     render(<ExpansionsView />);
     expect(await screen.findByText("Test Expansion")).toBeTruthy();
-    expect(screen.getByText("33%")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Test Expansion.*Expansión.*40,00.*En colección.*12,50/ })).toBeTruthy();
+    expect(screen.getByText("50%")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Test Expansion.*Total.*40,00.*Faltante.*27,50.*En propiedad.*12,50/ })).toBeTruthy();
     expect(document.querySelector('img[src*="tst.webp"]')?.getAttribute("src")).toContain("images.test");
 
     fireEvent.click(screen.getByRole("button", { name: /Test Expansion/ }));
     expect(await screen.findByText("Owned Card")).toBeTruthy();
     expect(screen.getByText("1 / 2 · 50%")).toBeTruthy();
+    expect(screen.getByText("Otra versión en tu colección").getAttribute("title")).toContain("LOTR #221 ×1, MCU #099 ×2");
     const chart = await screen.findByRole("img", { name: "Gráfica histórica del valor total y del valor en propiedad" });
     expect(chart.querySelector('path[stroke="#f43f5e"]')).toBeTruthy();
     expect(chart.querySelector('path[stroke="#10b981"]')).toBeTruthy();
@@ -68,6 +69,22 @@ describe("ExpansionsView", () => {
     fireEvent.change(direction, { target: { value: "desc" } });
     const cardButtons = await screen.findAllByRole("button", { name: /Ver detalle de/ });
     expect(cardButtons[0].getAttribute("aria-label")).toBe("Ver detalle de Owned Card");
+  });
+
+  it("keeps index and detail completion aligned when only the special-art printing is missing", async () => {
+    getExpansions.mockResolvedValueOnce([{
+      code: "rfc", name: "Reality Fracture Commander", setType: "commander", cardCount: 2,
+      ownedCount: 1, completionPercentage: 50, totalValueEur: 12, ownedValueEur: 7, missingValueEur: 5,
+    }]);
+    getExpansionCards.mockResolvedValueOnce([
+      { id: "rfc-base", catalogId: "rfc-card", setCode: "rfc", collectorNumber: "101", cardName: "Reality Fracture Hero", isOwned: true, ownedQuantity: 1 },
+      { id: "rfc-special-art", catalogId: "rfc-card", setCode: "rfc", collectorNumber: "101★", cardName: "Reality Fracture Hero", isOwned: false, ownedQuantity: 0, ownedElsewhere: true, otherPrintings: [{ setCode: "rfc", collectorNumber: "101", quantity: 1 }] },
+    ]);
+    render(<ExpansionsView />);
+    expect(await screen.findByText("50%")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Reality Fracture Commander/ }));
+    expect(await screen.findByText("1 / 2 · 50%")).toBeInTheDocument();
+    expect(screen.getByText("Otra versión en tu colección").getAttribute("title")).toContain("RFC #101 ×1");
   });
 
   it("applies one acquisition checkpoint to every owned card missing a date in the expansion", async () => {

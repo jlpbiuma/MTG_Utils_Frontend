@@ -95,6 +95,7 @@ export interface DeckRequirement {
   quantity: number;
   completionPercentage?: number;
   colors?: string[];
+  isSideboard?: boolean;
 }
 
 export interface DeckCardWithOwnership {

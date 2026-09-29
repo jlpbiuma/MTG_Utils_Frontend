@@ -530,7 +530,16 @@ export function EdhrecRecommendations({
   // Helper to get all decks where a card is present, including current deck
   const getCardDecks = useCallback(
     (card: EdhrecCardRecommendation): DeckRequirement[] => {
-      const existing = [...(card.requestedInDecks || [])];
+      const isSideboard = deckCards.some(
+        (deckCard) =>
+          normalizeCardName(deckCard.cardName) === card.normalizedName &&
+          deckCard.isSideboard
+      );
+      const existing = (card.requestedInDecks || []).map((deck) =>
+        deck.deckId === deckId
+          ? { ...deck, isSideboard }
+          : deck
+      );
       const isLocallyAdded = !!addedCardsMap[card.normalizedName];
       const isServerInDeck = card.isInDeck;
 
@@ -539,11 +548,12 @@ export function EdhrecRecommendations({
           deckId,
           deckName: deckName || "Este mazo",
           quantity: 1,
+          isSideboard,
         });
       }
       return existing;
     },
-    [addedCardsMap, deckId, deckName]
+    [addedCardsMap, deckCards, deckId, deckName]
   );
 
   // Price lookup map for instant sorting by price (CardPriceQuote uses unitPrice.trend or subtotal)
@@ -882,6 +892,7 @@ export function EdhrecRecommendations({
                               En este mazo:{" "}
                               <strong className="text-emerald-300 font-semibold">
                                 {cardDecks[0].deckName}
+                                {cardDecks[0].isSideboard && " · Sideboard"}
                               </strong>
                             </span>
                           </span>
@@ -896,6 +907,7 @@ export function EdhrecRecommendations({
                               En mazo:{" "}
                               <strong className="text-indigo-200 font-semibold group-hover/deck:underline">
                                 {cardDecks[0].deckName}
+                                {cardDecks[0].isSideboard && " · Sideboard"}
                               </strong>
                             </span>
                           </Link>
@@ -915,6 +927,7 @@ export function EdhrecRecommendations({
                             En {cardDecks.length} mazos:{" "}
                             <strong className="text-indigo-200 font-semibold">
                               {cardDecks[0].deckName} (+{cardDecks.length - 1})
+                              {cardDecks[0].isSideboard && " · Sideboard"}
                             </strong>
                           </span>
                         </button>
@@ -927,7 +940,8 @@ export function EdhrecRecommendations({
                           <span className="truncate">
                             Se pide en:{" "}
                             <strong className="text-amber-200 font-semibold">
-                              {cardDecks[0].deckName}
+                                {cardDecks[0].deckName}
+                                {cardDecks[0].isSideboard && " · Sideboard"}
                             </strong>
                           </span>
                         </span>
@@ -945,7 +959,8 @@ export function EdhrecRecommendations({
                           <span className="truncate">
                             Se pide en {cardDecks.length} mazos:{" "}
                             <strong className="text-amber-200 font-semibold">
-                              {cardDecks[0].deckName} (+{cardDecks.length - 1})
+                                {cardDecks[0].deckName} (+{cardDecks.length - 1})
+                                {cardDecks[0].isSideboard && " · Sideboard"}
                             </strong>
                           </span>
                         </button>
@@ -1711,7 +1726,7 @@ export function EdhrecRecommendations({
                           href={`/decks/${deck.deckId}`}
                           className="text-sm font-semibold text-foreground hover:text-primary transition-colors underline-offset-2 hover:underline truncate"
                         >
-                          {deck.deckName}
+                          {deck.deckName}{deck.isSideboard ? " · Sideboard" : ""}
                         </Link>
                         {isCurrentDeck && (
                           <Badge

@@ -31,6 +31,8 @@ import {
   ArchiveRestore,
   AlertTriangle,
   ArrowRightLeft,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +92,7 @@ import {
   groupCardsByType,
   isBasicLand,
 } from "@/lib/card-utils";
+import { copyText } from "@/lib/copy-text";
 
 interface DeckDetailViewProps {
   initialDeck: DeckDetailWithStats;
@@ -277,6 +280,10 @@ export function DeckDetailView({
         quantity,
         priceProvider,
         previousScryfallId,
+        {
+          updateTotals: true,
+          ownedQuantity: Math.max(0, quantity - (selectedCardForDetail?.missingCount ?? 0)),
+        },
       ),
     );
 
@@ -432,6 +439,7 @@ export function DeckDetailView({
     },
   );
   const [isLoadingPrices, setIsLoadingPrices] = useState(false);
+  const [deckListCopied, setDeckListCopied] = useState(false);
 
   const loadPrices = useCallback(
     async (providerToLoad = priceProvider, bypassCache = false) => {
@@ -646,6 +654,26 @@ export function DeckDetailView({
     sortDirection,
     priceSummary,
   );
+  const handleCopyDeckList = async () => {
+    const quantitiesByName = new Map<string, number>();
+    for (const card of cards) {
+      const name = card.cardName.trim();
+      if (!name) continue;
+      quantitiesByName.set(name, (quantitiesByName.get(name) ?? 0) + card.quantity);
+    }
+    const list = Array.from(quantitiesByName, ([name, quantity]) => `${quantity} ${name}`)
+      .sort((a, b) => a.localeCompare(b, "es"))
+      .join("\n");
+    if (!list) return;
+
+    try {
+      await copyText(list);
+      setDeckListCopied(true);
+      window.setTimeout(() => setDeckListCopied(false), 2000);
+    } catch {
+      alert("No se pudo copiar la lista al portapapeles.");
+    }
+  };
   const groupedSections = groupCardsByType(sortedCards, priceSummary, {
     excludeBasicLands: false,
   });
@@ -1635,6 +1663,21 @@ export function DeckDetailView({
                 </button>
               )}
             </div>
+
+            {!readOnly && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCopyDeckList}
+                disabled={cards.length === 0}
+                className="h-9 gap-2"
+                aria-label="Copiar lista completa del mazo al portapapeles"
+              >
+                {deckListCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {deckListCopied ? "Copiado" : "Copiar lista"}
+              </Button>
+            )}
 
             {/* Filters and Add Card */}
             <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">

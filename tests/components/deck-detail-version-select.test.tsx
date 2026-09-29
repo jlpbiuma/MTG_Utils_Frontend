@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { DeckDetailView } from "@/components/deck-detail-view";
 import { DeckDetailWithStats } from "@/lib/schemas";
 import * as scryfallActions from "@/actions/scryfall";
@@ -42,6 +42,10 @@ vi.mock("@/actions/wants", () => ({
 }));
 
 describe("DeckDetailView Version Selection & Stability", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   const terraPrintings: scryfallActions.CardPrintingDetail[] = [
     {
       id: "terra-v1",
@@ -164,5 +168,56 @@ describe("DeckDetailView Version Selection & Stability", () => {
 
     // The feedback badge shows it's selected as standard
     expect(screen.getByText(/seleccionada como estándar del mazo/i)).toBeInTheDocument();
+  });
+
+  it("updates the deck price optimistically while the selected printing is being saved", async () => {
+    vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(terraDetails);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+
+    let finishSave!: (result: { success: boolean }) => void;
+    vi.mocked(deckActions.updateDeckCardVersion).mockImplementation(
+      () => new Promise((resolve) => { finishSave = resolve; })
+    );
+
+    const oldQuote = {
+      cardName: "Terra, Herald of Hope",
+      scryfallId: "terra-v1",
+      provider: "cardmarket" as const,
+      currency: "EUR" as const,
+      currencySymbol: "€",
+      unitPrice: { trend: 15, min: 15, max: 15 },
+      quantity: 1,
+      subtotal: 15,
+      lastUpdated: "2026-01-01T00:00:00Z",
+    };
+    const deckWithPrices: DeckDetailWithStats = {
+      ...initialDeck,
+      priceSummary: {
+        provider: "cardmarket",
+        currency: "EUR",
+        currencySymbol: "€",
+        totalCards: 1,
+        totalNetValue: 15,
+        totalOwnedValue: 15,
+        totalMissingValue: 0,
+        quotes: {
+          "terra-v1": oldQuote,
+          "terra, herald of hope": oldQuote,
+        },
+      },
+    };
+
+    render(<DeckDetailView initialDeck={deckWithPrices} />);
+    expect(await screen.findAllByText("15.00")).not.toHaveLength(0);
+    fireEvent.click(screen.getAllByText("Terra, Herald of Hope")[0]);
+    const showcaseButton = await screen.findByText("Final Fantasy VI Showcase");
+    fireEvent.click(showcaseButton.closest("button")!);
+
+    await waitFor(() => expect(deckActions.updateDeckCardVersion).toHaveBeenCalled());
+    expect(await screen.findAllByText("45.00")).not.toHaveLength(0);
+    expect(screen.queryByText(/seleccionada como estándar del mazo/i)).not.toBeInTheDocument();
+
+    finishSave({ success: true });
+    expect(await screen.findByText(/seleccionada como estándar del mazo/i)).toBeInTheDocument();
   });
 });

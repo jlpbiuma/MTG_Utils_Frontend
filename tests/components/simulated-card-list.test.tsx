@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { SimulatedCollectionsTab } from "@/components/simulated-collections-tab";
 import * as actions from "@/actions/simulated-collections";
@@ -7,7 +7,9 @@ import fixture from "../fixtures/cardmarket/list-3-analysis.json";
 vi.mock("@/actions/simulated-collections", () => ({
   getSimulatedCollections: vi.fn(), getSimulatedCollection: vi.fn(),
   analyzeRawSimulatedCollection: vi.fn(), createSimulatedCollection: vi.fn(), deleteSimulatedCollection: vi.fn(),
+  removeCardFromSimulatedCollection: vi.fn(), addCardToSimulatedCollection: vi.fn(), updateSimulatedCardVersion: vi.fn(),
 }));
+vi.mock("@/actions/collection", () => ({ addOrIncrementCard: vi.fn() }));
 vi.mock("@/components/card-detail-dialog", () => ({ CardDetailDialog: ({ cardName }: { cardName: string }) => <div role="dialog" aria-label={`Detalles: ${cardName}`} /> }));
 
 const response = fixture as actions.SimulatedCollectionAnalysisResponse;
@@ -28,6 +30,7 @@ const analysis: actions.SimulatedCollectionAnalysisResponse = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubGlobal("confirm", vi.fn(() => true));
   vi.mocked(actions.getSimulatedCollections).mockResolvedValue([{ ...analysis, id: "saved", createdAt: "2026-09-26", updatedAt: "2026-09-26" }]);
   vi.mocked(actions.getSimulatedCollection).mockResolvedValue(analysis);
 });
@@ -79,4 +82,31 @@ it("filters by membership including owned cards in decks, and retains filters/se
   fireEvent.click(screen.getByRole("button", { name: "Listado" }));
   expect(rowNames(screen.getByRole("table", { name: "Cartas de la colección simulada" }))).toEqual(["Beta"]);
   expect(screen.getByRole("combobox", { name: "Ordenar cartas simuladas" })).toHaveValue("purchase-asc");
+});
+
+it("deletes selected cards optimistically and continues after one card fails", async () => {
+  vi.mocked(actions.getSimulatedCollection)
+    .mockResolvedValueOnce(analysis)
+    .mockResolvedValueOnce({ ...analysis, cards: [analysis.cards[1]] });
+  let rejectFirstRemove!: (error: Error) => void;
+  vi.mocked(actions.removeCardFromSimulatedCollection)
+    .mockReturnValueOnce(new Promise((_, reject) => { rejectFirstRemove = reject; }))
+    .mockResolvedValueOnce(analysis);
+  render(<SimulatedCollectionsTab />);
+  fireEvent.click(await screen.findByText("Mi carrito"));
+
+  fireEvent.click(await screen.findByRole("checkbox", { name: "Seleccionar Beta" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Gamma" }));
+  expect(screen.getByText("2 seleccionadas").parentElement).toHaveClass("fixed", "bottom-5");
+  fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+  expect(screen.queryByRole("heading", { name: "Beta" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Gamma" })).not.toBeInTheDocument();
+  await act(async () => rejectFirstRemove(new Error("not removable")));
+
+  expect(await screen.findByRole("status")).toHaveTextContent("1 completadas; 1 no se pudieron procesar");
+  expect(actions.removeCardFromSimulatedCollection).toHaveBeenCalledTimes(2);
+  expect(actions.removeCardFromSimulatedCollection).toHaveBeenNthCalledWith(1, "saved", "Beta", "cardmarket");
+  expect(actions.removeCardFromSimulatedCollection).toHaveBeenNthCalledWith(2, "saved", "Gamma", "cardmarket");
+  expect(screen.getByRole("heading", { name: "Beta" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Gamma" })).not.toBeInTheDocument();
 });
