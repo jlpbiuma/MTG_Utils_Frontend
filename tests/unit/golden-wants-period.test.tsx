@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import GoldenWantsPage from "@/app/priorities/golden-wants/page";
+import GoldenWantsPage from "@/app/buy/budget/page";
 import { getPriorities } from "@/actions/priorities";
 
 vi.mock("@/actions/priorities", () => ({ getPriorities: vi.fn() }));

@@ -6,7 +6,7 @@ import * as actions from "@/actions/simulated-collections";
 import fixture from "../fixtures/cardmarket/list-3-analysis.json";
 import type { CardPrintingDetail } from "@/actions/scryfall";
 
-vi.mock("@/actions/simulated-collections", () => ({ getSimulatedCollections: vi.fn(), getSimulatedCollection: vi.fn(), analyzeRawSimulatedCollection: vi.fn(), createSimulatedCollection: vi.fn(), deleteSimulatedCollection: vi.fn(), updateSimulatedCardVersion: vi.fn() }));
+vi.mock("@/actions/simulated-collections", () => ({ getDiscoveredOffers: async () => [], getSimulatedCollections: vi.fn(), getSimulatedCollection: vi.fn(), analyzeRawSimulatedCollection: vi.fn(), createSimulatedCollection: vi.fn(), deleteSimulatedCollection: vi.fn(), applySimulatedPrinting: vi.fn(), updateSimulatedCardVersion: vi.fn() }));
 vi.mock("@/components/card-detail-dialog", async () => {
   const { Dialog, DialogContent, DialogTitle } = await import("@/components/ui/dialog");
   return { CardDetailDialog: ({ onVersionSelect, cardName, onOpenChange }: { onVersionSelect: (version: CardPrintingDetail) => Promise<void>; cardName: string; onOpenChange: (open: boolean) => void }) =>
@@ -15,7 +15,7 @@ vi.mock("@/components/card-detail-dialog", async () => {
       <button onClick={() => onOpenChange(false)}>Cerrar detalle</button>
     </DialogContent></Dialog> };
 });
-const original = fixture as actions.SimulatedCollectionAnalysisResponse;
+const original: actions.SimulatedCollectionAnalysisResponse = { ...fixture as actions.SimulatedCollectionAnalysisResponse, origin: "cardmarket" };
 const name = original.cards[0].cardName;
 const changed: actions.SimulatedCollectionAnalysisResponse = {
   ...original, id: "saved", printingOverrides: { [name.toLowerCase()]: "chosen" }, totalEconomicValue: 20,
@@ -29,6 +29,7 @@ beforeEach(() => {
   vi.mocked(actions.getSimulatedCollections).mockResolvedValue([{ ...original, id: "saved", createdAt: "2026-09-26", updatedAt: "2026-09-26" }]);
   vi.mocked(actions.getSimulatedCollection).mockResolvedValue({ ...original, id: "saved" });
   vi.mocked(actions.updateSimulatedCardVersion).mockResolvedValue(changed);
+  vi.mocked(actions.applySimulatedPrinting).mockResolvedValue({ ok: true, data: changed });
 });
 
 it("selects a version from the list detail, persists it, and replaces both card and summary prices", async () => {
@@ -38,7 +39,7 @@ it("selects a version from the list detail, persists it, and replaces both card 
   const table = screen.getByRole("table", { name: "Cartas de la colección simulada" });
   fireEvent.click(within(table).getByRole("button", { name: `Ver detalles de ${name}` }));
   fireEvent.click(screen.getByRole("button", { name: "Elegir nueva versión" }));
-  await waitFor(() => expect(actions.updateSimulatedCardVersion).toHaveBeenCalledWith("saved", name, "chosen", "cardmarket"));
+  await waitFor(() => expect(actions.applySimulatedPrinting).toHaveBeenCalledWith(expect.objectContaining({ collectionId: "saved", cardName: name, printingId: "chosen", provider: "cardmarket" })));
   await waitFor(() => expect(within(table).getByText("Versión elegida: NEW #99")).toBeInTheDocument());
   expect(within(table).getAllByText("12.00 €")).toHaveLength(2);
   expect(within(table).getByText("+11.85 €")).toBeInTheDocument();
@@ -52,16 +53,17 @@ it("opens detail from purchase rows and retains a temporary choice when saving",
   vi.mocked(actions.analyzeRawSimulatedCollection).mockResolvedValueOnce(structuredClone(original)).mockResolvedValueOnce(changed);
   vi.mocked(actions.createSimulatedCollection).mockResolvedValue(changed);
   render(<SimulatedCollectionDialog isOpen onOpenChange={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("Origen de la oferta"), { target: { value: "cardmarket" } });
   fireEvent.change(screen.getByPlaceholderText("Ej. Lote Wallapop 50 cartas, Cambio Pedro..."), { target: { value: "Cart" } });
   fireEvent.change(screen.getByRole("textbox", { name: "Listado de cartas a simular" }), { target: { value: original.rawText } });
-  fireEvent.click(screen.getByRole("button", { name: "Simular y Analizar Lote" }));
+  fireEvent.click(screen.getByRole("button", { name: "Evaluar oferta" }));
   const comparison = await screen.findByRole("region", { name: "Compra vs mercado" });
   fireEvent.click(within(comparison).getByText("Ver precios por carta (5 filas)"));
   fireEvent.click(within(comparison).getByRole("button", { name }));
   fireEvent.click(screen.getByRole("button", { name: "Elegir nueva versión" }));
-  await waitFor(() => expect(actions.analyzeRawSimulatedCollection).toHaveBeenLastCalledWith(original.rawText, "cardmarket", changed.printingOverrides));
+  await waitFor(() => expect(actions.applySimulatedPrinting).toHaveBeenLastCalledWith(expect.objectContaining({ rawText: original.rawText, cardName: name, printingId: "chosen", printingOverrides: original.printingOverrides })));
   await waitFor(() => expect(within(comparison).getByText(/\+16,55/)).toBeInTheDocument());
   fireEvent.click(screen.getByRole("button", { name: "Cerrar detalle" }));
-  fireEvent.click(screen.getByRole("button", { name: "Guardar Colección Simulada" }));
-  await waitFor(() => expect(actions.createSimulatedCollection).toHaveBeenCalledWith("Cart", undefined, original.rawText!.trim(), "cardmarket", changed.printingOverrides));
+  fireEvent.click(screen.getByRole("button", { name: "Guardar oferta" }));
+  await waitFor(() => expect(actions.createSimulatedCollection).toHaveBeenCalledWith("Cart", undefined, original.rawText!.trim(), "cardmarket", changed.printingOverrides, "cardmarket"));
 });

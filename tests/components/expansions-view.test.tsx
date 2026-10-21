@@ -37,7 +37,7 @@ describe("ExpansionsView", () => {
     expect(chart.querySelector('path[stroke="#f43f5e"]')).toBeTruthy();
     expect(chart.querySelector('path[stroke="#10b981"]')).toBeTruthy();
     expect(chart.querySelector('linearGradient stop[stop-color="#f43f5e"]')).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Periodo del gráfico" })).toHaveValue("7");
+    expect(screen.getByRole("group", { name: "Periodo del gráfico" }).querySelector("button[aria-pressed=true]")).toHaveTextContent("7 días");
     expect(screen.getByText("Valor total de la expansión")).toBeTruthy();
     expect(screen.getByText("Valor en propiedad")).toBeTruthy();
     expect(getExpansionValueHistory).toHaveBeenCalledWith("tst", 7);
@@ -45,13 +45,13 @@ describe("ExpansionsView", () => {
     fireEvent.keyDown(chart, { key: "ArrowLeft" });
     expect(screen.getByRole("region", { name: "Tendencia del valor de la expansión" })).toHaveTextContent("Total 38,00");
     expect(screen.getByRole("region", { name: "Tendencia del valor de la expansión" })).toHaveTextContent("En propiedad 10,00");
-    fireEvent.change(screen.getByRole("combobox", { name: "Periodo del gráfico" }), { target: { value: "30" } });
+    fireEvent.click(screen.getByRole("group", { name: "Periodo del gráfico" }).querySelectorAll("button")[1]);
     await waitFor(() => expect(getExpansionValueHistory).toHaveBeenCalledWith("tst", 30));
     expect(screen.getByText("Missing Card")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Ver detalle de Owned Card" }));
     expect(screen.getByRole("dialog").textContent).toContain("Owned Card details");
     fireEvent.click(screen.getByRole("button", { name: "Cerrar detalle" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Filtrar cartas" }), { target: { value: "missing" } });
+    fireEvent.click(screen.getByRole("group", { name: "Filtrar cartas" }).querySelectorAll("button")[2]);
     await waitFor(() => expect(screen.queryByText("Owned Card")).toBeNull());
     expect(screen.getByText("Missing Card")).toBeTruthy();
   });
@@ -59,31 +59,30 @@ describe("ExpansionsView", () => {
   it("exposes price trend metric and an independent direction control", async () => {
     render(<ExpansionsView />);
     fireEvent.click(await screen.findByRole("button", { name: /Test Expansion/ }));
-    expect(screen.getByRole("option", { name: "Tendencia absoluta" })).toBeTruthy();
-    expect(screen.getByRole("option", { name: "Tendencia porcentual" })).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Periodo de tendencia" })).toHaveValue("acquisition");
-    fireEvent.change(screen.getByRole("combobox", { name: "Periodo de tendencia" }), { target: { value: "7d" } });
-    expect(screen.getByRole("combobox", { name: "Periodo de tendencia" })).toHaveValue("7d");
-    const direction = screen.getByRole("combobox", { name: "Dirección" }) as HTMLSelectElement;
-    fireEvent.change(screen.getByRole("combobox", { name: "Ordenar cartas" }), { target: { value: "trend_pct" } });
-    fireEvent.change(direction, { target: { value: "desc" } });
+    expect(screen.getByRole("button", { name: "Tendencia absoluta" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tendencia porcentual" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Desde adquisición" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Últimos 7 días" }));
+    expect(screen.getByRole("button", { name: "Últimos 7 días" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Tendencia porcentual" }));
+    expect(screen.getByRole("button", { name: /Orden descendente:/ })).toBeInTheDocument();
     const cardButtons = await screen.findAllByRole("button", { name: /Ver detalle de/ });
     expect(cardButtons[0].getAttribute("aria-label")).toBe("Ver detalle de Owned Card");
   });
 
   it("keeps index and detail completion aligned when only the special-art printing is missing", async () => {
     getExpansions.mockResolvedValueOnce([{
-      code: "rfc", name: "Reality Fracture Commander", setType: "commander", cardCount: 2,
-      ownedCount: 1, completionPercentage: 50, totalValueEur: 12, ownedValueEur: 7, missingValueEur: 5,
+      code: "rfc", name: "Reality Fracture Commander", setType: "commander", cardCount: 1, alternativeVersionCount: 1,
+      ownedCount: 1, completionPercentage: 100, totalValueEur: 12, ownedValueEur: 7, missingValueEur: 5,
     }]);
     getExpansionCards.mockResolvedValueOnce([
       { id: "rfc-base", catalogId: "rfc-card", setCode: "rfc", collectorNumber: "101", cardName: "Reality Fracture Hero", isOwned: true, ownedQuantity: 1 },
       { id: "rfc-special-art", catalogId: "rfc-card", setCode: "rfc", collectorNumber: "101★", cardName: "Reality Fracture Hero", isOwned: false, ownedQuantity: 0, ownedElsewhere: true, otherPrintings: [{ setCode: "rfc", collectorNumber: "101", quantity: 1 }] },
     ]);
     render(<ExpansionsView />);
-    expect(await screen.findByText("50%")).toBeInTheDocument();
+    expect(await screen.findByText("100%")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Reality Fracture Commander/ }));
-    expect(await screen.findByText("1 / 2 · 50%")).toBeInTheDocument();
+    expect(await screen.findByText("1 / 1 · 100%")).toBeInTheDocument();
     expect(screen.getByText("Otra versión en tu colección").getAttribute("title")).toContain("RFC #101 ×1");
   });
 
@@ -131,7 +130,7 @@ describe("ExpansionsView", () => {
     getExpansionCards.mockRejectedValueOnce(new Error("API unavailable"));
     render(<ExpansionsView />);
     fireEvent.click(await screen.findByRole("button", { name: /Test Expansion/ }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudieron cargar las cartas");
+    expect(await screen.findByText("No se pudieron cargar las cartas. Comprueba la conexión e inténtalo de nuevo.")).toBeInTheDocument();
   });
 
   it("does not mark a collected Marvel Commander card missing and opens its selected printing", async () => {
@@ -147,15 +146,51 @@ describe("ExpansionsView", () => {
     render(<ExpansionsView />);
     fireEvent.click(await screen.findByRole("button", { name: /Marvel Commander/ }));
     expect(await screen.findByText("Captain Marvel, Earth's Protector")).toBeInTheDocument();
-    expect(screen.getByText("En colección ×2")).toBeInTheDocument();
+    expect(screen.getByText("x2")).toBeInTheDocument();
     expect(screen.getByText("1 / 2 · 50%")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Filtrar cartas" }), { target: { value: "missing" } });
+    fireEvent.click(screen.getByRole("group", { name: "Filtrar cartas" }).querySelectorAll("button")[2]);
     expect(screen.queryByText("Captain Marvel, Earth's Protector")).not.toBeInTheDocument();
     expect(screen.getByText("Other Hero")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Filtrar cartas" }), { target: { value: "all" } });
+    fireEvent.click(screen.getByRole("group", { name: "Filtrar cartas" }).querySelectorAll("button")[0]);
     fireEvent.click(screen.getByRole("button", { name: "Ver detalle de Captain Marvel, Earth's Protector" }));
     expect(screen.getByTestId("detail-card-id")).toHaveTextContent("msh-printing");
   });
+});
+
+it("keeps extra product cards browsable without inflating base completion", async () => {
+  getExpansions.mockResolvedValue([{ code: "msc", name: "Marvel Commander", setType: "commander", cardCount: 1, ownedCount: 1, completionPercentage: 100, totalValueEur: 2, ownedValueEur: 2, missingValueEur: 0 }]);
+  getExpansionCards.mockResolvedValue([
+    { id: "base", setCode: "msc", collectorNumber: "1", cardName: "Base Hero", isOwned: true, ownedQuantity: 1, isBasePrinting: true, imageUri: "https://images.test/base.webp" },
+    { id: "extra", setCode: "msc", collectorNumber: "636", cardName: "Extra Hero", isOwned: false, ownedQuantity: 0, isBasePrinting: false },
+  ]);
+  render(<ExpansionsView />);
+  fireEvent.click(await screen.findByRole("button", { name: /Marvel Commander/ }));
+  const open = await screen.findByRole("button", { name: "Ver detalle de Base Hero" });
+  expect(open.firstElementChild).toHaveStyle({ aspectRatio: "63 / 88" });
+  expect(screen.getByText("1 / 1 · 100%")).toBeInTheDocument();
+  expect(screen.queryByText("Extra Hero")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Todas las versiones" }));
+  expect(await screen.findByText("Extra Hero")).toBeInTheDocument();
+  expect(screen.getByText("1 / 1 · 100%")).toBeInTheDocument();
+  fireEvent.click(open);
+  expect(screen.getByTestId("detail-card-id")).toHaveTextContent("base");
+});
+
+it("shows an owned alternate covering the base card without claiming its exact printing is owned", async () => {
+  getExpansions.mockResolvedValue([{ code: "msc", name: "Marvel Commander", setType: "commander", cardCount: 1, alternativeVersionCount: 1, ownedCount: 1, completionPercentage: 100, totalValueEur: 2, ownedValueEur: 2, missingValueEur: 0 }]);
+  getExpansionCards.mockResolvedValue([
+    { id: "base", catalogId: "hero", setCode: "msc", collectorNumber: "1", cardName: "Base Hero", isOwned: false, ownedQuantity: 0, isBasePrinting: true },
+    { id: "alternate", catalogId: "hero", setCode: "msc", collectorNumber: "291", cardName: "Alternate Hero", isOwned: true, ownedQuantity: 4, isBasePrinting: false },
+  ]);
+  render(<ExpansionsView />);
+  expect(await screen.findByText("1 versión alternativa")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Marvel Commander/ }));
+  expect(await screen.findByText("1 / 1 · 100%")).toBeInTheDocument();
+  expect(screen.getByText("Carta cubierta por otra versión de esta edición")).toBeInTheDocument();
+  expect(screen.getByText("1 carta única · 1 versión alternativa")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Ver detalle de Base Hero" }));
+  expect(screen.getByTestId("detail-card-id")).toHaveTextContent("base");
+  expect(screen.getByRole("button", { name: "Añadir a la colección" })).toBeInTheDocument();
 });

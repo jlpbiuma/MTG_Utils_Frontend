@@ -68,6 +68,7 @@ export interface TypeDistributionItem {
 }
 
 export interface KarstenColorRecommendation {
+  targetTurn: number;
   color: "W" | "U" | "B" | "R" | "G";
   colorName: string;
   sourcesOwned: number;
@@ -397,6 +398,13 @@ export function extractPipsAndSources(
       }
     }
 
+    if (card.producedMana?.length) {
+      for (const color of new Set(card.producedMana)) {
+        if (color in sources) sources[color as keyof ColorPips] += qty;
+      }
+      continue;
+    }
+
     // Extract mana production sources from lands / mana rocks
     const nameLower = card.cardName.toLowerCase();
     const typeLower = (card.typeLine || "").toLowerCase();
@@ -568,30 +576,34 @@ export function calculateKarstenRecommendations(
   const colors: ("W" | "U" | "B" | "R" | "G")[] = ["W", "U", "B", "R", "G"];
   const recommendations: KarstenColorRecommendation[] = [];
 
+  const library = cards.filter(card => !card.isSideboard && !card.isCommander);
+  const population = Math.max(1,library.reduce((n,card)=>n+(card.quantity||1),0));
   for (const c of colors) {
-    let maxPipsInCard = 0;
+    let recommended = 0;
     let toughestCost = "";
-
+    let targetTurn = 1;
+    let owned = sources[c];
     for (const card of cards) {
-      if (!card.manaCost) continue;
+      if (card.isSideboard || !card.manaCost) continue;
       const symbols = card.manaCost.match(/\{([^}]+)\}/g) || [];
-      const count = symbols.filter((s) => s.replace(/[{}]/g, "").toUpperCase().includes(c)).length;
-      if (count > maxPipsInCard) {
-        maxPipsInCard = count;
-        toughestCost = card.manaCost;
+      const required = symbols.filter(symbol => symbol.replace(/[{}]/g, "").toUpperCase().includes(c)).length;
+      if (!required) continue;
+      const turn = Math.max(1,parseManaValue(card.manaCost));
+      const sample = Math.min(population,7+turn-1);
+      let minimum = 0;
+      while (minimum<population && calculateHypergeometric(population,minimum,sample,required).atLeast < 90) minimum++;
+      if (minimum > recommended) {
+        recommended=minimum;toughestCost=card.manaCost;targetTurn=turn;
+        // Lands are available immediately; nonlands need a prior turn to be cast.
+        const available=library.filter(source => getCardCategory(source.typeLine,source.cardName)==="lands" || parseManaValue(source.manaCost)<turn);
+        owned=extractPipsAndSources(available,deckColors).sources[c];
       }
     }
-
-    if (maxPipsInCard === 0) {
-      // If no pips in deck, skip this color unless it's in deckColors and has sources
-      if (!validDeckColors || !validDeckColors.has(c)) continue;
+    if (!recommended) {
+      if (!validDeckColors?.has(c)) continue;
+      // Identity without colored spell costs has no justified minimum yet.
+      recommended=0;
     }
-
-    let recommended = 20;
-    if (maxPipsInCard === 2) recommended = 26;
-    if (maxPipsInCard >= 3) recommended = 32;
-
-    const owned = sources[c];
     let status: "optimal" | "warning" | "danger" = "optimal";
     if (owned < recommended - 4) {
       status = "danger";
@@ -606,6 +618,7 @@ export function calculateKarstenRecommendations(
       sourcesRecommended: recommended,
       status,
       toughestCost,
+      targetTurn,
     });
   }
 

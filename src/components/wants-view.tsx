@@ -1,35 +1,22 @@
 "use client";
 
+import { ViewToolbar, ToolbarSearch, ToolbarChoices, ToolbarToggle } from "@/components/view-toolbar";
+
+import { useQueryState, useQueryFlag } from "@/hooks/use-query-state";
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { CardImage as Image } from "@/components/card-image";
-import {
-  Heart,
-  Search,
-  Plus,
-  Minus,
-  Trash2,
-  Image as ImageIcon,
-  FolderTree,
-  LayoutGrid,
-  Eye,
-} from "lucide-react";
+import { Heart, Plus, Minus, Trash2, Image as ImageIcon, FolderTree, LayoutGrid, Eye } from "lucide-react";
 import { WantsPriceMovers } from "@/components/wants-price-movers";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+
 import { ManaCost } from "@/components/mana-cost";
-import { CardPreviewHover } from "@/components/card-preview-hover";
+
 import { CardSearchDialog } from "@/components/card-search-dialog";
 import { ExportListDialog } from "@/components/export-list-dialog";
-import {
-  addOrIncrementWant,
-  updateWantQuantity,
-  deleteWantCard,
-  getWantQuery,
-  type WantCardDTO,
-  type WantQueryResponse,
-} from "@/actions/wants";
-import { PriceProvider, PriceSummary } from "@/lib/pricing";
-import { PricingProviderSelector } from "@/components/pricing-provider-selector";
+import { addOrIncrementWant, updateWantQuantity, deleteWantCard, getWantQuery, type WantCardDTO, type WantQueryResponse } from "@/actions/wants";
+import { PriceSummary } from "@/lib/pricing";
+import { PricingSummary } from "@/components/pricing-summary";
 import { PriceBadge } from "@/components/price-badge";
 import { CardSortingBar } from "@/components/card-sorting-bar";
 import { PriceFilter } from "@/components/price-filter";
@@ -53,7 +40,7 @@ interface WantsViewProps {
 export function WantsView({ initialView, initialStats }: WantsViewProps) {
   const [view, setView] = useState<WantQueryResponse | null>(initialView ?? null);
   const [isLoadingView, setIsLoadingView] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useQueryState<string>("q", "");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedWantIds, setSelectedWantIds] = useState<string[]>([]);
@@ -61,12 +48,10 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
   const [bulkActionMessage, setBulkActionMessage] = useState<string | null>(null);
   const [selectedCardForDetail, setSelectedCardForDetail] =
     useState<WantCardDTO | null>(null);
-  const [isGroupedByType, setIsGroupedByType] = useState(
-    initialView?.grouped ?? false
-  );
-  const [sortField, setSortField] = useState<SortField>("name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [priceProvider, setPriceProvider] = useState<PriceProvider>("cardmarket");
+  const [isGroupedByType, setIsGroupedByType] = useQueryFlag("group", initialView?.grouped ?? false);
+  const [sortField, setSortField] = useQueryState<SortField>("sort", "name", ["name", "cmc", "type", "quantity", "price_trend", "price_subtotal", "requested_decks"]);
+  const [sortDirection, setSortDirection] = useQueryState<SortDirection>("direction", "asc", ["asc", "desc"]);
+  const priceProvider = "cardmarket";
   const [priceSummary, setPriceSummary] = useState<PriceSummary | null>(null);
   const [isLoadingPrices, setIsLoadingPrices] = useState(false);
   const [minPrice, setMinPrice] = useState("");
@@ -89,7 +74,7 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
         searchQuery: debouncedQuery,
         sort: sortField,
         direction: sortDirection,
-        grouped: isGroupedByType && !debouncedQuery,
+        grouped: isGroupedByType,
         priceProvider,
       });
       if (next) setView(next);
@@ -110,7 +95,7 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
   }, [loadView, initialView]);
 
   const loadPrices = useCallback(
-    async (providerToLoad = priceProvider, bypassCache = false) => {
+    async (providerToLoad = priceProvider) => {
       setIsLoadingPrices(true);
       try {
         const cards = (
@@ -135,7 +120,6 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
           body: JSON.stringify({
             cards,
             provider: providerToLoad,
-            bypassCache,
           }),
         });
         if (res.ok) {
@@ -335,11 +319,6 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
     return [...new Set(source.map((card) => card.setCode).filter(Boolean) as string[])].sort();
   }, [view]);
 
-  const visibleCardsCount =
-    (displayedView?.grouped
-      ? displayedView.sections.reduce((n, s) => n + s.cards.length, 0)
-      : displayedView?.cards?.length) || 0;
-
   const exportableFilteredCards = useMemo(() => {
     if (displayedView?.grouped && displayedView.sections) {
       return displayedView.sections.flatMap((s) =>
@@ -487,7 +466,6 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
     );
   }
 
-
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-8 border-b border-border">
@@ -504,7 +482,8 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
           <ExportListDialog
             cards={exportableFilteredCards}
             allCards={exportableAllCards}
-            title="Exportar Wants"
+            title="Exportar para Cardmarket"
+            triggerText="Exportar para Cardmarket"
             fileNamePrefix="wants"
           />
           <CardSearchDialog
@@ -516,7 +495,7 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
       </div>
 
       <div aria-live="polite" className="text-sm text-muted-foreground">{bulkActionMessage}</div>
-      <div className={`fixed bottom-5 left-1/2 z-50 flex w-[min(94vw,34rem)] -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur transition-all duration-200 motion-reduce:transition-none ${selectedWantIds.length ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-6 opacity-0"}`} aria-hidden={!selectedWantIds.length}>
+      <div className={`fixed bottom-20 md:bottom-5 left-1/2 z-50 flex w-[min(94vw,34rem)] -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur transition-all duration-200 motion-reduce:transition-none ${selectedWantIds.length ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-6 opacity-0"}`} aria-hidden={!selectedWantIds.length}>
         <span className="text-sm font-medium tabular-nums">{selectedWantIds.length} seleccionadas</span>
         <div className="flex items-center gap-2"><Button size="sm" disabled={isBulkBusy || !selectedWantIds.length} onClick={() => handleBulkWants("collection")}>Mover a colección</Button><Button size="sm" variant="destructive" disabled={isBulkBusy || !selectedWantIds.length} onClick={() => handleBulkWants("delete")}>Eliminar</Button></div>
       </div>
@@ -542,10 +521,8 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
         </div>
       </div>
 
-      <PricingProviderSelector
-        currentProvider={priceProvider}
-        onProviderChange={(p) => setPriceProvider(p)}
-        onRefreshPrices={() => loadPrices(priceProvider, true)}
+      <PricingSummary
+
         summary={priceSummary}
         isLoading={isLoadingPrices}
         showMissingNetValue={false}
@@ -556,19 +533,17 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
         onSelectCard={(name) => setSearchQuery(name)}
       />
 
-      <div className="space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar carta por nombre..."
+      <ViewToolbar
+        label="Opciones de la lista de compra"
+        search={
+          <ToolbarSearch
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-11 text-base"
+            onChange={setSearchQuery}
+            placeholder="Buscar carta por nombre..."
           />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
+        }
+        filters={
+          <>
             <PriceFilter
               minPrice={minPrice}
               maxPrice={maxPrice}
@@ -576,129 +551,85 @@ export function WantsView({ initialView, initialStats }: WantsViewProps) {
               onMaxPriceChange={setMaxPrice}
               currencySymbol={priceSummary?.currencySymbol || "€"}
             />
-            <select
+            <ToolbarChoices
+              label="Edición"
               value={edition}
-              onChange={(e) => setEdition(e.target.value)}
-              aria-label="Edición"
-              className="h-9 rounded-md border border-border bg-background px-2 text-xs text-foreground"
-            >
-              <option value="">Todas las ediciones</option>
-              {editionOptions.map((code) => (
-                <option key={code} value={code}>
-                  {code.toUpperCase()}
-                </option>
-              ))}
-            </select>
-            <select
+              onChange={setEdition}
+              options={[
+                { value: "", label: "Todas las ediciones" },
+                ...editionOptions.map((code) => ({ value: code, label: code.toUpperCase() })),
+              ]}
+            />
+            <ToolbarChoices
+              label="Tipo"
               value={typeKey}
-              onChange={(e) => setTypeKey(e.target.value)}
-              aria-label="Tipo"
-              className="h-9 rounded-md border border-border bg-background px-2 text-xs text-foreground"
-            >
-              <option value="">Todos los tipos</option>
-              {Object.values(CARD_TYPE_GROUPS).map((group) => (
-                <option key={group.key} value={group.key}>
-                  {group.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="text-xs text-muted-foreground mr-1">Colores:</span>
-            {COLOR_ORDER.map((color) => {
-              const active = selectedColors.includes(color);
-              return (
-                <Button
+              onChange={setTypeKey}
+              options={[
+                { value: "", label: "Todos los tipos" },
+                ...Object.values(CARD_TYPE_GROUPS).map((group) => ({
+                  value: group.key,
+                  label: group.label,
+                })),
+              ]}
+            />
+            <div role="group" aria-label="Colores" className="flex flex-wrap items-center gap-1">
+              <span className="mr-1 text-xs font-medium text-muted-foreground">Colores:</span>
+              {COLOR_ORDER.map((color) => (
+                <ToolbarToggle
                   key={color}
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  aria-pressed={active}
+                  pressed={selectedColors.includes(color)}
                   onClick={() => {
                     setColorlessOnly(false);
                     setSelectedColors((current) =>
                       current.includes(color)
                         ? current.filter((item) => item !== color)
-                        : [...current, color]
+                        : [...current, color],
                     );
                   }}
-                  className={`h-7 w-7 px-0 text-xs font-mono ${
-                    active
-                      ? "bg-primary/20 text-primary border border-primary/30"
-                      : "text-muted-foreground"
-                  }`}
                 >
                   {color}
-                </Button>
-              );
-            })}
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              aria-pressed={colorlessOnly}
-              onClick={() => {
-                setColorlessOnly((current) => !current);
-                setSelectedColors([]);
-              }}
-              className={`h-7 px-2 text-xs ${
-                colorlessOnly
-                  ? "bg-primary/20 text-primary border border-primary/30"
-                  : "text-muted-foreground"
-              }`}
-            >
-              Incoloro
-            </Button>
-          </div>
-        </div>
-
-        {visibleCardsCount > 0 && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <CardSortingBar
-              currentField={sortField}
-              currentDirection={sortDirection}
-              onSortChange={(f, d) => {
-                setSortField(f);
-                setSortDirection(d);
-              }}
-              showStatusOption={false}
-              showRequestedDecksOption
-              requestedDecksLabel="Repeticiones"
-            />
-
-            {!searchQuery && (
-              <div className="flex items-center gap-1 bg-background p-1 rounded-lg border border-border self-start sm:self-auto">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setIsGroupedByType(true)}
-                  className={`h-7 px-2.5 text-xs gap-1.5 ${
-                    isGroupedByType
-                      ? "bg-accent text-primary font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <FolderTree className="h-3.5 w-3.5" />
-                  <span>Por Categoría</span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setIsGroupedByType(false)}
-                  className={`h-7 px-2.5 text-xs gap-1.5 ${
-                    !isGroupedByType
-                      ? "bg-accent text-primary font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  <span>Cuadrícula</span>
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+                </ToolbarToggle>
+              ))}
+              <ToolbarToggle
+                pressed={colorlessOnly}
+                onClick={() => {
+                  setColorlessOnly((current) => !current);
+                  setSelectedColors([]);
+                }}
+              >
+                Incoloro
+              </ToolbarToggle>
+            </div>
+          </>
+        }
+        sorting={
+          <CardSortingBar
+            currentField={sortField}
+            currentDirection={sortDirection}
+            onSortChange={(field, direction) => {
+              setSortField(field);
+              setSortDirection(direction);
+            }}
+            showRequestedDecksOption
+            requestedDecksLabel="Repeticiones"
+          />
+        }
+        display={
+          <ToolbarChoices
+            label="Vista"
+            value={isGroupedByType ? "type" : "grid"}
+            onChange={(value) => setIsGroupedByType(value === "type")}
+            options={[
+              {
+                value: "type",
+                label: "Por Categoría",
+                icon: <FolderTree className="h-3.5 w-3.5" />,
+              },
+              { value: "grid", label: "Cuadrícula", icon: <LayoutGrid className="h-3.5 w-3.5" /> },
+            ]}
+          />
+        }
+      />
 
       {view === null && isLoadingView ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3">

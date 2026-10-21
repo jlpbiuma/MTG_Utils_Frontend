@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { signInWithEmail, signUpWithEmail, signOutUser, getCurrentUser } from "@/actions/auth";
+import { signInWithEmail, signUpWithEmail, signOutUser, getCurrentUser, getCurrentUserId } from "@/actions/auth";
 import * as apiClient from "@/lib/api-client";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -114,6 +114,38 @@ describe("FastAPI Auth Actions", () => {
   });
 
   describe("getCurrentUser", () => {
+    it.each([getCurrentUser, getCurrentUserId])(
+      "propagates Next.js dynamic rendering signals without logging or returning a guest",
+      async (readSession) => {
+        const error = Object.assign(new Error("Dynamic server usage"), {
+          digest: "DYNAMIC_SERVER_USAGE",
+        });
+        vi.mocked(cookies).mockRejectedValueOnce(error);
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+          await expect(readSession()).rejects.toBe(error);
+          expect(warn).not.toHaveBeenCalled();
+        } finally {
+          warn.mockRestore();
+        }
+      }
+    );
+
+    it("keeps the guest fallback and warning for application errors", async () => {
+      const error = new Error("Session unavailable");
+      vi.mocked(cookies).mockRejectedValueOnce(error);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await expect(getCurrentUser()).resolves.toMatchObject({
+          isAuthenticated: false,
+          name: "Invitado",
+        });
+        expect(warn).toHaveBeenCalledWith("Could not retrieve user session:", error);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     it("returns user details when cookies are present", async () => {
       mockCookieStore.get.mockImplementation((name: string) => {
         if (name === "mtg_token") return { value: "valid-token" };

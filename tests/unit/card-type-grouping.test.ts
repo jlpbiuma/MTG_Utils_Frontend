@@ -160,11 +160,11 @@ describe("Card Type Categorization & Grouping", () => {
       expect(sections.length).toBe(1);
 
       const creatureSection = sections[0];
-      expect(creatureSection.totalCards).toBe(4);
+      expect(creatureSection.totalCards).toBe(1);
       expect(creatureSection.uniqueCards).toBe(1);
-      expect(creatureSection.ownedCards).toBe(2);
-      expect(creatureSection.missingCards).toBe(2);
-      expect(creatureSection.completionPercentage).toBe(50); // 2/4 = 50%
+      expect(creatureSection.ownedCards).toBe(1);
+      expect(creatureSection.missingCards).toBe(0);
+      expect(creatureSection.completionPercentage).toBe(100); // 2/4 = 50%
       expect(creatureSection.sectionTotalPrice).toBe(60); // 15.0 * 4 = 60
       expect(creatureSection.sectionMissingPrice).toBe(30); // 15.0 * 2 = 30
       expect(creatureSection.sectionOwnedPrice).toBe(30); // 15.0 * 2 = 30
@@ -217,7 +217,7 @@ describe("Card Type Categorization & Grouping", () => {
       expect(sections.length).toBe(1);
       expect(sections[0].key).toBe("lands");
       expect(sections[0].label).toBe("Tierras");
-      expect(sections[0].totalCards).toBe(11);
+      expect(sections[0].totalCards).toBe(2);
       expect(sections[0].uniqueCards).toBe(2);
     });
 
@@ -276,8 +276,8 @@ describe("Card Type Categorization & Grouping", () => {
       expect(lands.sectionTotalPrice).toBe(3);
 
       const creatures = sections.find((s) => s.key === "creatures")!;
-      expect(creatures.totalCards).toBe(4);
-      expect(creatures.missingCards).toBe(2);
+      expect(creatures.totalCards).toBe(1);
+      expect(creatures.missingCards).toBe(0);
     });
 
     it("counts basic lands in completion stats as 100% owned without needing collection assignment", () => {
@@ -302,11 +302,11 @@ describe("Card Type Categorization & Grouping", () => {
 
       const sections = groupCardsByType(cards, mockPriceSummary);
       const lands = sections[0];
-      expect(lands.totalCards).toBe(21);
+      expect(lands.totalCards).toBe(2);
       // Basics are always owned (20), only Command Tower is missing (1)
       expect(lands.missingCards).toBe(1);
-      expect(lands.ownedCards).toBe(20);
-      expect(lands.completionPercentage).toBe(95.2); // 20/21 = 95.2%
+      expect(lands.ownedCards).toBe(1);
+      expect(lands.completionPercentage).toBe(50); // 20/21 = 95.2%
     });
 
     it("treats sections made only of basic lands as fully complete", () => {

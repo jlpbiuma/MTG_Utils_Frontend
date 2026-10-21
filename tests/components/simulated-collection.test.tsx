@@ -5,9 +5,11 @@ import { SimulatedCollectionsTab } from "@/components/simulated-collections-tab"
 import { SimulatedCollectionDialog } from "@/components/simulated-collection-dialog";
 import * as actions from "@/actions/simulated-collections";
 
+vi.mock("@/actions/whatsapp-matches", () => ({ getWhatsAppMatches: vi.fn().mockResolvedValue({ wants_matches: [], collection_matches: [] }) }));
+
 // Mock actions
 vi.mock("@/actions/simulated-collections", () => ({
-  getSimulatedCollections: vi.fn(),
+  getDiscoveredOffers: async () => [], getSimulatedCollections: vi.fn(),
   getSimulatedCollection: vi.fn(),
   analyzeRawSimulatedCollection: vi.fn(),
   createSimulatedCollection: vi.fn(),
@@ -38,7 +40,7 @@ describe("Simulated Collections Feature", () => {
     render(<SimulatedCollectionsTab />);
 
     await waitFor(() => {
-      expect(screen.getByText("Colecciones Simuladas")).toBeInTheDocument();
+      expect(screen.getByText("Evaluar oferta")).toBeInTheDocument();
       expect(screen.getByText("No tienes colecciones simuladas")).toBeInTheDocument();
     });
   });
@@ -187,7 +189,7 @@ describe("Simulated Collections Feature", () => {
 
     // Verify it switches to the in-page view
     await waitFor(() => {
-      expect(screen.getByText("Volver a Colecciones Simuladas")).toBeInTheDocument();
+      expect(screen.getByText("Volver a Evaluar oferta")).toBeInTheDocument();
       // Blue metric
       expect(screen.getAllByText("10.00 €").length).toBeGreaterThanOrEqual(1);
       // Standardized count in boxes
@@ -215,9 +217,9 @@ describe("Simulated Collections Feature", () => {
     });
 
     // Clicking back button returns to the list view
-    fireEvent.click(screen.getByText("Volver a Colecciones Simuladas"));
+    fireEvent.click(screen.getByText("Volver a Evaluar oferta"));
     await waitFor(() => {
-      expect(screen.getByText("Nueva Colección Simulada")).toBeInTheDocument();
+      expect(screen.getByText("Evaluar nueva oferta")).toBeInTheDocument();
     });
   });
 
@@ -713,7 +715,7 @@ describe("Simulated Collections Feature", () => {
     fireEvent.change(textarea, { target: { value: "1 Sol Ring\n1 Forest" } });
 
     // Click analyze button
-    const analyzeButton = screen.getByRole("button", { name: /Simular y Analizar Lote/i });
+    const analyzeButton = screen.getByRole("button", { name: /Evaluar oferta/i });
     fireEvent.click(analyzeButton);
 
     await waitFor(() => {
@@ -730,7 +732,7 @@ describe("Simulated Collections Feature", () => {
     });
 
     // Save collection
-    const saveButton = screen.getByRole("button", { name: /Guardar Colección Simulada/i });
+    const saveButton = screen.getByRole("button", { name: /Guardar oferta/i });
     fireEvent.click(saveButton);
 
     await waitFor(() => {

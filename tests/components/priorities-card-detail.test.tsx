@@ -11,7 +11,7 @@ vi.mock("@/actions/priorities", () => ({
 }));
 
 vi.mock("@/actions/wants", () => ({
-  addOrIncrementWant: vi.fn(),
+  addWantsBulk: vi.fn(),
 }));
 
 // Mock CardDetailDialog to verify it receives the cheapest reprint scryfallId
@@ -133,7 +133,7 @@ describe("PrioritiesView - Card Detail & Cheapest Reprint", () => {
     render(<PrioritiesView initialData={samplePrioritiesResponse} />);
 
     // Switch to Grid View
-    const gridToggleBtn = screen.getByTitle("Vista en cuadrícula");
+    const gridToggleBtn = screen.getByRole("button", { name: "Cuadrícula" });
     fireEvent.click(gridToggleBtn);
 
     // In grid view, click on card image or title
@@ -148,7 +148,7 @@ describe("PrioritiesView - Card Detail & Cheapest Reprint", () => {
   });
 
   it("adds exactly 1 copy to wants when clicking the add to wants button regardless of deficit", async () => {
-    const { addOrIncrementWant } = await import("@/actions/wants");
+    const { addWantsBulk } = await import("@/actions/wants");
     render(<PrioritiesView initialData={samplePrioritiesResponse} />);
 
     // In sampleItem, deficit is 2
@@ -157,12 +157,12 @@ describe("PrioritiesView - Card Detail & Cheapest Reprint", () => {
     const wantBtn = screen.getByTitle("Añadir a lista de deseos (Wants)");
     fireEvent.click(wantBtn);
 
-    expect(addOrIncrementWant).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(addWantsBulk).toHaveBeenCalledWith(
+      [expect.objectContaining({
         cardScryfallId: "sol-ring-cheapest-reprint-uuid",
         cardName: "Sol Ring",
         quantity: 1,
-      })
+      })]
     );
   });
   it.each(["Ver detalles de Sol Ring", "Ver imagen y detalles de Sol Ring"])(

@@ -87,7 +87,7 @@ export async function getWantQuery(options: GetWantQueryOptions = {}) {
   if (options.sort) params.set("sort", options.sort);
   if (options.direction) params.set("direction", options.direction);
   if (options.grouped !== undefined) params.set("grouped", String(options.grouped));
-  if (options.priceProvider) params.set("priceProvider", options.priceProvider);
+  params.set("priceProvider", "cardmarket");
 
   const queryString = params.toString() ? `?${params.toString()}` : "";
   return await backendFetch<WantQueryResponse>(`/api/wants/query${queryString}`, {
@@ -112,7 +112,7 @@ export async function addOrIncrementWant(input: WantCardCreateInput) {
     userId,
   });
 
-  revalidatePath("/wants");
+  revalidatePath("/buy/list");
   revalidatePath("/decks");
   return res;
 }
@@ -125,7 +125,7 @@ export async function updateWantQuantity(cardId: string, quantity: number) {
     userId,
   });
 
-  revalidatePath("/wants");
+  revalidatePath("/buy/list");
   return res;
 }
 
@@ -145,7 +145,7 @@ export async function updateWantCardVersion(
     userId,
   });
 
-  revalidatePath("/wants");
+  revalidatePath("/buy/list");
   revalidatePath("/decks");
   return { success: true };
 }
@@ -157,7 +157,7 @@ export async function deleteWantCard(cardId: string) {
     userId,
   });
 
-  revalidatePath("/wants");
+  revalidatePath("/buy/list");
   return { success: true };
 }
 
@@ -178,8 +178,17 @@ export async function addDeckMissingToWants(deckId: string): Promise<{
     userId,
   });
 
-  revalidatePath("/wants");
+  revalidatePath("/buy/list");
   revalidatePath(`/decks/${deckId}`);
   return res;
 }
 
+
+/** Set at least the requested missing quantity; repeated submissions are idempotent. */
+export async function addWantsBulk(cards: WantCardCreateInput[]): Promise<{ added: string[]; existing: string[] }> {
+  const response = await backendFetch<{ added: string[]; existing: string[] }>("/api/wants/bulk", {
+    method: "POST", userId: await getCurrentUserId(), body: JSON.stringify({ cards }),
+  });
+  revalidatePath("/buy/list"); revalidatePath("/buy/needs");
+  return response;
+}

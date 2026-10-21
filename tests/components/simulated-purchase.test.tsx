@@ -8,13 +8,14 @@ import { SimulatedPurchaseComparison } from "@/components/simulated-purchase-com
 import * as actions from "@/actions/simulated-collections";
 import responseJson from "../fixtures/cardmarket/list-3-analysis.json";
 
+vi.mock("@/actions/whatsapp-matches", () => ({ getWhatsAppMatches: async () => ({ wants_matches: [], collection_matches: [] }) }));
 vi.mock("@/actions/simulated-collections", () => ({
-  getSimulatedCollections: vi.fn(), getSimulatedCollection: vi.fn(),
+  getDiscoveredOffers: async () => [], getSimulatedCollections: vi.fn(), getSimulatedCollection: vi.fn(),
   analyzeRawSimulatedCollection: vi.fn(), createSimulatedCollection: vi.fn(), deleteSimulatedCollection: vi.fn(),
 }));
 vi.mock("@/components/card-detail-dialog", () => ({ CardDetailDialog: () => null }));
 
-const response = responseJson as actions.SimulatedCollectionAnalysisResponse;
+const response: actions.SimulatedCollectionAnalysisResponse = { ...responseJson as actions.SimulatedCollectionAnalysisResponse, origin: "cardmarket" };
 const purchase = response.purchaseAnalysis!;
 const fixtures = ["cart-markdown.txt", "list-1.txt", "list-2.txt", "list-3.txt"];
 const rawFixture = (filename: string) => readFileSync(path.join(import.meta.dirname, "../fixtures/cardmarket", filename), "utf8");
@@ -28,15 +29,16 @@ describe("Cardmarket clipboard import", () => {
     vi.mocked(actions.createSimulatedCollection).mockResolvedValue({ ...response, id: "new-sim" });
     const onSaved = vi.fn();
     render(<SimulatedCollectionDialog isOpen onOpenChange={vi.fn()} onSaved={onSaved} />);
+    fireEvent.change(screen.getByLabelText("Origen de la oferta"), { target: { value: "cardmarket" } });
     fireEvent.change(screen.getByPlaceholderText("Ej. Lote Wallapop 50 cartas, Cambio Pedro..."), { target: { value: "Mi carrito" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Listado de cartas a simular" }), { target: { value: raw } });
-    fireEvent.click(screen.getByRole("button", { name: "Simular y Analizar Lote" }));
+    fireEvent.click(screen.getByRole("button", { name: "Evaluar oferta" }));
     const comparison = await screen.findByRole("region", { name: "Compra vs mercado" });
-    expect(actions.analyzeRawSimulatedCollection).toHaveBeenCalledWith(raw, "cardmarket");
+    expect(actions.analyzeRawSimulatedCollection).toHaveBeenCalledWith(raw, "cardmarket", {}, "cardmarket");
     expect(within(comparison).getByText("Wants cubiertos")).toBeInTheDocument();
     expect(within(comparison).getByText("66.7%")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Guardar Colección Simulada" }));
-    await waitFor(() => expect(actions.createSimulatedCollection).toHaveBeenCalledWith("Mi carrito", undefined, raw.trim(), "cardmarket"));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar oferta" }));
+    await waitFor(() => expect(actions.createSimulatedCollection).toHaveBeenCalledWith("Mi carrito", undefined, raw.trim(), "cardmarket", {}, "cardmarket"));
     expect(onSaved).toHaveBeenCalledWith("new-sim");
   });
 
@@ -62,7 +64,7 @@ describe("Cardmarket clipboard import", () => {
     render(<SimulatedCollectionDialog isOpen onOpenChange={vi.fn()} />);
     const input = screen.getByRole("textbox", { name: "Listado de cartas a simular" });
     fireEvent.change(input, { target: { value: rawFixture("list-1.txt") } });
-    fireEvent.click(screen.getByRole("button", { name: "Simular y Analizar Lote" }));
+    fireEvent.click(screen.getByRole("button", { name: "Evaluar oferta" }));
     await screen.findByText("Error de conexión");
     expect(input).toHaveValue(rawFixture("list-1.txt"));
     expect(screen.queryByRole("region", { name: "Compra vs mercado" })).not.toBeInTheDocument();
@@ -79,11 +81,11 @@ describe("Purchase comparison", () => {
     fireEvent.click(screen.getByText("Ver precios por carta (5 filas)"));
     const table = screen.getByRole("table", { name: "Precios de compra y mercado por carta" });
     expect(within(table).getAllByRole("row")).toHaveLength(6);
-    fireEvent.change(screen.getByRole("combobox", { name: "Mostrar cartas" }), { target: { value: "wants" } });
+    fireEvent.click(screen.getByRole("group", { name: "Mostrar cartas" }).querySelectorAll("button")[4]);
     expect(within(table).getAllByRole("row")).toHaveLength(3);
     expect(within(table).getByText("Hero of Precinct One")).toBeInTheDocument();
     expect(within(table).queryByText("Eureka Moment")).not.toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox", { name: "Mostrar cartas" }), { target: { value: "unrelated" } });
+    fireEvent.click(screen.getByRole("group", { name: "Mostrar cartas" }).querySelectorAll("button")[6]);
     expect(within(table).getAllByRole("row")).toHaveLength(4);
   });
 
@@ -111,11 +113,11 @@ it("filters detailed purchase rows by deck and collection membership and sorts p
   render(<SimulatedPurchaseComparison analysis={{ ...purchase, cards: rows }} />);
   fireEvent.click(screen.getByText("Ver precios por carta (5 filas)"));
   const table = screen.getByRole("table", { name: "Precios de compra y mercado por carta" });
-  fireEvent.change(screen.getByRole("combobox", { name: "Mostrar cartas" }), { target: { value: "decks" } });
-  fireEvent.change(screen.getByRole("combobox", { name: "Ordenar precios por carta" }), { target: { value: "purchase-desc" } });
+  fireEvent.click(screen.getByRole("group", { name: "Mostrar cartas" }).querySelectorAll("button")[2]);
+  fireEvent.click(screen.getByRole("group", { name: "Ordenar precios por carta" }).querySelectorAll("button")[2]);
   expect(within(table).getAllByRole("rowheader")[0]).toHaveTextContent("Nicol Bolas, Dragon-God");
   expect(within(table).getAllByRole("rowheader")).toHaveLength(2);
-  fireEvent.change(screen.getByRole("combobox", { name: "Mostrar cartas" }), { target: { value: "owned" } });
+  fireEvent.click(screen.getByRole("group", { name: "Mostrar cartas" }).querySelectorAll("button")[3]);
   expect(within(table).getAllByRole("rowheader")).toHaveLength(1);
   expect(within(table).getByRole("rowheader")).toHaveTextContent("Nicol Bolas, Dragon-God");
 });

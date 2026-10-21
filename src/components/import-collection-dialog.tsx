@@ -26,9 +26,13 @@ import {
   type CollectionImportResult,
 } from "@/actions/import";
 
+import { createSimulatedCollection, type SimulatedCollectionAnalysisResponse } from "@/actions/simulated-collections";
+import { OfferCollectionDialog } from "@/components/offer-collection-dialog";
 const LAST_IMPORT_STORAGE_KEY = "mtg-collection-last-import";
 
 export function ImportCollectionDialog() {
+  const [mode,setMode]=useState("adjustment");
+  const [purchase,setPurchase]=useState<SimulatedCollectionAnalysisResponse|null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [retryVersion, setRetryVersion] = useState(0);
@@ -89,6 +93,10 @@ export function ImportCollectionDialog() {
     setSuccessResult(null);
 
     try {
+      if(mode==="purchase") {
+        const offer=await createSimulatedCollection("Compra de listado",undefined,collectionText,"cardmarket",{},"other");
+        setPurchase(offer);setOpen(false);return;
+      }
       const hash = crypto.subtle ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(collectionText))))
         .map((byte) => byte.toString(16).padStart(2, "0")).join("") : null;
       let attempt: { hash: string; key: string } | null = null;
@@ -123,6 +131,8 @@ export function ImportCollectionDialog() {
   const percent = trackedTotal > 0 ? Math.min(100, Math.round((terminalDone / trackedTotal) * 100)) : 0;
 
   return (
+    <>
+    {purchase?.id && <OfferCollectionDialog name={purchase.name} cards={purchase.cards} initialCost={purchase.cards.reduce((s,c)=>s+c.totalPrice,0)} selection={false} finance={{offerId:purchase.id,origin:"other",valuationRevision:purchase.valuationRevision}} onClose={()=>setPurchase(null)} onConfirm={async()=>{setCollectionText("");}}/>}
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
@@ -204,6 +214,8 @@ export function ImportCollectionDialog() {
         )}
 
         <form onSubmit={handleImport} className="space-y-4 mt-2 flex-1 flex flex-col overflow-hidden">
+          <label className="text-sm">Procedencia<select aria-label="Tipo de importación" value={mode} disabled={loading} onChange={e=>setMode(e.target.value)} className="block min-h-11 w-full rounded-md border bg-background px-3"><option value="adjustment">Inventario existente / regalo (sin gasto)</option><option value="purchase">Compra nueva (estimación por tendencia)</option></select></label>
+          <p className="text-xs text-muted-foreground">Para compras antiguas, importa primero las cartas y después vincúlalas mediante «Registrar compra antigua» en Gastos e inversión.</p>
           <div className="space-y-1.5 flex-1 flex flex-col">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -267,6 +279,6 @@ export function ImportCollectionDialog() {
           </DialogFooter>
         </form>
       </DialogContent>
-    </Dialog>
+    </Dialog></>
   );
 }

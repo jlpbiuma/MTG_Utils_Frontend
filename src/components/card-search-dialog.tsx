@@ -1,15 +1,11 @@
 "use client";
 
+import { ViewToolbar, ToolbarChoices } from "@/components/view-toolbar";
+
 import React, { useState, useEffect } from "react";
 import { CardImage as Image } from "@/components/card-image";
 import { Search, Plus, Loader2, Image as ImageIcon } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ManaCost } from "@/components/mana-cost";
@@ -115,54 +111,61 @@ export function CardSearchDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3 pt-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              aria-label="Buscar cartas en Scryfall"
-              placeholder="Escribe el nombre de la carta (ej: Black Lotus, Lightning Bolt, Atraxa...)"
-              value={query}
-              onChange={(e) => {
-                const value = e.target.value;
-                setQuery(value);
-                setLoading(value.trim().length >= 2);
-                if (value.trim().length < 2) setResults([]);
-              }}
-              className="pl-9 h-11 text-base"
-              autoFocus
-            />
-          </div>
-
-          <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <span>Cantidad:</span>
+        <ViewToolbar
+          label="Opciones de la búsqueda de cartas"
+          className="pt-2"
+          search={
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                aria-label="Buscar cartas en Scryfall"
+                placeholder="Escribe el nombre de la carta (ej: Black Lotus, Lightning Bolt, Atraxa...)"
+                value={query}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setQuery(value);
+                  setLoading(value.trim().length >= 2);
+                  if (value.trim().length < 2) setResults([]);
+                }}
+                className="pl-9 h-11 text-base"
+                autoFocus
+              />
+            </div>
+          }
+          filters={
+            <>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                Cantidad:
                 <input
                   type="number"
                   min="1"
                   max="99"
                   value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-14 h-7 px-2 bg-background border border-border rounded-md text-center text-foreground"
+                  onChange={(e) =>
+                    setQuantity(Math.max(1, Math.min(99, parseInt(e.target.value) || 1)))
+                  }
+                  className="w-16 h-11 px-2 bg-background border border-border rounded-md text-center text-foreground"
                 />
               </label>
-
               {showSideboardOption && (
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isSideboard}
-                    onChange={(e) => setIsSideboard(e.target.checked)}
-                    className="rounded border-border bg-background text-primary focus:ring-ring"
-                  />
-                  <span>Añadir al Sideboard</span>
-                </label>
+                <ToolbarChoices
+                  label="Destino"
+                  value={isSideboard ? "sideboard" : "mainboard"}
+                  onChange={(value) => setIsSideboard(value === "sideboard")}
+                  options={[
+                    { value: "mainboard", label: "Mazo principal" },
+                    { value: "sideboard", label: "Sideboard" },
+                  ]}
+                />
               )}
-            </div>
-
-            <span>{results.length > 0 ? `${results.length} resultados` : ""}</span>
-          </div>
-        </div>
+            </>
+          }
+          actions={
+            <span className="text-xs text-muted-foreground">
+              {results.length > 0 ? `${results.length} resultados` : ""}
+            </span>
+          }
+        />
 
         <div className="flex-1 overflow-y-auto mt-3 pr-1 space-y-2 min-h-[300px] border-t border-border pt-3">
           {loading && (

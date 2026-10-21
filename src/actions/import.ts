@@ -114,7 +114,7 @@ export async function importCollectionFromText(
 
   revalidatePath("/collection");
   revalidatePath("/decks");
-  revalidatePath("/wants");
+  revalidatePath("/buy/list");
   return {
     success: true,
     importId: res.importId,

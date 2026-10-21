@@ -13,10 +13,21 @@ export function filterExpansions(expansions: Expansion[], query: string): Expans
     (!normalizedQuery || set.name.toLocaleLowerCase().includes(normalizedQuery) || set.code.toLocaleLowerCase().includes(normalizedQuery)));
 }
 
+export function expansionCardIdentity(card: ExpansionCard) {
+  return `${card.setCode.toLowerCase()}:${card.catalogId ? `catalog:${card.catalogId}` : `printing:${card.id}`}`;
+}
+
 export function getExpansionProgress(cards: ExpansionCard[]) {
-  const total = new Set(cards.map((card) => card.id)).size;
-  const owned = new Set(cards.filter((card) => card.isOwned).map((card) => card.id)).size;
-  return { owned, total, percentage: total ? Math.round((owned / total) * 100) : 0 };
+  // Include the edition in the key: a reprint from another set cannot cover it.
+  // Unresolved catalog identities remain separate instead of merging by name.
+  const uniquePrintings = [...new Map(cards.map(card => [`${card.setCode.toLowerCase()}:${card.id}`, card])).values()];
+  const identity = expansionCardIdentity;
+  const checklist = new Set(uniquePrintings.filter(card => card.isBasePrinting !== false).map(identity));
+  const ownedIdentities = new Set(uniquePrintings.filter(card => card.isOwned && card.ownedQuantity > 0).map(identity));
+  const owned = [...checklist].filter(key => ownedIdentities.has(key)).length;
+  const total = checklist.size;
+  const alternatives = uniquePrintings.filter(card => checklist.has(identity(card))).length - total;
+  return { owned, total, alternatives, percentage: total ? Math.round((owned / total) * 100) : 0 };
 }
 
 export function summarizeAcquisitionBalance(cards: ExpansionCard[]) {

@@ -102,12 +102,12 @@ describe("PriceHistoryChart - MTGGoldfish Expansion Markers", () => {
       />
     );
 
-    const checkbox = screen.getByRole("checkbox", { name: /Lanzamientos de expansión/i });
+    const checkbox = screen.getByRole("button", { name: /Lanzamientos de expansión/i });
     expect(checkbox).toBeDefined();
-    expect((checkbox as HTMLInputElement).checked).toBe(true);
+    expect(checkbox).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(checkbox);
-    expect((checkbox as HTMLInputElement).checked).toBe(false);
+    expect(checkbox).toHaveAttribute("aria-pressed", "false");
   });
 
   it("calls onSelectPrinting when clicking an expansion marker with a printing", () => {
@@ -132,7 +132,7 @@ describe("PriceHistoryChart - MTGGoldfish Expansion Markers", () => {
     const marker = screen.getByRole("button", { name: /ONE Phyrexia/ });
     expect(marker.closest("svg")).toBeNull();
     expect(marker).toHaveTextContent("10 feb 2023");
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", {name: /Lanzamientos de expansión/i}));
     expect(screen.queryByRole("region", { name: "Lanzamientos en el período" })).not.toBeInTheDocument();
   });
 

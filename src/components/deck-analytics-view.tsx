@@ -1,57 +1,25 @@
 "use client";
 
+import { ViewToolbar, ToolbarChoices, ToolbarToggle } from "@/components/view-toolbar";
+
+import { DeckFunctions } from "@/components/deck-functions";
 import React, { useState, useMemo } from "react";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-  CartesianGrid,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
-import {
-  BarChart3,
-  Calculator,
-  Flame,
-  ShieldCheck,
-  AlertTriangle,
-  XCircle,
-  HelpCircle,
-  Sliders,
-  Layers,
-  Sparkles,
-  Droplet,
-  Crown,
-  Info,
-  Scale,
-  Compass,
-} from "lucide-react";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, PieChart, Pie, Cell } from "recharts";
+import { Flame, ShieldCheck, AlertTriangle, XCircle, Sliders, Crown, Info, Scale, Compass } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+
 import { Badge } from "@/components/ui/badge";
 import { ManaCost } from "@/components/mana-cost";
 import type { DeckCardWithOwnership } from "@/lib/schemas";
-import {
-  analyzeManaCurve,
-  analyzeTypeDistribution,
-  analyzeManaBaseAndColors,
-  getOpeningHandProbabilities,
-  calculateCommanderOnCurve,
-  calculateHypergeometric,
-  parseManaValue,
-} from "@/lib/deck-analytics";
+import { analyzeManaCurve, analyzeTypeDistribution, analyzeManaBaseAndColors, getOpeningHandProbabilities, calculateCommanderOnCurve, calculateHypergeometric, parseManaValue } from "@/lib/deck-analytics";
 
 interface DeckAnalyticsViewProps {
+  deckId?: string;
   cards: DeckCardWithOwnership[];
   colors?: string[] | null;
 }
 
-export function DeckAnalyticsView({ cards, colors }: DeckAnalyticsViewProps) {
+export function DeckAnalyticsView({ cards, colors, deckId }: DeckAnalyticsViewProps) {
   // Mana Curve State & Options
   const [excludeLands, setExcludeLands] = useState<boolean>(true);
   const [excludeCommander, setExcludeCommander] = useState<boolean>(true);
@@ -117,6 +85,7 @@ export function DeckAnalyticsView({ cards, colors }: DeckAnalyticsViewProps) {
 
   return (
     <div className="space-y-8">
+      <DeckFunctions key={deckId} cards={cards} deckId={deckId} />
       {/* ========================================================================= */}
       {/* SECCIÓN 1 — Curva de Maná y Composición por Tipo (Horizontal Compacto)     */}
       {/* ========================================================================= */}
@@ -133,63 +102,14 @@ export function DeckAnalyticsView({ cards, colors }: DeckAnalyticsViewProps) {
               </p>
             </div>
 
-            {/* Controls: Stack Mode Toggle + Exclude Toggles + Dynamic Average CMC */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Stacking Mode Toggle */}
-              <div className="flex items-center bg-secondary/80 p-0.5 rounded-lg border border-border">
-                <button
-                  onClick={() => setCurveStackMode("type")}
-                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
-                    curveStackMode === "type"
-                      ? "bg-primary text-primary-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Tipo
-                </button>
-                <button
-                  onClick={() => setCurveStackMode("color")}
-                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
-                    curveStackMode === "color"
-                      ? "bg-primary text-primary-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Color
-                </button>
-              </div>
-
-              {/* Filter Toggles */}
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setExcludeLands(!excludeLands)}
-                  className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${
-                    excludeLands
-                      ? "bg-secondary text-foreground border-primary/40 font-semibold"
-                      : "bg-background text-muted-foreground border-border hover:bg-secondary/40"
-                  }`}
-                >
-                  {excludeLands ? "✓ Sin Tierras" : "Con Tierras"}
-                </button>
-
-                <button
-                  onClick={() => setExcludeCommander(!excludeCommander)}
-                  className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${
-                    excludeCommander
-                      ? "bg-secondary text-foreground border-primary/40 font-semibold"
-                      : "bg-background text-muted-foreground border-border hover:bg-secondary/40"
-                  }`}
-                >
-                  {excludeCommander ? "✓ Sin Cdte." : "Con Cdte."}
-                </button>
-              </div>
-
-              {/* Metric badge */}
-              <div className="flex items-center gap-2 bg-secondary/60 px-2.5 py-1 rounded-lg border border-border shrink-0">
-                <span className="text-[10px] text-muted-foreground uppercase font-semibold">CMC:</span>
-                <span className="text-sm font-bold font-mono text-primary">{curveData.avgCmc}</span>
-              </div>
-            </div>
+            <ViewToolbar label="Opciones de la curva de maná"
+              filters={<>
+                <ToolbarToggle pressed={excludeLands} onClick={() => setExcludeLands(!excludeLands)}>Sin tierras</ToolbarToggle>
+                <ToolbarToggle pressed={excludeCommander} onClick={() => setExcludeCommander(!excludeCommander)}>Sin comandante</ToolbarToggle>
+              </>}
+              display={<ToolbarChoices label="Agrupar" value={curveStackMode} onChange={setCurveStackMode} options={[{value:"type",label:"Tipo"},{value:"color",label:"Color"}]} />}
+              actions={<span className="text-xs text-muted-foreground">CMC: <strong className="font-mono text-primary">{curveData.avgCmc}</strong></span>}
+            />
           </div>
 
           {/* Stacked Bar Chart */}
@@ -378,7 +298,9 @@ export function DeckAnalyticsView({ cards, colors }: DeckAnalyticsViewProps) {
           </div>
 
           <div className="flex flex-col justify-center">
-            {manaBase.totalLands < manaBase.recommendedLands - 2 ? (
+            {manaBase.karstenRecs.some(r => r.status === "danger" || r.status === "warning") ? (
+              <div className="flex items-center gap-2 rounded-lg border border-rose-800/40 bg-rose-950/30 p-2.5 text-xs font-semibold text-rose-400"><AlertTriangle className="h-4 w-4 shrink-0" /><span>Fuentes de color insuficientes: revisa los colores señalados abajo, aunque el total de tierras sea adecuado.</span></div>
+            ) : manaBase.totalLands < manaBase.recommendedLands - 2 ? (
               <div className="flex items-center gap-2 text-rose-400 text-xs font-semibold bg-rose-950/30 p-2.5 rounded-lg border border-rose-800/40">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span>Base ajustada: podrías sufrir falta de tierras en turnos 3–5.</span>
@@ -500,11 +422,11 @@ export function DeckAnalyticsView({ cards, colors }: DeckAnalyticsViewProps) {
           <div className="flex items-center gap-2">
             <Flame className="h-4 w-4 text-amber-400" />
             <h4 className="text-base font-bold text-foreground">
-              Fuentes Mínimas de Frank Karsten (90% Probabilidad en Turno)
+              Fuentes de color · modelo de probabilidad al 90%
             </h4>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Recomendaciones estadísticas para asegurar que puedes jugar tus cartas con los costes de color más exigentes sin quedarte sin maná coloreado.
+            Modelo hipergeométrico según el coste y turno de cada carta, inspirado en el enfoque de Karsten. Cuenta tierras multicolor y productores jugables en un turno anterior. Supone jugar primero, sin mulligan, fuentes enderezadas y costes híbridos conservadores; no garantiza poder pagar todo el coste de maná.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -525,7 +447,7 @@ export function DeckAnalyticsView({ cards, colors }: DeckAnalyticsViewProps) {
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-sm text-foreground">
-                      {rec.colorName} ({rec.color})
+                      {rec.colorName} ({rec.color}) · turno {rec.targetTurn}
                     </span>
                     {isOptimal ? (
                       <div className="flex items-center gap-1 text-xs font-semibold text-emerald-400">

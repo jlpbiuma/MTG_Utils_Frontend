@@ -17,11 +17,11 @@ import { CardToPrice } from "@/lib/pricing";
  */
 export async function getDeckPriceSummary(
   deckId: string,
-  provider: PriceProvider = "cardmarket",
-  forceRefresh: boolean = false
+  provider: PriceProvider = "cardmarket"
 ): Promise<PriceSummary> {
+  provider = "cardmarket";
   const userId = await getCurrentUserId();
-  return await backendFetch<PriceSummary>(`/api/pricing/decks/${encodeURIComponent(deckId)}?provider=${provider}&forceRefresh=${forceRefresh}`, {
+  return await backendFetch<PriceSummary>(`/api/pricing/decks/${encodeURIComponent(deckId)}?provider=${provider}`, {
     method: "POST",
     body: JSON.stringify({}),
     userId,
@@ -30,12 +30,12 @@ export async function getDeckPriceSummary(
 
 export async function getCardsPriceSummary(
   cards: CardToPrice[],
-  provider: PriceProvider = "cardmarket",
-  forceRefresh = false
+  provider: PriceProvider = "cardmarket"
 ): Promise<PriceSummary> {
+  provider = "cardmarket";
   return await backendFetch<PriceSummary>("/api/pricing/cards", {
     method: "POST",
-    body: JSON.stringify({ cards, provider, forceRefresh }),
+    body: JSON.stringify({ cards, provider }),
     userId: await getCurrentUserId(),
   });
 }
@@ -44,16 +44,15 @@ export async function getCardsPriceSummary(
  * Calculates or retrieves cached prices for the entire collection via FastAPI backend.
  */
 export async function getCollectionPriceSummary(
-  provider: PriceProvider = "cardmarket",
-  forceRefresh: boolean = false
+  provider: PriceProvider = "cardmarket"
 ): Promise<PriceSummary> {
+  provider = "cardmarket";
   const userId = await getCurrentUserId();
   return await backendFetch<PriceSummary>("/api/pricing", {
     method: "POST",
     body: JSON.stringify({
       includeCollection: true,
       provider,
-      forceRefresh,
     }),
     userId,
   });
@@ -65,8 +64,8 @@ export async function getPriceMovers(options: {
   limit?: number;
   scope?: MoversScope;
 } = {}): Promise<PriceMoversResponse> {
+  const provider = "cardmarket";
   const {
-    provider = "cardmarket",
     windowDays = 30,
     limit = 20,
     scope = "global",
@@ -88,6 +87,7 @@ export async function getCardPriceHistory(
   provider: PriceProvider = "cardmarket",
   days: number = 30
 ): Promise<CardPriceHistoryResponse> {
+  provider = "cardmarket";
   const params = new URLSearchParams({
     provider,
     days: String(days),
@@ -106,6 +106,7 @@ export async function getCollectionPriceHistory(
   provider: PriceProvider = "cardmarket",
   days: number = 30
 ): Promise<CollectionValueHistoryResponse> {
+  provider = "cardmarket";
   const params = new URLSearchParams({
     provider,
     days: String(days),
@@ -114,35 +115,4 @@ export async function getCollectionPriceHistory(
     `/api/pricing/collection/history?${params.toString()}`,
     { method: "GET", userId: await getCurrentUserId() }
   );
-}
-
-
-export async function triggerWeeklyCollectionPricing(): Promise<{
-  success: boolean;
-  message: string;
-  timestamp: string;
-  updatedCatalogCount: number;
-}> {
-  try {
-    const res = await backendFetch<{ status: string; enrichedCards: number }>("/api/worker/enrich", {
-      method: "POST",
-    });
-    return {
-      success: true,
-      message: "Actualización completada",
-      timestamp: new Date().toISOString(),
-      updatedCatalogCount: res?.enrichedCards ?? 0,
-    };
-  } catch {
-    return {
-      success: true,
-      message: "Actualización procesada",
-      timestamp: new Date().toISOString(),
-      updatedCatalogCount: 0,
-    };
-  }
-}
-
-export async function getCollectionPricesLastUpdated(): Promise<string | null> {
-  return new Date().toISOString();
 }

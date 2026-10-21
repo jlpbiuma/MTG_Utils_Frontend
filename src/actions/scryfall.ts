@@ -1,5 +1,7 @@
 "use server";
 
+import type { UpcomingReprint } from "@/lib/upcoming-reprints";
+
 import { backendFetch } from "@/lib/api-client";
 
 export interface ScryfallCardResult {
@@ -137,6 +139,7 @@ export interface CardPrintingDetail {
   price_usd?: number | null;
   price_usd_foil?: number | null;
   released_at?: string | null;
+  set_released_at?: string | null;
   set_type?: string | null;
   icon_svg_uri?: string | null;
 }
@@ -170,6 +173,7 @@ export interface SpanishCardFace {
 }
 
 export interface SpanishCardDetails {
+  upcomingReprints?: UpcomingReprint[];
   id: string;
   name: string;
   name_es: string;

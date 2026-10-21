@@ -1,7 +1,5 @@
 import { PriceProvider, PriceSummary, CardPriceQuote, PRICE_PROVIDERS } from "./types";
 import { calculateCardmarketQuote, RawScryfallPriceData } from "./cardmarket";
-import { calculateCardTraderQuote } from "./cardtrader";
-import { calculateMTGGoldfishQuote } from "./mtggoldfish";
 import { normalizeCardName } from "@/lib/card-utils";
 
 
@@ -76,6 +74,7 @@ export async function getPriceSummary(
   provider: PriceProvider = "cardmarket",
   bypassCache: boolean = false
 ): Promise<PriceSummary> {
+  provider = "cardmarket";
   const config = PRICE_PROVIDERS[provider] || PRICE_PROVIDERS.cardmarket;
 
   const quotes: Record<string, CardPriceQuote> = {};
@@ -111,19 +110,7 @@ export async function getPriceSummary(
     const norm = normalizeCardName(card.name);
     const rawData = rawPriceMap.get(norm);
 
-    let quote: CardPriceQuote;
-    switch (provider) {
-      case "cardtrader":
-        quote = await calculateCardTraderQuote(card, rawData);
-        break;
-      case "mtggoldfish":
-        quote = calculateMTGGoldfishQuote(card, rawData);
-        break;
-      case "cardmarket":
-      default:
-        quote = calculateCardmarketQuote(card, rawData);
-        break;
-    }
+    const quote = calculateCardmarketQuote(card, rawData);
 
     quotes[norm] = quote;
     if (card.scryfallId) {

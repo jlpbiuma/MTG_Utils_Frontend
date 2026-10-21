@@ -2,23 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Library, TrendingUp, Moon, FlaskConical } from "lucide-react";
+import { Library, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/collection/inventory", label: "Inventario", icon: Library },
-  { href: "/collection/value-history", label: "Evolución de Valor", icon: TrendingUp },
-  { href: "/collection/dormant", label: "Cartas Dormidas", icon: Moon },
-  { href: "/collection/simulated", label: "Colecciones Simuladas", icon: FlaskConical },
+  { href: "/collection/expansions", label: "Rendimiento por expansión", icon: TrendingUp },
 ] as const;
 
 export function CollectionTabNav() {
   const pathname = usePathname();
   return (
     <div
-      role="tablist"
+      role="navigation"
       aria-label="Secciones de colección"
-      className="inline-flex h-10 items-center justify-center rounded-md bg-secondary/70 p-1 border border-border text-muted-foreground gap-1 flex-wrap sm:flex-nowrap"
+      className="flex min-h-11 items-center justify-center rounded-md bg-secondary/70 p-1 border border-border text-muted-foreground gap-1 flex-wrap sm:flex-nowrap"
     >
       {TABS.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
@@ -26,8 +24,7 @@ export function CollectionTabNav() {
           <Link
             key={href}
             href={href}
-            role="tab"
-            aria-selected={active}
+            aria-current={active ? "page" : undefined}
             className={cn(
               "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all",
               active

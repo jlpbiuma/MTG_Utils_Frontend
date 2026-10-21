@@ -1,5 +1,8 @@
 "use client";
 
+import { HistoricalPriceSummary, historicalPrice } from "@/components/historical-price-summary";
+
+import { ViewToolbar, ToolbarChoices, ToolbarSort } from "@/components/view-toolbar";
 import { useId, useState } from "react";
 import type { PurchaseAnalysis } from "@/actions/simulated-collections";
 
@@ -63,6 +66,8 @@ export function SimulatedPurchaseComparison({ analysis: a, onCardDetails }: { an
         Comparación de {a.comparedCopies} copias: compra {euros(a.comparedPurchaseCost)} frente a mercado {euros(a.comparedMarketValue)}.
         {" "}Signo positivo = ahorro; negativo = sobreprecio. No es un beneficio de reventa garantizado.
       </p>
+      <HistoricalPriceSummary label="Histórico global de la oferta" statistics={a.historyStatistics} />
+      <p className="text-xs text-muted-foreground">Todo el histórico disponible de las impresiones de referencia, respetando foil y cantidades. Media y desviación típica poblacional del valor total en las fechas con cotizaciones para todas las cartas; sin envío ni comisiones. No se suman las desviaciones individuales. Cobertura: {a.historyCoveredCopies ?? 0} copias con histórico; {a.missingHistoryCopies ?? 0} sin histórico.{!a.historyStatistics?.observations && " No hay fechas comunes suficientes para calcular el total completo."}</p>
       <div className="space-y-1 rounded-lg border border-border p-3 text-sm">
         <p>{a.wantsCoveredCopies} de {a.wantsRequestedCopies} copias de wants cubiertas; {a.wantsCompletedCards} de {a.wantsRequestedCards} nombres completados.</p>
         <p>Gasto en wants: {euros(a.wantsPurchaseCost)} · Resto de la compra: {euros(a.restPurchaseCost)}</p>
@@ -87,29 +92,53 @@ export function SimulatedPurchaseComparison({ analysis: a, onCardDetails }: { an
       </div>
       <details>
         <summary className="cursor-pointer py-3 text-sm font-medium focus-visible:outline-ring">Ver precios por carta ({a.cards.length} filas)</summary>
-        <label htmlFor={`${id}-filter`} className="text-sm">Mostrar cartas</label>
-        <select id={`${id}-filter`} value={filter} onChange={e => setFilter(e.target.value)} className="ml-2 min-h-11 max-w-full rounded-md border border-border bg-background p-2 text-sm">
-          <option value="all">Todas</option><option value="in-wants">En wants</option><option value="decks">En mazos</option><option value="owned">En colección</option><option value="wants">Cubren wants</option><option value="rest">Con copias fuera de wants cubiertos</option><option value="unrelated">Fuera de wants, mazos y colección</option>
-        </select>
-        <label htmlFor={`${id}-sort`} className="ml-3 text-sm">Ordenar precios por carta</label>
-        <select id={`${id}-sort`} value={sort} onChange={event => setSort(event.target.value)} className="ml-2 min-h-11 max-w-full rounded-md border border-border bg-background p-2 text-sm">
-          <option value="original">Orden del carrito</option>
-          <option value="unit-desc">Precio unitario: mayor primero</option><option value="unit-asc">Precio unitario: menor primero</option>
-          <option value="purchase-desc">Precio compra total: mayor primero</option><option value="purchase-asc">Precio compra total: menor primero</option>
-          <option value="difference-desc">Precio diferencial: mayor primero</option><option value="difference-asc">Precio diferencial: menor primero</option>
-        </select>
+        <ViewToolbar
+          label="Opciones de comparación de precios"
+          filters={
+            <ToolbarChoices
+              label="Mostrar cartas"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: "all", label: "Todas" },
+                { value: "in-wants", label: "En wants" },
+                { value: "decks", label: "En mazos" },
+                { value: "owned", label: "En colección" },
+                { value: "wants", label: "Cubren wants" },
+                { value: "rest", label: "Con copias fuera de wants cubiertos" },
+                { value: "unrelated", label: "Fuera de wants, mazos y colección" },
+              ]}
+            />
+          }
+          sorting={
+            <ToolbarSort
+              label="Ordenar precios por carta"
+              value={sort.split("-")[0]}
+              direction={sort.endsWith("asc") ? "asc" : "desc"}
+              onChange={(value, dir) =>
+                setSort(value === "original" ? "original" : `${value}-${dir}`)
+              }
+              options={[
+                { value: "original", label: "Orden del carrito" },
+                { value: "unit", label: "Precio unitario", defaultDesc: true },
+                { value: "purchase", label: "Precio compra total", defaultDesc: true },
+                { value: "difference", label: "Precio diferencial", defaultDesc: true },
+              ]}
+            />
+          }
+        />
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Precios de compra y mercado por carta</caption>
-            <thead><tr className="border-b border-border"><th scope="col" className="p-2">Carta</th><th scope="col" className="p-2">Copias</th><th scope="col" className="p-2">Compra / ud.</th><th scope="col" className="p-2">Mercado / ud.</th><th scope="col" className="p-2">Diferencia total</th></tr></thead>
-            <tbody>{rows.map((c, i) => <tr key={i} className="border-b border-border/50">
+            <thead><tr className="border-b border-border"><th scope="col" className="p-2">Carta</th><th scope="col" className="p-2">Copias</th><th scope="col" className="p-2">Compra / ud.</th><th scope="col" className="p-2">Mercado / ud.</th><th scope="col" className="p-2">Media histórica / ud.</th><th scope="col" className="p-2">Desviación típica / ud.</th><th scope="col" className="p-2">Diferencia total</th></tr></thead>
+            <tbody>{rows.map((c, i) => <tr key={i} className={`border-b border-border/50 ${c.savings !== null && c.savings < 0 ? "bg-rose-500/10 text-rose-300" : ""}`}>
               <th scope="row" className="min-w-48 p-2 font-normal">
                 {onCardDetails ? <button type="button" onClick={() => onCardDetails(c.cardName)} className="min-h-11 text-left font-medium hover:text-primary focus-visible:outline-ring">{c.cardName}</button> : <span className="font-medium">{c.cardName}</span>}
                 <span className="block text-xs text-muted-foreground">{c.setName?.replaceAll("-", " ")} {c.collectorNumber && `#${c.collectorNumber}`} {c.condition} {c.isFoil && "Foil"}</span>
                 <span className="block text-xs text-muted-foreground">{REFERENCE_NAMES[c.referenceKind]}{c.referenceSet && `: ${c.referenceSet} #${c.referenceCollectorNumber}`}</span>
                 <span className="block text-xs text-muted-foreground">Wants: {c.wantsCoveredCopies} · Mazos: {c.inDecks ? "Sí" : "No"} · En colección: {c.copiesOwned}</span>
               </th>
-              <td className="p-2 tabular-nums">{c.quantity}</td><td className="whitespace-nowrap p-2 tabular-nums">{euros(c.purchaseUnitPrice)}</td><td className="whitespace-nowrap p-2 tabular-nums">{euros(c.marketUnitPrice)}</td><td className="whitespace-nowrap p-2 tabular-nums">{difference(c.savings)}</td>
+              <td className="p-2 tabular-nums">{c.quantity}</td><td className="whitespace-nowrap p-2 tabular-nums">{euros(c.purchaseUnitPrice)}</td><td className="whitespace-nowrap p-2 tabular-nums">{euros(c.marketUnitPrice)}</td><td className="whitespace-nowrap p-2 tabular-nums">{historicalPrice(c.historyStatistics?.mean)}<span className="block text-xs text-muted-foreground">{c.historyStatistics?.observations ?? 0} fechas</span></td><td className="whitespace-nowrap p-2 tabular-nums">{historicalPrice(c.historyStatistics?.standardDeviation)}</td><td className="whitespace-nowrap p-2 tabular-nums">{difference(c.savings)}</td>
             </tr>)}</tbody>
           </table>
           {rows.length === 0 && <p className="py-3 text-sm text-muted-foreground">No hay cartas en este grupo.</p>}

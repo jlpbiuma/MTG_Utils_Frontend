@@ -1,17 +1,12 @@
 "use client";
 
+import { ViewToolbar, ToolbarSearch } from "@/components/view-toolbar";
+
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { CardImage as Image } from "@/components/card-image";
-import { Crown, AlertCircle, Loader2, Sparkles, Search, RotateCw } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Crown, AlertCircle, Loader2, Sparkles, RotateCw } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -679,18 +674,17 @@ export function SelectCommanderDialog({
                   <Sparkles className="w-3.5 h-3.5 text-primary" />
                   Elegir de las cartas del mazo ({candidateCards.length})
                 </label>
-                {candidateCards.length > 6 && (
-                  <div className="relative w-full min-w-0">
-                    <Search className="w-3 h-3 absolute left-2 top-2 text-muted-foreground" />
-                    <input
-                      type="text"
-                      placeholder="Filtrar..."
+                <ViewToolbar
+                  label="Opciones de los comandantes del mazo"
+                  search={
+                    <ToolbarSearch
                       value={candidateFilter}
-                      onChange={(e) => setCandidateFilter(e.target.value)}
-                      className="w-full h-7 pl-6 pr-2 bg-background border border-border rounded-md text-xs text-foreground"
+                      onChange={setCandidateFilter}
+                      placeholder="Filtrar comandantes..."
                     />
-                  </div>
-                )}
+                  }
+                />
+
               </div>
 
               <div className="w-full min-w-0 max-h-48 overflow-x-hidden overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">

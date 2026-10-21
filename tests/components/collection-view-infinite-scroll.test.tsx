@@ -4,11 +4,6 @@ import { CollectionView } from "@/components/collection-view";
 import * as collectionActions from "@/actions/collection";
 import type { CollectionCardDTO, CollectionQueryResponse } from "@/actions/collection";
 
-vi.mock("@/actions/pricing", () => ({
-  getCollectionPricesLastUpdated: vi.fn().mockResolvedValue("2026-09-06T10:00:00Z"),
-  triggerWeeklyCollectionPricing: vi.fn(),
-}));
-
 vi.mock("@/actions/collection", () => ({
   addOrIncrementCard: vi.fn(),
   updateCollectionQuantity: vi.fn(),

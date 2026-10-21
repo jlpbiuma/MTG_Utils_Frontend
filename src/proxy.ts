@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const token = request.cookies.get("mtg_token")?.value;
   const userId = request.cookies.get("mtg_user_id")?.value;
   const isAuthenticated = Boolean(token || userId);

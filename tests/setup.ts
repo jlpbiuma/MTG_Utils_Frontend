@@ -1,6 +1,8 @@
 import "@testing-library/jest-dom/vitest";
-import { vi, afterEach } from "vitest";
+import { vi, afterEach, beforeEach } from "vitest";
 import { cleanup } from "@testing-library/react";
+
+beforeEach(() => { window.history.replaceState(null, "", "/decks"); });
 
 // Automatically cleanup DOM after each test
 afterEach(() => {
@@ -8,7 +10,8 @@ afterEach(() => {
 });
 
 // Mock Next.js navigation
-vi.mock("next/navigation", () => ({
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
   useRouter: () => ({
     push: vi.fn(),
     replace: vi.fn(),

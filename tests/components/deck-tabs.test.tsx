@@ -4,8 +4,12 @@ import DecksPage from "@/app/decks/page";
 import { DeckWithCompletion } from "@/lib/schemas";
 import * as deckActions from "@/actions/decks";
 
+vi.mock("@/actions/auth", () => ({ getCurrentUserId: vi.fn().mockResolvedValue("user-1") }));
+
 vi.mock("@/actions/decks", () => ({
   getDecksWithCompletion: vi.fn(),
+  getDeckAssignmentNotices: vi.fn().mockResolvedValue([]),
+  acceptDeckAssignmentNotice: vi.fn().mockResolvedValue(undefined),
   deleteDeck: vi.fn().mockResolvedValue({ success: true }),
   archiveDeck: vi.fn().mockResolvedValue({ success: true }),
   updateDeck: vi.fn().mockResolvedValue({}),
@@ -80,7 +84,7 @@ describe("DecksPage Tabs Navigation", () => {
     vi.clearAllMocks();
   });
 
-  it("should render the 3 main tabs: Mis mazos, Archivados, and Recomendaciones EDHREC", async () => {
+  it("should render the 3 main tabs: Mis mazos, Archivados, and Descubrir", async () => {
     vi.mocked(deckActions.getDecksWithCompletion).mockResolvedValue([activeDeck, archivedDeck]);
 
     const ui = await DecksPage({});
@@ -89,7 +93,7 @@ describe("DecksPage Tabs Navigation", () => {
     // Verify Tab triggers
     const myDecksTab = screen.getByRole("tab", { name: /Mis mazos/i });
     const archivedTab = screen.getByRole("tab", { name: /Archivados/i });
-    const edhrecTab = screen.getByRole("tab", { name: /Recomendaciones EDHREC/i });
+    const edhrecTab = screen.getByRole("tab", { name: /Descubrir/i });
 
     expect(myDecksTab).toBeInTheDocument();
     expect(archivedTab).toBeInTheDocument();
@@ -132,13 +136,13 @@ describe("DecksPage Tabs Navigation", () => {
     expect(screen.getByText(/Mazos Archivados \(1\)/i)).toBeInTheDocument();
   });
 
-  it("should switch to Recomendaciones EDHREC tab and display EDHREC recommendations view", async () => {
+  it("should switch to Descubrir tab and display EDHREC recommendations view", async () => {
     vi.mocked(deckActions.getDecksWithCompletion).mockResolvedValue([activeDeck]);
 
     const ui = await DecksPage({});
     render(ui);
 
-    const edhrecTab = screen.getByRole("tab", { name: /Recomendaciones EDHREC/i });
+    const edhrecTab = screen.getByRole("tab", { name: /Descubrir/i });
     fireEvent.mouseDown(edhrecTab, { button: 0 });
 
     expect(screen.getByTestId("edhrec-recommendations-view")).toBeInTheDocument();
@@ -146,7 +150,7 @@ describe("DecksPage Tabs Navigation", () => {
   it("returns directly to the recommendations tab from a deck preview", async () => {
     vi.mocked(deckActions.getDecksWithCompletion).mockResolvedValue([activeDeck]);
     render(await DecksPage({ searchParams: Promise.resolve({ tab: "edhrec" }) }));
-    expect(screen.getByRole("tab", { name: /Recomendaciones EDHREC/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /Descubrir/i })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("edhrec-recommendations-view")).toBeInTheDocument();
   });
 });

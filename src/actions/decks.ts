@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "./auth";
 import { backendFetch } from "@/lib/api-client";
 import {
+  DeckAssignmentNotice,
   DeckCreateInput,
   DeckUpdateInput,
   DeckCardCreateInput,
@@ -14,7 +15,8 @@ import {
 
 export async function getUserDecks(): Promise<DeckSummary[]> {
   const userId = await getCurrentUserId();
-  return await backendFetch<DeckSummary[]>("/api/decks", { userId });
+
+  return await backendFetch<DeckSummary[]>(`/api/decks?provider=cardmarket`, { userId });
 }
 
 export async function getDecksWithCompletion(): Promise<any[]> {
@@ -29,7 +31,8 @@ export async function getDecksWithCompletion(): Promise<any[]> {
 export async function getDeckDetail(deckId: string): Promise<DeckDetailWithStats | null> {
   const userId = await getCurrentUserId();
   try {
-    return await backendFetch<DeckDetailWithStats>(`/api/decks/${deckId}`, { userId });
+
+    return await backendFetch<DeckDetailWithStats>(`/api/decks/${deckId}?provider=cardmarket`, { userId });
   } catch (error) {
     console.error(`Error getting deck ${deckId}:`, error);
     return null;
@@ -439,7 +442,7 @@ export async function archiveDeck(
 
   revalidatePath("/decks");
   revalidatePath(`/decks/${deckId}`);
-  revalidatePath("/priorities");
+  revalidatePath("/buy/needs");
   revalidatePath("/collection");
   return { success: true };
 }
@@ -504,3 +507,16 @@ export async function getEdhrecCommanderRecommendations(
   return await backendFetch<CommanderRecommendationsListResponse>(endpoint, { userId });
 }
 
+
+export async function getDeckAssignmentNotices(): Promise<DeckAssignmentNotice[]> {
+  const userId = await getCurrentUserId();
+  return backendFetch<DeckAssignmentNotice[]>("/api/decks/assignment-notices", { userId });
+}
+
+export async function acceptDeckAssignmentNotice(noticeId: string): Promise<void> {
+  const userId = await getCurrentUserId();
+  await backendFetch(`/api/decks/assignment-notices/${encodeURIComponent(noticeId)}/accept`, {
+    method: "POST", userId,
+  });
+  revalidatePath("/decks");
+}

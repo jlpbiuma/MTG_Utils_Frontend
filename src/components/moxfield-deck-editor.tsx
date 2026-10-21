@@ -1,65 +1,31 @@
 "use client";
 
+import { ViewToolbar, ToolbarSearch, ToolbarChoices, ToolbarToggle, ToolbarSort } from "@/components/view-toolbar";
+
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import Link from "next/link";
-import {
-  Search,
-  Sliders,
-  Check,
-  Plus,
-  Minus,
-  Trash2,
-  Tag,
-  Crown,
-  ChevronDown,
-  ShoppingBag,
-  ExternalLink,
-  Layers,
-  Sparkles,
-  Grid,
-  List,
-  BookmarkPlus,
-  Settings2,
-  CheckSquare,
-  Square,
-  X,
-  RefreshCw,
-  Loader2,
-  ShieldAlert,
-  AlertTriangle,
-  ArrowRightLeft,
-  Eye,
-} from "lucide-react";
+
+import { Search, Plus, Minus, Trash2, Crown, ChevronDown, ShoppingBag, ExternalLink, List, BookmarkPlus, CheckSquare, Square, X, Loader2, AlertTriangle, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+
 import { ManaCost } from "@/components/mana-cost";
-import { CardPreviewHover } from "@/components/card-preview-hover";
-import { CardImage as Image } from "@/components/card-image";
+
 import { CardContextMenu } from "@/components/card-context-menu";
 import { DeckTagManagerDialog } from "@/components/deck-tag-manager-dialog";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import type { DeckCardWithOwnership, DeckDetailWithStats } from "@/lib/schemas";
-import type { PriceProvider, PriceSummary } from "@/lib/pricing/types";
+import type { PriceSummary } from "@/lib/pricing/types";
 import { normalizeCardName, getCardCategory } from "@/lib/card-utils";
 import { parseManaValue, getCardColorBucket } from "@/lib/deck-analytics";
 import { searchCards, ScryfallCardResult } from "@/actions/scryfall";
-import {
-  addCardToDeck,
-  updateDeckCardQuantity,
-  updateDeckCardTags,
-  updateDeckTags,
-  removeCardFromDeck,
-  moveCardToSideboard,
-} from "@/actions/decks";
+import { addCardToDeck, updateDeckCardQuantity, updateDeckCardTags, updateDeckTags, removeCardFromDeck, moveCardToSideboard } from "@/actions/decks";
 import { addDeckMissingToWants } from "@/actions/wants";
 
 interface MoxfieldDeckEditorProps {
   deck: DeckDetailWithStats;
+  modeControls?: React.ReactNode;
   cards: DeckCardWithOwnership[];
   priceSummary: PriceSummary | null;
-  priceProvider: PriceProvider;
-  onPriceProviderChange?: (provider: PriceProvider) => void;
   onCardsUpdated: (updater: (prev: DeckCardWithOwnership[]) => DeckCardWithOwnership[]) => void;
   onDeckUpdated?: (updater: (prev: DeckDetailWithStats) => DeckDetailWithStats) => void;
 }
@@ -68,14 +34,16 @@ export function MoxfieldDeckEditor({
   deck,
   cards,
   priceSummary,
-  priceProvider,
-  onPriceProviderChange,
   onCardsUpdated,
   onDeckUpdated,
+  modeControls,
 }: MoxfieldDeckEditorProps) {
+  const [cardQuery, setCardQuery] = useState("");
+  const [ownership, setOwnership] = useState<"all" | "owned" | "missing">("all");
   // Top toolbar states
   const [viewMode, setViewMode] = useState<"text" | "visual">("text");
   const [grouping, setGrouping] = useState<"tags" | "type_and_tags" | "type" | "mana_value" | "color">("tags");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [sortBy, setSortBy] = useState<"name" | "cmc" | "price">("name");
 
   // Filter states
@@ -361,7 +329,8 @@ export function MoxfieldDeckEditor({
   // Grouping & Sorting logic
   // ==========================================
   const groupedCards = useMemo(() => {
-    const mainCards = cards.filter((c) => !c.isSideboard);
+    const visibleCards = cards.filter((card) => card.cardName.toLowerCase().includes(cardQuery.trim().toLowerCase()) && (ownership === "all" || (ownership === "owned" ? card.missingCount === 0 : card.missingCount > 0)));
+    const mainCards = visibleCards.filter((c) => !c.isSideboard);
     const groups: Record<string, { category: string; cards: DeckCardWithOwnership[]; totalPrice: number }> = {};
 
     function addCardToGroup(cat: string, card: DeckCardWithOwnership) {
@@ -473,12 +442,12 @@ export function MoxfieldDeckEditor({
     Object.values(groups).forEach((g) => {
       g.cards.sort((a, b) => {
         if (sortBy === "cmc") {
-          return parseManaValue(a.manaCost) - parseManaValue(b.manaCost);
+          return (parseManaValue(a.manaCost) - parseManaValue(b.manaCost)) * (sortDirection === "asc" ? 1 : -1);
         }
         if (sortBy === "price") {
-          return getCardPrice(b.cardName) - getCardPrice(a.cardName);
+          return (getCardPrice(a.cardName) - getCardPrice(b.cardName)) * (sortDirection === "asc" ? 1 : -1);
         }
-        return a.cardName.localeCompare(b.cardName);
+        return a.cardName.localeCompare(b.cardName) * (sortDirection === "asc" ? 1 : -1);
       });
     });
 
@@ -492,16 +461,16 @@ export function MoxfieldDeckEditor({
     });
 
     // Sideboard group (always placed at the end)
-    const sideboardCards = cards.filter((c) => c.isSideboard);
+    const sideboardCards = visibleCards.filter((c) => c.isSideboard);
     if (sideboardCards.length > 0) {
       const sortedSideboard = [...sideboardCards].sort((a, b) => {
         if (sortBy === "cmc") {
-          return parseManaValue(a.manaCost) - parseManaValue(b.manaCost);
+          return (parseManaValue(a.manaCost) - parseManaValue(b.manaCost)) * (sortDirection === "asc" ? 1 : -1);
         }
         if (sortBy === "price") {
-          return getCardPrice(b.cardName) - getCardPrice(a.cardName);
+          return (getCardPrice(a.cardName) - getCardPrice(b.cardName)) * (sortDirection === "asc" ? 1 : -1);
         }
-        return a.cardName.localeCompare(b.cardName);
+        return a.cardName.localeCompare(b.cardName) * (sortDirection === "asc" ? 1 : -1);
       });
       sortedGroups.push({
         category: "Sideboard",
@@ -514,7 +483,7 @@ export function MoxfieldDeckEditor({
     }
 
     return sortedGroups;
-  }, [cards, grouping, disableTags, hideDeckTags, sortBy, priceSummary]);
+  }, [cards, cardQuery, ownership, grouping, disableTags, hideDeckTags, sortBy, sortDirection, priceSummary]);
 
   // Counts for bottom bar
   const mainboardCount = cards.reduce((sum, c) => (c.isSideboard ? sum : sum + (c.quantity || 1)), 0);
@@ -558,176 +527,184 @@ export function MoxfieldDeckEditor({
       {/* ========================================================================= */}
       {/* TOP TOOLBAR: Actions + Scryfall Search Bar (Moxfield-style)              */}
       {/* ========================================================================= */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-card p-4 rounded-2xl border border-border">
-        {/* Left Action Links */}
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleAddAllMissingToWants}
-            disabled={isAddingWants}
-            className="text-xs bg-secondary/60 hover:bg-secondary border-border"
-          >
-            {isAddingWants ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <BookmarkPlus className="h-3.5 w-3.5 mr-1.5 text-primary" />}
-            <span>Faltantes a Wants</span>
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const text = cards.map((c) => `${c.quantity} ${c.cardName}`).join("\n");
-              navigator.clipboard.writeText(text);
-              alert("¡Lista del mazo copiada al portapapeles!");
-            }}
-            className="text-xs bg-secondary/60 hover:bg-secondary border-border"
-          >
-            <List className="h-3.5 w-3.5 mr-1.5" />
-            <span>Copiar lista</span>
-          </Button>
-        </div>
-
-        {/* Right Scryfall Card Search Bar */}
-        <div ref={searchContainerRef} className="relative flex-1 max-w-md">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar y añadir cartas al mazo..."
-              className="pl-9 pr-8 text-xs bg-background/80 border-border focus-visible:ring-primary h-9"
+      <ViewToolbar
+        label="Opciones del editor de mazos"
+        className="bg-card p-4 rounded-2xl border border-border"
+        search={
+          <ToolbarSearch
+            value={cardQuery}
+            onChange={setCardQuery}
+            placeholder="Buscar carta en el mazo..."
+          />
+        }
+        filters={
+          <>
+            <ToolbarChoices
+              label="Colección"
+              value={ownership}
+              onChange={setOwnership}
+              options={[
+                { value: "all", label: "Todas" },
+                { value: "owned", label: "Tengo" },
+                { value: "missing", label: "Faltantes" },
+              ]}
             />
-            {isSearching && (
-              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />
-            )}
-          </div>
+            <ToolbarToggle
+              pressed={enableCollection}
+              onClick={() => setEnableCollection(!enableCollection)}
+            >
+              Colección activa
+            </ToolbarToggle>
+            <ToolbarToggle pressed={disableTags} onClick={() => setDisableTags(!disableTags)}>
+              Desactivar etiquetas
+            </ToolbarToggle>
+            <ToolbarToggle pressed={hideDeckTags} onClick={() => setHideDeckTags(!hideDeckTags)}>
+              Ocultar tags de mazo
+            </ToolbarToggle>
+          </>
+        }
+        sorting={
+          <ToolbarSort
+            value={sortBy}
+            direction={sortDirection}
+            onChange={(value, direction) => {
+              setSortBy(value);
+              setSortDirection(direction);
+            }}
+            options={[
+              { value: "name", label: "Nombre" },
+              { value: "cmc", label: "Coste de maná" },
+              { value: "price", label: "Precio", defaultDesc: true },
+            ]}
+          />
+        }
+        display={
+          <>
+            {modeControls}
+            <ToolbarChoices
+              label="Vista"
+              value={viewMode}
+              onChange={setViewMode}
+              options={[
+                { value: "text", label: "Lista" },
+                { value: "visual", label: "Cuadrícula" },
+              ]}
+            />
+            <ToolbarChoices
+              label="Agrupar"
+              value={grouping}
+              onChange={setGrouping}
+              options={[
+                { value: "tags", label: "Etiqueta" },
+                { value: "type_and_tags", label: "Tipo y etiquetas" },
+                { value: "type", label: "Tipo de carta" },
+                { value: "mana_value", label: "Coste de maná" },
+                { value: "color", label: "Color" },
+              ]}
+            />
+          </>
+        }
+        actions={
+          <>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleAddAllMissingToWants}
+                disabled={isAddingWants}
+                className="text-xs bg-secondary/60 hover:bg-secondary border-border"
+              >
+                {isAddingWants ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                ) : (
+                  <BookmarkPlus className="h-3.5 w-3.5 mr-1.5 text-primary" />
+                )}
+                <span>Faltantes a Wants</span>
+              </Button>
 
-          {/* Autocomplete / Search Results Popover */}
-          {showSearchDropdown && searchResults.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1.5 max-h-96 overflow-y-auto bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl z-50 p-2 space-y-1 divide-y divide-border/40">
-              {searchResults.slice(0, 10).map((res) => (
-                <div key={res.id} className="pt-1.5 first:pt-0 flex items-center justify-between gap-3 p-1.5 rounded-lg hover:bg-secondary/60 transition-all">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    {res.image_uris?.small && (
-                      <img src={res.image_uris.small} alt={res.name} className="w-8 h-11 object-cover rounded shadow-xs" />
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-foreground truncate">{res.name}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <ManaCost manaCost={res.mana_cost} className="scale-75 origin-left" />
-                        <span className="text-[10px] text-muted-foreground truncate">{res.type_line}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const text = cards.map((c) => `${c.quantity} ${c.cardName}`).join("\n");
+                  navigator.clipboard.writeText(text);
+                  alert("¡Lista del mazo copiada al portapapeles!");
+                }}
+                className="text-xs bg-secondary/60 hover:bg-secondary border-border"
+              >
+                <List className="h-3.5 w-3.5 mr-1.5" />
+                <span>Copiar lista</span>
+              </Button>
+            </div>
+
+            <div ref={searchContainerRef} className="relative min-w-0 w-full sm:w-72">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="Buscar y añadir cartas al mazo"
+                  placeholder="Buscar y añadir cartas al mazo..."
+                  className="pl-9 pr-8 text-xs bg-background/80 border-border focus-visible:ring-primary h-11"
+                />
+                {isSearching && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                )}
+              </div>
+
+              {/* Autocomplete / Search Results Popover */}
+              {showSearchDropdown && searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1.5 max-h-96 overflow-y-auto bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl z-50 p-2 space-y-1 divide-y divide-border/40">
+                  {searchResults.slice(0, 10).map((res) => (
+                    <div
+                      key={res.id}
+                      className="pt-1.5 first:pt-0 flex items-center justify-between gap-3 p-1.5 rounded-lg hover:bg-secondary/60 transition-all"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {res.image_uris?.small && (
+                          <img
+                            src={res.image_uris.small}
+                            alt={res.name}
+                            className="w-8 h-11 object-cover rounded shadow-xs"
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-foreground truncate">{res.name}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <ManaCost manaCost={res.mana_cost} className="scale-75 origin-left" />
+                            <span className="text-[10px] text-muted-foreground truncate">
+                              {res.type_line}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="h-7 px-2 text-[10px] font-semibold"
+                          onClick={() => handleAddCard(res, false)}
+                        >
+                          + Mazo
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-[10px]"
+                          onClick={() => handleAddCard(res, true)}
+                        >
+                          + Side
+                        </Button>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="h-7 px-2 text-[10px] font-semibold"
-                      onClick={() => handleAddCard(res, false)}
-                    >
-                      + Mazo
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2 text-[10px]"
-                      onClick={() => handleAddCard(res, true)}
-                    >
-                      + Side
-                    </Button>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* SUB-BAR: Filters, View Modes, Grouping, and Sorting                      */}
-      {/* ========================================================================= */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-background/50 p-3.5 rounded-xl border border-border text-xs">
-        {/* Left Filters */}
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 cursor-pointer font-medium select-none">
-            <input
-              type="checkbox"
-              checked={enableCollection}
-              onChange={(e) => setEnableCollection(e.target.checked)}
-              className="rounded border-border accent-primary cursor-pointer"
-            />
-            <span>Colección activa</span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer font-medium select-none">
-            <input
-              type="checkbox"
-              checked={disableTags}
-              onChange={(e) => setDisableTags(e.target.checked)}
-              className="rounded border-border accent-primary cursor-pointer"
-            />
-            <span>Desactivar etiquetas</span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer text-muted-foreground hover:text-foreground select-none">
-            <input
-              type="checkbox"
-              checked={hideDeckTags}
-              onChange={(e) => setHideDeckTags(e.target.checked)}
-              className="rounded border-border accent-primary cursor-pointer"
-            />
-            <span>Ocultar tags de mazo</span>
-          </label>
-        </div>
-
-        {/* Right Selectors */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* View Mode */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">Vista:</span>
-            <select
-              value={viewMode}
-              onChange={(e) => setViewMode(e.target.value as any)}
-              className="bg-secondary/70 border border-border rounded-md px-2 py-1 text-xs text-foreground cursor-pointer focus:outline-none"
-            >
-              <option value="text">Texto</option>
-              <option value="visual">Visual</option>
-            </select>
-          </div>
-
-          {/* Grouping */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">Agrupar:</span>
-            <select
-              value={grouping}
-              onChange={(e) => setGrouping(e.target.value as any)}
-              className="bg-secondary/70 border border-border rounded-md px-2 py-1 text-xs text-foreground cursor-pointer focus:outline-none"
-            >
-              <option value="tags">Etiqueta (Tag)</option>
-              <option value="type_and_tags">Tipo y Etiquetas</option>
-              <option value="type">Tipo de carta</option>
-              <option value="mana_value">Coste de maná</option>
-              <option value="color">Color</option>
-            </select>
-          </div>
-
-          {/* Sorting */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">Ordenar:</span>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="bg-secondary/70 border border-border rounded-md px-2 py-1 text-xs text-foreground cursor-pointer focus:outline-none"
-            >
-              <option value="name">Nombre</option>
-              <option value="cmc">Coste (CMC)</option>
-              <option value="price">Precio</option>
-            </select>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* ========================================================================= */}
       {/* MAIN LAYOUT: Left Multi-column Category Masonry + Right Preview Showcase  */}
@@ -817,21 +794,7 @@ export function MoxfieldDeckEditor({
                 <ExternalLink className="h-3.5 w-3.5 opacity-70" />
               </a>
 
-              {/* Provider Selector Switcher */}
-              {onPriceProviderChange && (
-                <div className="pt-2">
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
-                    <span>Proveedor de precios:</span>
-                  </div>
-                  <select
-                    value={priceProvider}
-                    onChange={(e) => onPriceProviderChange(e.target.value as PriceProvider)}
-                    className="w-full bg-secondary/60 border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground cursor-pointer focus:outline-none"
-                  >
-                    <option value="cardmarket">Cardmarket (EUR €)</option>
-                  </select>
-                </div>
-              )}
+
             </div>
           </div>
         </div>

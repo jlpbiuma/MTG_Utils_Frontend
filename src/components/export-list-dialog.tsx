@@ -12,7 +12,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { copyText } from "@/lib/copy-text";
 
 export interface ExportCardItem {
   cardName: string;
@@ -38,6 +38,7 @@ export function ExportListDialog({
 }: ExportListDialogProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
   const [exportScope, setExportScope] = useState<"current" | "all">("current");
 
   const hasDifferentAll = Boolean(
@@ -75,11 +76,13 @@ export function ExportListDialog({
 
   const handleCopy = async () => {
     if (!formattedText) return;
+    setCopyError(false);
     try {
-      await navigator.clipboard.writeText(formattedText);
+      await copyText(formattedText);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
+      setCopyError(true);
       console.error("Error al copiar al portapapeles:", err);
     }
   };
@@ -176,6 +179,7 @@ export function ExportListDialog({
         {/* Textarea with generated list */}
         <div className="relative flex-1 min-h-[220px]">
           <textarea
+            aria-label="Lista de cartas generada"
             readOnly
             value={formattedText}
             onClick={(e) => (e.target as HTMLTextAreaElement).select()}
@@ -183,6 +187,7 @@ export function ExportListDialog({
             placeholder="No hay cartas para exportar"
           />
         </div>
+        {copyError ? <p role="alert" className="text-sm text-destructive">No se pudo copiar. Selecciona el texto o descarga la lista.</p> : null}
 
         <DialogFooter className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t border-border">
           <Button

@@ -1,43 +1,21 @@
 "use client";
+import { deckCompletionCounts } from "@/lib/card-utils";
 
+import { ViewToolbar, ToolbarSearch, ToolbarChoices } from "@/components/view-toolbar";
+
+import { useQueryState } from "@/hooks/use-query-state";
+import { DeckValueMiniChart } from "@/components/deck-value-mini-chart";
 import React, { useState, useEffect, useCallback } from "react";
 import { CardImage as Image } from "@/components/card-image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EditDeckDialog } from "@/components/edit-deck-dialog";
 import { FloatingDeckControls } from "@/components/floating-deck-controls";
-import {
-  ArrowLeft,
-  Plus,
-  Minus,
-  Trash2,
-  CheckCircle2,
-  AlertCircle,
-  Sparkles,
-  Layers,
-  Filter,
-  BookmarkPlus,
-  Info,
-  ChevronDown,
-  ChevronRight,
-  FolderTree,
-  AlignJustify,
-  Crown,
-  Search,
-  BarChart3,
-  Shuffle,
-  SlidersHorizontal,
-  Archive,
-  ArchiveRestore,
-  AlertTriangle,
-  ArrowRightLeft,
-  Copy,
-  Check,
-} from "lucide-react";
+import { ArrowLeft, Plus, Minus, Trash2, CheckCircle2, AlertCircle, Sparkles, Layers, BookmarkPlus, ChevronDown, ChevronRight, FolderTree, AlignJustify, Crown, BarChart3, Archive, ArchiveRestore, AlertTriangle, ArrowRightLeft, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+
 import { ManaCost } from "@/components/mana-cost";
 import { CardPreviewHover } from "@/components/card-preview-hover";
 import { CardSearchDialog } from "@/components/card-search-dialog";
@@ -53,45 +31,17 @@ import { MoxfieldDeckEditor } from "@/components/moxfield-deck-editor";
 import { injectPrintingQuote } from "@/lib/printing-quote";
 import { TabErrorBoundary } from "@/components/tab-error-boundary";
 import { ColorIdentityPips } from "@/components/color-identity-pips";
-import {
-  extractColorsFromManaCost,
-  buildColorIdentity,
-} from "@/lib/deck-colors";
-import {
-  DeckDetailWithStats,
-  DeckCardWithOwnership,
-  DeckRequirement,
-} from "@/lib/schemas";
-import {
-  addCardToDeck,
-  updateDeckCardQuantity,
-  removeCardFromDeck,
-  assignCardToDeck,
-  unassignCardFromDeck,
-  reassignCardToDeck,
-  deleteDeck,
-  addMissingCardsToCollection,
-  addMissingCardToCollection,
-  archiveDeck,
-  moveCardToSideboard,
-} from "@/actions/decks";
+import { extractColorsFromManaCost, buildColorIdentity } from "@/lib/deck-colors";
+import { DeckDetailWithStats, DeckCardWithOwnership, DeckRequirement } from "@/lib/schemas";
+import { addCardToDeck, updateDeckCardQuantity, removeCardFromDeck, assignCardToDeck, unassignCardFromDeck, reassignCardToDeck, deleteDeck, addMissingCardsToCollection, addMissingCardToCollection, archiveDeck, moveCardToSideboard } from "@/actions/decks";
 import { addOrIncrementWant, addDeckMissingToWants } from "@/actions/wants";
-import { PriceProvider, PriceSummary } from "@/lib/pricing";
-import { PricingProviderSelector } from "@/components/pricing-provider-selector";
+import { PriceSummary } from "@/lib/pricing";
+import { PricingSummary } from "@/components/pricing-summary";
 import { PriceBadge } from "@/components/price-badge";
 import { CardSortingBar } from "@/components/card-sorting-bar";
 import { PriceFilter } from "@/components/price-filter";
-import {
-  SortField,
-  SortDirection,
-  sortCards,
-  matchesPriceFilter,
-} from "@/lib/sorting";
-import {
-  normalizeCardName,
-  groupCardsByType,
-  isBasicLand,
-} from "@/lib/card-utils";
+import { SortField, SortDirection, sortCards, matchesPriceFilter } from "@/lib/sorting";
+import { normalizeCardName, groupCardsByType, isBasicLand } from "@/lib/card-utils";
 import { copyText } from "@/lib/copy-text";
 
 interface DeckDetailViewProps {
@@ -130,6 +80,17 @@ export function DeckDetailView({
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
+  const [cardMode, setCardMode] = useQueryState<string>("mode", initialTab === "editor" ? "edit" : "list", ["list", "edit"]);
+  const showEditor = (activeTab === "cards" || activeTab === "editor") && cardMode === "edit";
+  const modeControls = !readOnly && <ToolbarChoices
+    label="Modo"
+    value={cardMode}
+    onChange={setCardMode}
+    options={[
+      { value: "list", label: "Lista" },
+      { value: "edit", label: "Editar" },
+    ]}
+  />;
   const [showCommanderModal, setShowCommanderModal] = useState(
     !initialDeck.commander,
   );
@@ -412,8 +373,7 @@ export function DeckDetailView({
   const [maxPrice, setMaxPrice] = useState("");
 
   // Dynamic pricing state
-  const [priceProvider, setPriceProvider] =
-    useState<PriceProvider>("cardmarket");
+  const priceProvider = "cardmarket";
   const [loadedPriceSummary, setPriceSummary] = useState<PriceSummary | null>(
     () => {
       if (recommendation) return recommendation.priceSummary;
@@ -442,7 +402,7 @@ export function DeckDetailView({
   const [deckListCopied, setDeckListCopied] = useState(false);
 
   const loadPrices = useCallback(
-    async (providerToLoad = priceProvider, bypassCache = false) => {
+    async (providerToLoad = priceProvider) => {
       if (readOnly) return;
       setIsLoadingPrices(true);
       try {
@@ -452,7 +412,6 @@ export function DeckDetailView({
           body: JSON.stringify({
             deckId: initialDeck.id,
             provider: providerToLoad,
-            bypassCache,
           }),
         });
         if (res.ok) {
@@ -471,7 +430,7 @@ export function DeckDetailView({
   );
 
   useEffect(() => {
-    if (!readOnly) loadPrices(priceProvider, false);
+    if (!readOnly) loadPrices(priceProvider);
   }, [priceProvider, loadPrices, readOnly]);
 
   const priceSummary = recommendation?.priceSummary ?? loadedPriceSummary;
@@ -693,45 +652,21 @@ export function DeckDetailView({
   const stats = React.useMemo(() => {
     if (readOnly)
       return {
-        totalCards: initialDeck.totalCards,
+        totalCards: initialDeck.uniqueCards,
         ownedCards: initialDeck.ownedCards,
         missingCardsCount: initialDeck.missingCardsCount,
         completionPercentage: initialDeck.completionPercentage,
         isComplete:
           initialDeck.totalCards > 0 && initialDeck.missingCardsCount === 0,
       };
-    let total = 0;
-    let owned = 0;
-    for (const c of cards || []) {
-      if (c.isSideboard) continue;
-      const isBasic = isBasicLand(c.typeLine, c.cardName);
-      total += c.quantity;
-      if (isBasic) {
-        owned += c.quantity;
-      } else {
-        const actualOwned = Math.min(
-          c.quantity,
-          Math.max(
-            c.assignedQuantity || 0,
-            Math.min(c.ownedInCollection || 0, c.quantity),
-          ),
-        );
-        owned += actualOwned;
-      }
-    }
-    const missing = Math.max(0, total - owned);
-    const pct =
-      total > 0
-        ? Math.round((owned / total) * 100)
-        : (initialDeck.completionPercentage ?? 100);
+    const { total, owned, missing, percentage: pct } = deckCompletionCounts(cards || []);
     return {
-      totalCards: total || initialDeck.totalCards,
-      ownedCards: total > 0 ? owned : initialDeck.ownedCards,
-      missingCardsCount: total > 0 ? missing : initialDeck.missingCardsCount,
-      completionPercentage: total > 0 ? pct : initialDeck.completionPercentage,
+      totalCards: total,
+      ownedCards: owned,
+      missingCardsCount: missing,
+      completionPercentage: pct,
       isComplete:
-        (total || initialDeck.totalCards) > 0 &&
-        (total > 0 ? missing === 0 : initialDeck.missingCardsCount === 0),
+        total > 0 && missing === 0,
     };
   }, [readOnly, cards, initialDeck]);
 
@@ -1507,7 +1442,7 @@ export function DeckDetailView({
         <Link
           href={`/decks/${initialDeck.id}`}
           role="tab"
-          aria-selected={activeTab === "cards"}
+          aria-selected={activeTab === "cards" || activeTab === "editor"}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
             activeTab === "cards"
               ? "bg-accent text-foreground border border-border"
@@ -1523,24 +1458,6 @@ export function DeckDetailView({
             {readOnly ? cards.length : initialDeck.totalCards}
           </Badge>
         </Link>
-
-        {!readOnly && (
-          <>
-            <Link
-              href={`/decks/${initialDeck.id}/editor`}
-              role="tab"
-              aria-selected={activeTab === "editor"}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-bold text-sm transition-all whitespace-nowrap ${
-                activeTab === "editor"
-                  ? "bg-accent text-foreground border border-border"
-                  : "text-muted-foreground hover:text-foreground hover:bg-card"
-              }`}
-            >
-              <SlidersHorizontal className="h-4 w-4 text-purple-400" />
-              <span>Editar mazo</span>
-            </Link>
-          </>
-        )}
 
         {!readOnly && (
           <Link
@@ -1575,21 +1492,21 @@ export function DeckDetailView({
         )}
       </div>
 
-      {activeTab === "editor" ? (
+      {!readOnly && <DeckValueMiniChart deckId={initialDeck.id} />}
+      {showEditor ? (
         <TabErrorBoundary tabName="Editor de mazo">
           <MoxfieldDeckEditor
+            modeControls={modeControls}
             deck={initialDeck}
             cards={cards}
             priceSummary={priceSummary}
-            priceProvider={priceProvider}
-            onPriceProviderChange={(p) => setPriceProvider(p)}
             onCardsUpdated={setCards}
           />
         </TabErrorBoundary>
       ) : activeTab === "analytics_and_simulations" ? (
         <TabErrorBoundary tabName="Estadística y simulaciones">
           <div className="space-y-8">
-            <DeckAnalyticsView cards={cards} colors={deckColors} />
+            <DeckAnalyticsView deckId={initialDeck.id} cards={cards} colors={deckColors} />
             <DeckMulliganSimulator
               cards={cards}
               commanderName={deckInfo.commander}
@@ -1623,209 +1540,137 @@ export function DeckDetailView({
       ) : (
         <>
           {/* Dynamic Pricing Selector & Net Totals */}
-          <PricingProviderSelector
-            currentProvider={priceProvider}
-            onProviderChange={(p) => setPriceProvider(p)}
-            onRefreshPrices={async () =>
-              readOnly ? router.refresh() : loadPrices(priceProvider, true)
-            }
+          <PricingSummary
+
             summary={priceSummary}
             isLoading={isLoadingPrices}
             showMissingNetValue={true}
           />
 
-          {/* Action Toolbar & Filters */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-border">
-            {/* Mainboard vs Sideboard Tabs */}
-            <div className="flex items-center bg-secondary/80 p-1 rounded-lg border border-border h-9">
-              <button
-                onClick={() => setActiveBoard("mainboard")}
-                className={`px-3 h-7 rounded-md text-xs font-semibold transition-all ${
-                  activeBoard === "mainboard"
-                    ? "bg-primary text-primary-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {readOnly ? "Recomendaciones" : "Mainboard"} (
-                {mainboardCards.reduce((s, c) => s + c.quantity, 0)})
-              </button>
-              {!readOnly && (
-                <button
-                  onClick={() => setActiveBoard("sideboard")}
-                  className={`px-3 h-7 rounded-md text-xs font-semibold transition-all ${
-                    activeBoard === "sideboard"
-                      ? "bg-primary text-primary-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Sideboard (
-                  {sideboardCards.reduce((s, c) => s + c.quantity, 0)})
-                </button>
-              )}
-            </div>
-
-            {!readOnly && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleCopyDeckList}
-                disabled={cards.length === 0}
-                className="h-9 gap-2"
-                aria-label="Copiar lista completa del mazo al portapapeles"
-              >
-                {deckListCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                {deckListCopied ? "Copiado" : "Copiar lista"}
-              </Button>
-            )}
-
-            {/* Filters and Add Card */}
-            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-              <div className="relative w-full sm:w-56">
-                <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <input
-                  type="search"
-                  value={cardSearch}
-                  onChange={(event) => setCardSearch(event.target.value)}
-                  placeholder="Buscar carta en el mazo..."
-                  aria-label="Buscar carta en el mazo"
-                  className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-ring"
-                />
-              </div>
-              <div className="flex items-center gap-1 bg-secondary p-1 rounded-lg border border-border text-xs">
-                <button
-                  onClick={() => setFilterMode("all")}
-                  className={`px-2.5 py-1 rounded transition-colors ${
-                    filterMode === "all"
-                      ? "bg-accent text-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Todas
-                </button>
-                <button
-                  onClick={() => setFilterMode("missing")}
-                  className={`px-2.5 py-1 rounded transition-colors ${
-                    filterMode === "missing"
-                      ? "bg-primary/20 text-primary font-medium"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Solo Faltantes
-                </button>
-                <button
-                  onClick={() => setFilterMode("owned")}
-                  className={`px-2.5 py-1 rounded transition-colors ${
-                    filterMode === "owned"
-                      ? "bg-emerald-500/20 text-emerald-300 font-medium"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  En Colección
-                </button>
-              </div>
-
-              <PriceFilter
-                minPrice={minPrice}
-                maxPrice={maxPrice}
-                onMinPriceChange={setMinPrice}
-                onMaxPriceChange={setMaxPrice}
-                currencySymbol={priceSummary?.currencySymbol || "€"}
+          <ViewToolbar
+            label="Opciones de las cartas del mazo"
+            search={
+              <ToolbarSearch
+                label="Buscar carta en el mazo"
+                value={cardSearch}
+                onChange={setCardSearch}
+                placeholder="Buscar carta en el mazo..."
               />
-
-              {!readOnly && (
+            }
+            filters={
+              <>
+                <ToolbarChoices
+                  label="Board"
+                  value={activeBoard}
+                  onChange={setActiveBoard}
+                  options={[
+                    {
+                      value: "mainboard",
+                      label: `${readOnly ? "Recomendaciones" : "Mainboard"} (${mainboardCards.reduce((sum, card) => sum + card.quantity, 0)})`,
+                    },
+                    ...(!readOnly
+                      ? [
+                          {
+                            value: "sideboard" as const,
+                            label: `Sideboard (${sideboardCards.reduce((sum, card) => sum + card.quantity, 0)})`,
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+                <ToolbarChoices
+                  label="Colección"
+                  value={filterMode}
+                  onChange={setFilterMode}
+                  options={[
+                    { value: "all", label: "Todas" },
+                    { value: "owned", label: "En Colección" },
+                    { value: "missing", label: "Faltantes" },
+                  ]}
+                />
+                <PriceFilter
+                  minPrice={minPrice}
+                  maxPrice={maxPrice}
+                  onMinPriceChange={setMinPrice}
+                  onMaxPriceChange={setMaxPrice}
+                  currencySymbol={priceSummary?.currencySymbol || "€"}
+                />
+              </>
+            }
+            sorting={
+              <CardSortingBar
+                currentField={sortField}
+                currentDirection={sortDirection}
+                onSortChange={(field, direction) => {
+                  setSortField(field);
+                  setSortDirection(direction);
+                }}
+                showStatusOption
+                showEdhrecOptions={readOnly}
+              />
+            }
+            display={
+              <>
+                {modeControls}
+                <ToolbarChoices
+                  label="Vista"
+                  value={isGroupedByType ? "type" : "flat"}
+                  onChange={(value) => setIsGroupedByType(value === "type")}
+                  options={[
+                    {
+                      value: "type",
+                      label: "Tipo de Carta",
+                      icon: <FolderTree className="h-3.5 w-3.5" />,
+                    },
+                    {
+                      value: "flat",
+                      label: "Sin Agrupar",
+                      icon: <AlignJustify className="h-3.5 w-3.5" />,
+                    },
+                  ]}
+                />
+                {isGroupedByType && groupedSections.length > 1 && (
+                  <>
+                    <Button variant="ghost" className="min-h-11 text-xs" onClick={expandAll}>
+                      Expandir todo
+                    </Button>
+                    <Button variant="ghost" className="min-h-11 text-xs" onClick={collapseAll}>
+                      Colapsar todo
+                    </Button>
+                  </>
+                )}
+              </>
+            }
+            actions={
+              !readOnly && (
                 <>
+                  <Button
+                    variant="outline"
+                    disabled={isAddingMissingToWants}
+                    onClick={handleAddAllMissingToWants}
+                  >
+                    Faltantes a Wants
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="min-h-11"
+                    onClick={handleCopyDeckList}
+                    disabled={cards.length === 0}
+                    aria-label="Copiar lista completa del mazo al portapapeles"
+                  >
+                    {deckListCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    {deckListCopied ? "Copiado" : "Copiar lista"}
+                  </Button>
                   <CardSearchDialog
                     onAddCard={handleAddCard}
                     title={`Añadir Carta a ${activeBoard === "mainboard" ? "Mainboard" : "Sideboard"}`}
                     triggerText="Buscar en Scryfall"
-                    showSideboardOption={true}
+                    showSideboardOption
                   />
                 </>
-              )}
-            </div>
-          </div>
-
-          {/* Interactive Sorting & Grouping Bar */}
-          {filteredCards.length > 0 && (
-            <div className="p-3.5 rounded-lg bg-card border border-border flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              {/* Left: Sorting options */}
-              <div className="flex-1">
-                <CardSortingBar
-                  currentField={sortField}
-                  currentDirection={sortDirection}
-                  onSortChange={(f, d) => {
-                    setSortField(f);
-                    setSortDirection(d);
-                  }}
-                  showStatusOption={true}
-                  showEdhrecOptions={readOnly}
-                />
-              </div>
-
-              {/* Right: Highly visible Grouping Parameter */}
-              <div className="flex items-center gap-3 border-t lg:border-t-0 pt-3 lg:pt-0 border-border shrink-0 flex-wrap sm:flex-nowrap">
-                <span className="text-xs font-bold text-foreground flex items-center gap-1.5 uppercase tracking-wider">
-                  <FolderTree className="h-4 w-4 text-primary" />
-                  Agrupar por:
-                </span>
-
-                <div className="inline-flex items-center bg-background p-1 rounded-lg border border-border shadow-inner">
-                  <button
-                    type="button"
-                    onClick={() => setIsGroupedByType(true)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      isGroupedByType
-                        ? "bg-primary text-primary-foreground ring-1 ring-ring"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    title="Agrupar cartas por Criaturas, Artefactos, Conjuros, Tierras, etc."
-                  >
-                    <FolderTree className="h-3.5 w-3.5" />
-                    <span>Tipo de Carta</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsGroupedByType(false)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      !isGroupedByType
-                        ? "bg-accent text-foreground ring-1 ring-ring"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    title="Mostrar todas las cartas en una lista continua sin divisiones"
-                  >
-                    <AlignJustify className="h-3.5 w-3.5" />
-                    <span>Sin Agrupar</span>
-                  </button>
-                </div>
-
-                {/* Quick collapse/expand all */}
-                {isGroupedByType && groupedSections.length > 1 && (
-                  <div className="flex items-center gap-1 pl-1 border-l border-border text-xs">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={expandAll}
-                      className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                      title="Desplegar todas las secciones de tipos"
-                    >
-                      Expandir todo
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={collapseAll}
-                      className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                      title="Plegar todas las secciones de tipos"
-                    >
-                      Colapsar todo
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+              )
+            }
+          />
 
           {/* Card Table / List */}
           {filteredCards.length === 0 ? (

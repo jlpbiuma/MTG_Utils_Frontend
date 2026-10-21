@@ -1,9 +1,6 @@
-import { getPriorities } from "@/actions/priorities";
-import { PrioritiesView } from "@/components/priorities-view";
-
-export const dynamic = "force-dynamic";
-
-export default async function PrioritiesPage() {
-  const initialData = await getPriorities();
-  return <PrioritiesView initialData={initialData} activeTab="table" />;
+import { redirect } from "next/navigation";
+export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+ const params = await searchParams; const query = new URLSearchParams();
+ for (const [key, value] of Object.entries(params)) if (typeof value === "string") query.set(key, value);
+ redirect(`/buy/needs${query.size ? `?${query}` : ""}`);
 }

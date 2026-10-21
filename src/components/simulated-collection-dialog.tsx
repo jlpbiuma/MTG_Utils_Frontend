@@ -1,5 +1,9 @@
 "use client";
 
+import { UpcomingReprintWarning } from "@/components/upcoming-reprint-warning";
+
+import { SimulatedHistorySummary } from "@/components/simulated-history-summary";
+
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import {
@@ -31,11 +35,10 @@ import {
 } from "lucide-react";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import {
-  analyzeRawSimulatedCollection,
+  analyzeRawSimulatedCollection, applySimulatedPrinting, importOfferLink, type OfferOrigin,
   createSimulatedCollection,
   getSimulatedCollection,
   deleteSimulatedCollection,
-  updateSimulatedCardVersion,
   type SimulatedCollectionAnalysisResponse,
   type SimulatedCardAnalysisItem,
 } from "@/actions/simulated-collections";
@@ -60,6 +63,9 @@ export function SimulatedCollectionDialog({
   onDeleted,
   provider = "cardmarket",
 }: SimulatedCollectionDialogProps) {
+  const [origin, setOrigin] = useState<OfferOrigin>("other");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [subject, setSubject] = useState<"vende" | "compra_busca">("vende");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [rawText, setRawText] = useState("");
@@ -87,6 +93,7 @@ export function SimulatedCollectionDialog({
           setAnalysis(res);
           setRawText(res.rawText || "");
           setName(res.name);
+          setOrigin(res.origin ?? "other");
           setDescription(res.description || "");
           setActiveStep("results");
         })
@@ -96,6 +103,9 @@ export function SimulatedCollectionDialog({
         .finally(() => setIsLoading(false));
     } else if (isOpen && !collectionId) {
       // Reset for new creation
+      setOrigin("other");
+      setSourceUrl("");
+      setSubject("vende");
       setName("");
       setDescription("");
       setRawText("");
@@ -128,7 +138,7 @@ export function SimulatedCollectionDialog({
 
   // Run simulation analysis on-the-fly
   const handleAnalyze = async () => {
-    if (!rawText.trim()) {
+    if (!rawText.trim() && !sourceUrl.trim()) {
       setError("Introduce al menos una carta para simular.");
       return;
     }
@@ -136,13 +146,20 @@ export function SimulatedCollectionDialog({
     setIsLoading(true);
     setError(null);
     try {
+      if (sourceUrl.trim()) {
+        const saved = await importOfferLink({ url: sourceUrl.trim(), name: name.trim() || undefined, origin, subject });
+        onOpenChange(false);
+        onSaved?.(saved.id ?? undefined);
+        return;
+      }
       const res = await analyzeRawSimulatedCollection(rawText, provider,
-        ...(analysis?.rawText === rawText && analysis.printingOverrides ? [analysis.printingOverrides] : []));
+        analysis?.rawText === rawText ? analysis.printingOverrides ?? {} : {}, origin);
       if (res.cards.length === 0) {
         setError("No se pudieron interpretar cartas válidas en el texto proporcionado.");
         setIsLoading(false);
         return;
       }
+      res.origin = origin;
       res.name = name.trim() || "Colección Simulada";
       res.description = description.trim() || null;
       setAnalysis(res);
@@ -156,11 +173,12 @@ export function SimulatedCollectionDialog({
 
   const handleSimulationVersion = async (version: CardPrintingDetail) => {
     if (!analysis || !selectedCardForDetail) return;
-    const printingOverrides = { ...analysis.printingOverrides, [normalizeCardName(selectedCardForDetail.cardName)]: version.id };
-    const result = collectionId
-      ? await updateSimulatedCardVersion(collectionId, selectedCardForDetail.cardName, version.id, provider)
-      : await analyzeRawSimulatedCollection(rawText, provider, printingOverrides);
-    const updated = { ...result, name: analysis.name, description: analysis.description };
+    const result = await applySimulatedPrinting({
+      collectionId: collectionId || undefined, rawText, cardName: selectedCardForDetail.cardName,
+      printingId: version.id, provider, origin, printingOverrides: analysis.printingOverrides,
+    });
+    if (!result.ok) throw new Error(result.error);
+    const updated = { ...result.data, origin, name: analysis.name, description: analysis.description };
     setAnalysis(updated);
     setSelectedCardForDetail(current => current?.cardName === selectedCardForDetail.cardName ? updated.cards.find(card => card.cardName === current.cardName) || null : current);
   };
@@ -189,7 +207,8 @@ export function SimulatedCollectionDialog({
         description.trim() || undefined,
         textToSave,
         provider,
-        ...(analysis.printingOverrides && Object.keys(analysis.printingOverrides).length ? [analysis.printingOverrides] : [])
+        analysis.printingOverrides ?? {},
+        origin
       );
       setAnalysis(saved);
       onOpenChange(false);
@@ -235,13 +254,13 @@ export function SimulatedCollectionDialog({
                 </div>
                 <div>
                   <DialogTitle className="text-xl font-semibold flex items-center gap-2">
-                    {collectionId ? "Detalles de Colección Simulada" : "Nueva Colección Simulada"}
+                    {collectionId ? "Detalles de oferta" : "Nueva oferta"}
                     <Badge variant="outline" className="text-xs border-primary/30 text-primary bg-primary/5 font-mono">
                       Simulación
                     </Badge>
                   </DialogTitle>
                   <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                    Las cartas simuladas no se introducen en tu inventario real ni afectan a tus mazos.
+                    Guarda la oferta para evaluarla. Las cartas entrarán al inventario al pulsar Confirmar compra.
                   </DialogDescription>
                 </div>
               </div>
@@ -262,6 +281,22 @@ export function SimulatedCollectionDialog({
 
           {/* Body Content */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {activeStep === "input" && <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2 text-sm font-medium">Origen
+                <select aria-label="Origen de la oferta" value={origin} onChange={event => setOrigin(event.target.value as OfferOrigin)} className="block min-h-11 w-full rounded-md border border-input bg-background px-3">
+                  <option value="in_person">Venta presencial</option><option value="other">Otros</option><option value="whatsapp">WhatsApp</option><option value="cardmarket">Cardmarket</option>
+                </select>
+              </label>
+              <label className="space-y-2 text-sm font-medium">Enlace público (opcional)
+                <Input type="url" aria-label="Enlace público" value={sourceUrl} onChange={event => setSourceUrl(event.target.value)} placeholder="ManaBox, Moxfield o Archidekt" />
+              </label>
+              {sourceUrl.trim() && <label className="space-y-2 text-sm font-medium">La persona que comparte la lista
+                <select aria-label="Tipo de lista" value={subject} onChange={event => setSubject(event.target.value as typeof subject)} className="block min-h-11 w-full rounded-md border border-input bg-background px-3">
+                  <option value="vende">Vende cartas: quiero comprar</option><option value="compra_busca">Busca cartas: puedo vender</option>
+                </select>
+              </label>}
+              <p className="text-xs text-muted-foreground sm:col-span-2">El origen identifica la oferta. Todos los orígenes admiten los mismos formatos de texto, archivo y enlace. Los precios de listas públicas son referencias, salvo precio explícito del vendedor.</p>
+            </div>}
             {error && (
               <div className="p-3.5 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive text-sm flex items-start gap-2.5 animate-in fade-in">
                 <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
@@ -282,7 +317,7 @@ export function SimulatedCollectionDialog({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-foreground">
-                      Nombre de la colección simulada *
+                      Nombre de la oferta *
                     </label>
                     <Input
                       placeholder="Ej. Lote Wallapop 50 cartas, Cambio Pedro..."
@@ -308,7 +343,7 @@ export function SimulatedCollectionDialog({
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
                       <Boxes className="h-4 w-4 text-primary" />
-                      Listado de cartas a simular (Cardmarket, Moxfield, Arena, Texto plano)
+                      Pegar tabla del vendedor (Cardmarket o lista de cartas)
                     </label>
                     <label className="cursor-pointer text-xs text-primary hover:text-primary/80 flex items-center gap-1">
                       <Upload className="h-3.5 w-3.5" />
@@ -338,7 +373,8 @@ export function SimulatedCollectionDialog({
               /* Step 2: Live Analysis & Dashboard */
               analysis && (
                 <div className="space-y-6">
-                  {analysis.purchaseAnalysis && <SimulatedPurchaseComparison analysis={analysis.purchaseAnalysis} onCardDetails={name => setSelectedCardForDetail(analysis.cards.find(card => normalizeCardName(card.cardName) === normalizeCardName(name)) || null)} />}
+                  {origin === "cardmarket" && analysis.purchaseAnalysis && <SimulatedPurchaseComparison analysis={analysis.purchaseAnalysis} onCardDetails={name => setSelectedCardForDetail(analysis.cards.find(card => normalizeCardName(card.cardName) === normalizeCardName(name)) || null)} />}
+            {origin === "cardmarket" && <SimulatedHistorySummary analysis={analysis} />}
                   {/* Hero Metric Cards */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     {/* Metric 1: Importe Económico Total */}
@@ -508,6 +544,7 @@ export function SimulatedCollectionDialog({
                                       <span className="font-medium text-sm text-foreground group-hover:text-primary transition-colors truncate">
                                         {card.cardName}
                                       </span>
+                                      <UpcomingReprintWarning reprints={card.upcomingReprints} />
                                       <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5 font-mono">
                                         {card.quantity}x
                                       </Badge>
@@ -678,7 +715,7 @@ export function SimulatedCollectionDialog({
                   ) : (
                     <>
                       <FlaskConical className="h-4 w-4" />
-                      <span>Simular y Analizar Lote</span>
+                      <span>Evaluar oferta</span>
                     </>
                   )}
                 </Button>
@@ -697,7 +734,7 @@ export function SimulatedCollectionDialog({
                   ) : (
                     <>
                       <Save className="h-4 w-4" />
-                      <span>Guardar Colección Simulada</span>
+                      <span>Guardar oferta</span>
                     </>
                   )}
                 </Button>

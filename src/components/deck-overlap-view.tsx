@@ -1,40 +1,23 @@
 "use client";
 
+import { ViewToolbar, ToolbarSearch, ToolbarSort } from "@/components/view-toolbar";
+
 import React, { useState, useEffect, useMemo } from "react";
-import Link from "next/link";
-import {
-  Layers,
-  ArrowRightLeft,
-  RefreshCw,
-  Sparkles,
-  ExternalLink,
-  ChevronRight,
-  Info,
-  CheckCircle2,
-  AlertCircle,
-} from "lucide-react";
+
+import { Layers, ArrowRightLeft, RefreshCw } from "lucide-react";
 import { CardImage as Image } from "@/components/card-image";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CardPreviewHover } from "@/components/card-preview-hover";
 import { ManaCost } from "@/components/mana-cost";
 import { ColorIdentityPips } from "@/components/color-identity-pips";
-import {
-  getDecksOverlap,
-  reassignCardToDeck,
-  type DecksOverlapResponse,
-  type DeckOverlapPair,
-  type DeckOverlapSharedCard,
-} from "@/actions/decks";
+import { getDecksOverlap, reassignCardToDeck, type DecksOverlapResponse, type DeckOverlapPair } from "@/actions/decks";
 
 export function DeckOverlapView() {
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<"name" | "cards">("name");
+  const [direction, setDirection] = useState<"asc" | "desc">("asc");
   const [data, setData] = useState<DecksOverlapResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedPair, setSelectedPair] = useState<DeckOverlapPair | null>(null);
@@ -72,6 +55,11 @@ export function DeckOverlapView() {
     }
     return map;
   }, [data]);
+
+  const shownDecks = useMemo(() => (data?.decks ?? []).filter((deck) => deck.name.toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => {
+    const comparison = sort === "name" ? a.name.localeCompare(b.name) : a.nonBasicCardsCount - b.nonBasicCardsCount;
+    return comparison * (direction === "asc" ? 1 : -1);
+  }), [data, query, sort, direction]);
 
   const handleReassign = async (
     targetCardId: string,
@@ -142,17 +130,46 @@ export function DeckOverlapView() {
             Haz clic en cualquier celda para ver el desglose y reasignar copias directamente.
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={loadOverlap}
-          disabled={isLoading}
-          className="h-8 text-xs border-border gap-1.5 shrink-0"
-        >
-          <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} />
-          <span>Recalcular</span>
-        </Button>
+
       </div>
+
+      <ViewToolbar
+        label="Opciones del solapamiento de mazos"
+        actions={
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={loadOverlap}
+            disabled={isLoading}
+            className="h-8 text-xs border-border gap-1.5 shrink-0"
+          >
+            <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Recalcular</span>
+          </Button>
+        }
+        search={
+          <ToolbarSearch
+            value={query}
+            onChange={setQuery}
+            placeholder="Buscar mazos en el solapamiento..."
+          />
+        }
+        sorting={
+          <ToolbarSort
+            value={sort}
+            direction={direction}
+            onChange={(value, next) => {
+              setSort(value);
+              setDirection(next);
+            }}
+            options={[
+              { value: "name", label: "Nombre" },
+              { value: "cards", label: "Cartas", defaultDesc: true },
+            ]}
+          />
+        }
+      />
+      {shownDecks.length === 0 && <p className="text-sm text-muted-foreground">No hay mazos que coincidan con la búsqueda.</p>}
 
       {/* Overlap Matrix */}
       <div className="rounded-xl border border-border bg-card overflow-x-auto p-4 shadow-sm">
@@ -162,7 +179,7 @@ export function DeckOverlapView() {
               <th className="p-2 text-left text-muted-foreground font-semibold min-w-[140px]">
                 Mazo
               </th>
-              {data.decks.map((colDeck) => (
+              {shownDecks.map((colDeck) => (
                 <th
                   key={colDeck.id}
                   className="p-2 text-center text-foreground font-medium max-w-[110px] min-w-[90px] truncate"
@@ -177,7 +194,7 @@ export function DeckOverlapView() {
             </tr>
           </thead>
           <tbody>
-            {data.decks.map((rowDeck) => (
+            {shownDecks.map((rowDeck) => (
               <tr key={rowDeck.id} className="border-t border-border/50">
                 <td className="p-2 font-semibold text-foreground truncate max-w-[160px]">
                   <div className="flex items-center gap-1.5">
@@ -188,7 +205,7 @@ export function DeckOverlapView() {
                   </div>
                 </td>
 
-                {data.decks.map((colDeck) => {
+                {shownDecks.map((colDeck) => {
                   if (rowDeck.id === colDeck.id) {
                     return (
                       <td

@@ -4,10 +4,12 @@ import { getCurrentUserId } from "@/actions/auth";
 import { backendFetch } from "@/lib/api-client";
 
 export interface Expansion {
+  batchCount?: number; roi?: number | null; valuesAvailable?: boolean;
   code: string;
   name: string;
   setType: string;
   cardCount: number;
+  alternativeVersionCount?: number;
   releasedAt?: string | null;
   iconSvgUri?: string | null;
   ownedCount: number;
@@ -24,6 +26,7 @@ export interface ExpansionValueHistory {
 }
 
 export interface ExpansionCard {
+  isBasePrinting?: boolean;
   id: string;
   catalogId?: string | null;
   setCode: string;

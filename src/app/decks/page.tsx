@@ -1,10 +1,14 @@
+import { DeckAssignmentNotices } from "@/components/deck-assignment-notices";
 import { CheckCircle2, Coins, Wallet, ShoppingCart, Layers, Archive, Sparkles } from "lucide-react";
-import { getDecksWithCompletion } from "@/actions/decks";
+import { getDecksWithCompletion, getDeckAssignmentNotices } from "@/actions/decks";
 import { CreateDeckDialog } from "@/components/create-deck-dialog";
 import { ImportDeckDialog } from "@/components/import-deck-dialog";
 import { DeckListView } from "@/components/deck-list-view";
 import { EdhrecRecommendationsView } from "@/components/edhrec-recommendations-view";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { getCurrentUserId } from "@/actions/auth";
+import { OnboardingChecklist } from "@/components/onboarding-checklist";
+import { RoutedDeckTabs } from "@/components/routed-deck-tabs";
+import { TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatPrice } from "@/lib/deck-colors";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +17,7 @@ export default async function DecksPage({ searchParams }: {
   searchParams?: Promise<{ tab?: string }>;
 }) {
   const tab = (await searchParams)?.tab;
-  const allDecks = await getDecksWithCompletion();
+  const [allDecks, userId, notices] = await Promise.all([getDecksWithCompletion(), getCurrentUserId(), getDeckAssignmentNotices()]);
 
   const activeDecks = allDecks.filter((d) => !d.isArchived);
   const archivedDecks = allDecks.filter((d) => !!d.isArchived);
@@ -58,6 +62,7 @@ export default async function DecksPage({ searchParams }: {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <DeckAssignmentNotices notices={notices} />
       {/* Header section */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-8 border-b border-slate-800/80">
         <div>
@@ -78,8 +83,9 @@ export default async function DecksPage({ searchParams }: {
         </div>
       </div>
 
+      <OnboardingChecklist userId={userId} hasDecks={activeDecks.length > 0} />
       {/* Main Tabs Navigation */}
-      <Tabs defaultValue={tab === "edhrec" ? "edhrec" : "my-decks"} className="w-full space-y-6 mt-6">
+      <RoutedDeckTabs initialTab={tab === "edhrec" || tab === "archived" ? tab : "my-decks"} className="w-full space-y-6 mt-6">
         <TabsList className="bg-slate-900/90 border border-slate-800 p-1 rounded-xl h-11 flex-wrap">
           <TabsTrigger value="my-decks" className="gap-2 text-xs sm:text-sm px-4">
             <Layers className="h-4 w-4 text-primary" />
@@ -104,7 +110,7 @@ export default async function DecksPage({ searchParams }: {
             className="gap-2 text-xs sm:text-sm px-4 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-300"
           >
             <Sparkles className="h-4 w-4 text-amber-400" />
-            <span>Recomendaciones EDHREC</span>
+            <span>Descubrir</span>
           </TabsTrigger>
         </TabsList>
 
@@ -216,7 +222,7 @@ export default async function DecksPage({ searchParams }: {
         <TabsContent value="edhrec" className="space-y-6 mt-0 focus-visible:ring-0">
           <EdhrecRecommendationsView />
         </TabsContent>
-      </Tabs>
+      </RoutedDeckTabs>
     </div>
   );
 }

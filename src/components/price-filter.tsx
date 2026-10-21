@@ -38,7 +38,7 @@ export function PriceFilter({
 
   return (
     <div
-      className={`inline-flex items-center gap-1.5 p-1 rounded-lg border transition-colors ${
+      className={`inline-flex items-center gap-1.5 min-h-11 p-1 rounded-lg border transition-colors ${
         hasFilter
           ? "bg-primary/5 border-primary/40 text-primary shadow-xs"
           : "bg-background border-border text-muted-foreground"
@@ -60,7 +60,7 @@ export function PriceFilter({
           value={minPrice}
           onChange={(e) => onMinPriceChange(e.target.value)}
           className={`${
-            isSmall ? "h-7 w-20 text-[11px]" : "h-8 w-22 sm:w-24 text-xs"
+            isSmall ? "h-9 w-20 text-xs" : "h-9 w-22 sm:w-24 text-xs"
           } px-2 py-0 border-border bg-background focus-visible:ring-1 focus-visible:ring-ring`}
           aria-label="Precio mínimo"
         />
@@ -76,7 +76,7 @@ export function PriceFilter({
           value={maxPrice}
           onChange={(e) => onMaxPriceChange(e.target.value)}
           className={`${
-            isSmall ? "h-7 w-20 text-[11px]" : "h-8 w-22 sm:w-24 text-xs"
+            isSmall ? "h-9 w-20 text-xs" : "h-9 w-22 sm:w-24 text-xs"
           } px-2 py-0 border-border bg-background focus-visible:ring-1 focus-visible:ring-ring`}
           aria-label="Precio máximo"
         />
@@ -88,7 +88,7 @@ export function PriceFilter({
             variant="ghost"
             onClick={handleClear}
             className={`${
-              isSmall ? "h-7 w-7" : "h-8 w-8"
+              "h-9 w-9"
             } p-0 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-md shrink-0`}
             title="Limpiar filtro de precio"
             aria-label="Limpiar filtro de precio"

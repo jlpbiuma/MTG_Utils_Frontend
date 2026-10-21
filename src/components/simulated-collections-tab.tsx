@@ -1,41 +1,23 @@
 "use client";
 
+import { UpcomingReprintWarning } from "@/components/upcoming-reprint-warning";
+
+import { SimulatedHistorySummary } from "@/components/simulated-history-summary";
+
+import { ViewToolbar, ToolbarSearch, ToolbarChoices, ToolbarSort } from "@/components/view-toolbar";
+
+import { getWhatsAppMatches, type WhatsAppMatchesResponse } from "@/actions/whatsapp-matches";
+import { importOfferLink, getDiscoveredOffers, applySimulatedPrinting } from "@/actions/simulated-collections";
+import { OfferCollectionDialog } from "@/components/offer-collection-dialog";
+import { OfferControls } from "@/components/offer-controls";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { CardImage as Image } from "@/components/card-image";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+
 import { Badge } from "@/components/ui/badge";
-import {
-  FlaskConical,
-  Plus,
-  TrendingUp,
-  Coins,
-  Layers,
-  Trash2,
-  Eye,
-  Calendar,
-  Sparkles,
-  ArrowLeft,
-  Search,
-  ArrowUpDown,
-  ImageIcon,
-  List,
-  LayoutGrid,
-  ExternalLink,
-} from "lucide-react";
-import {
-  getSimulatedCollections,
-  getSimulatedCollection,
-  deleteSimulatedCollection,
-  updateSimulatedCardVersion,
-  addCardToSimulatedCollection,
-  removeCardFromSimulatedCollection,
-  type SimulatedCollectionSummary,
-  type SimulatedCollectionAnalysisResponse,
-  type SimulatedCardAnalysisItem,
-  type CandidateDeckInfo,
-} from "@/actions/simulated-collections";
+import { FlaskConical, Plus, TrendingUp, Coins, Layers, Trash2, Eye, Calendar, Sparkles, ArrowLeft, ImageIcon, List, LayoutGrid, ExternalLink } from "lucide-react";
+import { getSimulatedCollections, getSimulatedCollection, deleteSimulatedCollection, addCardToSimulatedCollection, removeCardFromSimulatedCollection, type SimulatedCollectionSummary, type SimulatedCollectionAnalysisResponse, type SimulatedCardAnalysisItem, type CandidateDeckInfo } from "@/actions/simulated-collections";
 import type { CardPrintingDetail } from "@/actions/scryfall";
 import { normalizeCardName, isBasicLand } from "@/lib/card-utils";
 import { SimulatedPurchaseComparison } from "@/components/simulated-purchase-comparison";
@@ -46,22 +28,12 @@ import { CardPreviewHover } from "@/components/card-preview-hover";
 import { ManaCost } from "@/components/mana-cost";
 import { ColorIdentityPips } from "@/components/color-identity-pips";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 import { simulationListCards, matchesSimulationFilter, sortSimulationCards, type SimulationFilter, type SimulationSort } from "@/lib/simulated-card-list";
 import { SimulatedCardTable, SimulationMembershipTags, SimulationPriceDetails } from "@/components/simulated-card-table";
-import { addOrIncrementCard, decrementCardInCollectionByName } from "@/actions/collection";
 import { runBulkAction } from "@/lib/bulk-actions";
 
-interface SimulatedCollectionsTabProps {
-  provider?: string;
-}
 
 type CardFilterType = SimulationFilter;
 type SortOption = SimulationSort;
@@ -73,6 +45,8 @@ interface DeckGrowthItem {
   deckName: string;
   colors: string[];
   currentCompletion: number;
+  totalCards?: number | null;
+  ownedCards?: number | null;
   gainPercentage: number;
   newCompletion: number;
   cardsToAddCount: number;
@@ -86,11 +60,33 @@ interface DeckGrowthItem {
   }[];
 }
 
-export function SimulatedCollectionsTab({
-  provider = "cardmarket",
-}: SimulatedCollectionsTabProps) {
+export function SimulatedCollectionsTab() {
+  const provider = "cardmarket";
   const [collections, setCollections] = useState<SimulatedCollectionSummary[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(true);
+  const [discoveredOffers, setDiscoveredOffers] = useState<SimulatedCollectionSummary[]>([]);
+  const [discovered, setDiscovered] = useState<WhatsAppMatchesResponse | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [isLoadingDiscovery, setIsLoadingDiscovery] = useState(true);
+  const listRequest = useRef(0);
+  const [importing, setImporting] = useState(false);
+  const [originFilter, setOriginFilter] = useState("all");
+  const [subjectFilter, setSubjectFilter] = useState("all");
+  const allOffers = useMemo<SimulatedCollectionSummary[]>(() => [
+    ...collections,
+    ...discoveredOffers.filter(discovery => !collections.some(offer => offer.sourceUrl === discovery.sourceUrl && (offer.opportunitySubject ?? "vende") === discovery.opportunitySubject)),
+  ], [collections, discoveredOffers]);
+  const [offerQuery,setOfferQuery] = useState("");
+  const [offerStatus,setOfferStatus] = useState("all");
+  const [offerSort,setOfferSort] = useState<"date" | "name" | "value" | "gain">("date");
+  const [offerDirection,setOfferDirection] = useState<"asc" | "desc">("desc");
+  const [offerView,setOfferView] = useState<"grid" | "list">("grid");
+  const visibleOffers = useMemo(() => allOffers.filter(offer => (originFilter === "all" || (offer.origin ?? "other") === originFilter) && (subjectFilter === "all" || (offer.opportunitySubject ?? "vende") === subjectFilter) && (offerStatus === "all" || (offer.status ?? "evaluating") === offerStatus) && `${offer.name} ${offer.seller ?? ""} ${offer.description ?? ""}`.toLowerCase().includes(offerQuery.trim().toLowerCase())).sort((first,second) => {
+    const comparison = offerSort === "name" ? first.name.localeCompare(second.name) : offerSort === "value" ? first.totalEconomicValue-second.totalEconomicValue : offerSort === "gain" ? first.globalNetGain-second.globalNetGain : (Date.parse(first.createdAt) || 0)-(Date.parse(second.createdAt) || 0);
+    return (offerDirection === "asc" ? comparison : -comparison) || first.name.localeCompare(second.name);
+  }),[allOffers,originFilter,subjectFilter,offerQuery,offerStatus,offerSort,offerDirection]);
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   // Selected collection ID for in-page view (replaces the modal once created/selected)
@@ -102,6 +98,10 @@ export function SimulatedCollectionsTab({
   const [removingCardName, setRemovingCardName] = useState<string | null>(null);
   const [selectedSimulationNames, setSelectedSimulationNames] = useState<string[]>([]);
   const [isBulkBusy, setIsBulkBusy] = useState(false);
+  const [acquisitionOffer, setAcquisitionOffer] = useState<SimulatedCollectionAnalysisResponse | null>(null);
+  const [acquisitionNames, setAcquisitionNames] = useState<string[] | undefined>();
+  const [preparingOfferId, setPreparingOfferId] = useState<string | null>(null);
+  const [acquisitionError, setAcquisitionError] = useState<string | null>(null);
   const [bulkActionMessage, setBulkActionMessage] = useState<string | null>(null);
 
   // Detail dialog & candidate decks modal state
@@ -113,6 +113,8 @@ export function SimulatedCollectionsTab({
 
   // In-page view tab & format state
   const [activeViewTab, setActiveViewTab] = useState<ActiveViewTab>("cards");
+  const [growthSort, setGrowthSort] = useState<"name" | "gain" | "completion">("gain");
+  const [growthDirection, setGrowthDirection] = useState<"asc" | "desc">("desc");
   const [deckViewFormat, setDeckViewFormat] = useState<DeckViewFormat>("grid");
 
   // In-page search, filter and sort state
@@ -124,19 +126,32 @@ export function SimulatedCollectionsTab({
 
   // Fetch collections list
   const fetchCollections = useCallback(async () => {
+    const request = ++listRequest.current;
+    const current = () => request === listRequest.current;
     setIsLoadingList(true);
-    try {
-      const data = await getSimulatedCollections(provider);
-      setCollections(data);
-    } catch (err) {
-      console.error("Failed to load simulated collections", err);
-    } finally {
-      setIsLoadingList(false);
-    }
+    setIsLoadingDiscovery(true);
+    setListError(null);
+    setDiscoveryError(null);
+    // Saved offers must become usable without waiting for source discovery.
+    const saved = getSimulatedCollections(provider)
+      .then(data => { if (current()) setCollections(data); })
+      .catch(() => { if (current()) setListError("No se pudieron cargar las ofertas guardadas. Inténtalo de nuevo."); })
+      .finally(() => { if (current()) setIsLoadingList(false); });
+    const discovery = Promise.all([getWhatsAppMatches(), getDiscoveredOffers()])
+      .then(([opportunities, candidates]) => {
+        if (current()) {
+          setDiscovered(opportunities);
+          setDiscoveredOffers(candidates);
+        }
+      })
+      .catch(() => { if (current()) setDiscoveryError("No se pudieron cargar las ofertas adicionales. Puedes consultar las ofertas guardadas."); })
+      .finally(() => { if (current()) setIsLoadingDiscovery(false); });
+    await Promise.all([saved, discovery]);
   }, [provider]);
 
   useEffect(() => {
-    fetchCollections();
+    void fetchCollections();
+    return () => { listRequest.current += 1; };
   }, [fetchCollections]);
 
   // Fetch selected collection details when selectedCollectionId changes
@@ -174,10 +189,12 @@ export function SimulatedCollectionsTab({
 
   const handleSimulationVersion = async (version: CardPrintingDetail) => {
     if (!selectedCollectionId || !cardForDetail) return;
-    const updated = await updateSimulatedCardVersion(selectedCollectionId, cardForDetail.cardName, version.id, provider);
+    const result = await applySimulatedPrinting({ collectionId: selectedCollectionId, rawText: selectedAnalysis?.rawText ?? "", cardName: cardForDetail.cardName, printingId: version.id, provider });
+    if (!result.ok) throw new Error(result.error);
+    const updated = result.data;
     setSelectedAnalysis(updated);
     setCardForDetail(current => current?.cardName === cardForDetail.cardName ? updated.cards.find(card => card.cardName === current.cardName) || null : current);
-    void fetchCollections();
+    setCollections(current => current.map(offer => offer.id === updated.id ? { ...offer, ...updated, id: offer.id } : offer));
   };
 
   const handleAddSimulationCard = async (card: { cardName: string; quantity: number }) => {
@@ -210,51 +227,63 @@ export function SimulatedCollectionsTab({
     }
   };
 
-  const handleBulkSimulation = async (action: "collection" | "delete") => {
+  const handleBulkSimulation = async () => {
     if (!selectedAnalysis || !selectedCollectionId) return;
-    const chosen = listCards.filter((card) => selectedSimulationNames.includes(card.cardName));
-    if (!chosen.length || !confirm(`¿${action === "collection" ? "Mover" : "Eliminar"} ${chosen.length} ${chosen.length === 1 ? "carta" : "cartas"} ${action === "collection" ? "a tu colección física" : "de esta simulación"}?`)) return;
-    const unresolved = action === "collection" ? chosen.find((card) => !card.cardScryfallId) : undefined;
-    if (unresolved) {
-      setCardMutationError(`No se pudo resolver la impresión de ${unresolved.cardName}.`);
-      return;
-    }
+    const chosen = listCards.filter(card => selectedSimulationNames.includes(card.cardName));
+    if (!chosen.length || !confirm(`¿Eliminar ${chosen.length} cartas de esta simulación?`)) return;
     setIsBulkBusy(true);
     setCardMutationError(null);
-    setBulkActionMessage(null);
-    const chosenNames = new Set(chosen.map((card) => card.cardName));
-    setSelectedAnalysis((current) => current ? { ...current, cards: current.cards.filter((card) => !chosenNames.has(card.cardName)) } : current);
+    const chosenNames = new Set(chosen.map(card => card.cardName));
+    setSelectedAnalysis(current => current ? { ...current, cards: current.cards.filter(card => !chosenNames.has(card.cardName)) } : current);
     try {
-      const failures = await runBulkAction(chosen, async (card) => {
-        if (action === "collection") {
-          await addOrIncrementCard({ cardScryfallId: card.cardScryfallId!, cardName: card.cardName, quantity: card.quantity, setCode: card.setCode, collectorNumber: card.collectorNumber, manaCost: card.manaCost, typeLine: card.typeLine, imageUri: card.imageUri });
-          try {
-            await removeCardFromSimulatedCollection(selectedCollectionId, card.cardName, provider);
-          } catch (error) {
-            for (let copy = 0; copy < card.quantity; copy += 1) {
-              await decrementCardInCollectionByName(card.cardName).catch(() => undefined);
-            }
-            throw error;
-          }
-          return;
-        }
-        await removeCardFromSimulatedCollection(selectedCollectionId, card.cardName, provider);
-      });
+      const failures = await runBulkAction(chosen, card => removeCardFromSimulatedCollection(selectedCollectionId, card.cardName, provider));
       setSelectedSimulationNames([]);
       setSelectedAnalysis(await getSimulatedCollection(selectedCollectionId, provider));
-      setBulkActionMessage(failures.length ? `${chosen.length - failures.length} completadas; ${failures.length} no se pudieron procesar y siguen en la simulación.` : `${chosen.length} cartas procesadas.`);
-      void fetchCollections();
+      setBulkActionMessage(failures.length ? `${chosen.length - failures.length} completadas; ${failures.length} no se pudieron procesar.` : `${chosen.length} cartas eliminadas.`);
+      await fetchCollections();
     } catch (error) {
       setCardMutationError(error instanceof Error ? error.message : "No se pudo completar la acción.");
       setSelectedAnalysis(await getSimulatedCollection(selectedCollectionId, provider));
     } finally { setIsBulkBusy(false); }
   };
 
+  const prepareAcquisition = async (offer: SimulatedCollectionSummary) => {
+    if (preparingOfferId) return;
+    setPreparingOfferId(offer.id);
+    setAcquisitionError(null);
+    try {
+      const analysis = offer.id.startsWith("discovery:")
+        ? await importOfferLink({ url: offer.sourceUrl!, name: offer.name, origin: offer.origin ?? "other", subject: "vende", savedOnly: true })
+        : await getSimulatedCollection(offer.id, provider);
+      if (!analysis) throw new Error("No se encontró la oferta.");
+      setAcquisitionNames(undefined);
+      setAcquisitionOffer(analysis);
+    } catch (error) {
+      setAcquisitionError(error instanceof Error ? error.message : "No se pudo cargar la oferta.");
+    } finally { setPreparingOfferId(null); }
+  };
+
   const handleOpenNew = () => {
     setIsDialogOpen(true);
   };
 
-  const handleSelectCollection = (id: string) => {
+  const handleSelectCollection = async (id: string) => {
+    if (id.startsWith("discovery:")) {
+      if (importing) return;
+      const offer = allOffers.find(item => item.id === id);
+      if (!offer?.sourceUrl) return;
+      setImporting(true);
+      setListError(null);
+      try {
+        const saved = await importOfferLink({ url: offer.sourceUrl, name: offer.name, origin: offer.origin ?? "other", subject: offer.opportunitySubject ?? "vende", savedOnly: true });
+        if (!saved.id) throw new Error("No se pudo guardar la oferta.");
+        await fetchCollections();
+        setSelectedCollectionId(saved.id);
+      } catch (error) {
+        setListError(error instanceof Error ? error.message : "No se pudo abrir la oferta.");
+      } finally { setImporting(false); }
+      return;
+    }
     setSelectedCollectionId(id);
     setSearchQuery("");
     setDeckSearchQuery("");
@@ -332,12 +361,12 @@ export function SimulatedCollectionsTab({
       if (card.copiesOwnedReal > 0) continue;
       if (isBasicLand(card.typeLine, card.cardName)) continue;
       for (const cd of card.candidateDecks) {
-        const addedQty = Math.min(card.quantity, cd.missingQuantity);
+        const addedQty = cd.missingQuantity > 0 && card.quantity > 0 ? 1 : 0;
         if (addedQty <= 0 && cd.potentialGain <= 0) continue;
 
         const existing = deckMap.get(cd.deckId);
         if (existing) {
-          existing.cardsToAddCount += addedQty;
+          existing.cardsToAddCount += 1;
           existing.gainPercentage += cd.potentialGain;
           existing.cards.push({
             cardName: card.cardName,
@@ -353,6 +382,8 @@ export function SimulatedCollectionsTab({
             deckName: cd.deckName,
             colors: cd.colors || [],
             currentCompletion: cd.completionPercentage,
+            totalCards: cd.totalCards,
+            ownedCards: cd.ownedCards,
             gainPercentage: cd.potentialGain,
             newCompletion: 0,
             cardsToAddCount: addedQty,
@@ -372,11 +403,14 @@ export function SimulatedCollectionsTab({
     }
 
     const list = Array.from(deckMap.values()).map((item) => {
-      const roundedGain = Math.round(item.gainPercentage * 10) / 10;
+      const newCompletion = item.totalCards && item.ownedCards != null
+        ? Math.min(100, Math.round((item.ownedCards + item.cardsToAddCount) / item.totalCards * 1000) / 10)
+        : Math.min(100, Math.round((item.currentCompletion + item.gainPercentage) * 10) / 10);
+      const roundedGain = Math.round((newCompletion - item.currentCompletion) * 10) / 10;
       return {
         ...item,
         gainPercentage: roundedGain,
-        newCompletion: Math.min(100, Math.round((item.currentCompletion + roundedGain) * 10) / 10),
+        newCompletion,
       };
     });
 
@@ -388,13 +422,44 @@ export function SimulatedCollectionsTab({
     }
 
     // Sort by gain percentage descending
-    filtered.sort((a, b) => b.gainPercentage - a.gainPercentage);
+    filtered.sort((a, b) => {
+      const comparison = growthSort === "name" ? a.deckName.localeCompare(b.deckName) : growthSort === "completion" ? a.newCompletion - b.newCompletion : a.gainPercentage - b.gainPercentage;
+      return comparison * (growthDirection === "asc" ? 1 : -1);
+    });
     return filtered;
-  }, [selectedAnalysis, deckSearchQuery]);
+  }, [selectedAnalysis, deckSearchQuery, growthSort, growthDirection]);
 
   // =========================================================================
   // VIEW 1: IN-PAGE SIMULATED COLLECTION VIEW
   // =========================================================================
+  const acquisitionCards = acquisitionOffer?.cards.filter(card => !acquisitionNames || acquisitionNames.includes(card.cardName)) ?? [];
+  const selectionCoversAll = acquisitionOffer && acquisitionCards.length === acquisitionOffer.cards.length;
+  const acquisitionCost = acquisitionOffer?.origin === "in_person"
+    ? Math.round(acquisitionCards.reduce((sum, card) => sum + card.totalPrice, 0) * 100) / 100
+    : acquisitionNames
+    ? (acquisitionOffer?.purchaseAnalysis?.cards.filter(card => acquisitionNames.some(name => normalizeCardName(name) === normalizeCardName(card.cardName))).reduce((sum, card) => sum + (card.purchaseTotal ?? 0), 0) ?? 0)
+    : acquisitionOffer?.paidTotal ?? acquisitionOffer?.purchaseAnalysis?.totalPurchaseCost ?? 0;
+  const collectionDialog = acquisitionOffer && <OfferCollectionDialog
+    key={`${acquisitionOffer.id}:${acquisitionNames?.join("|") ?? "all"}`}
+    finance={{offerId:acquisitionOffer.id!,valuationRevision:acquisitionOffer.valuationRevision,origin:acquisitionOffer.origin ?? "other",cardNames:acquisitionNames ?? undefined}}
+    name={acquisitionOffer.name} cards={acquisitionCards} initialCost={acquisitionCost} fixedCost={acquisitionOffer.origin === "in_person"}
+    shipping={acquisitionOffer.origin !== "in_person" && selectionCoversAll ? acquisitionOffer.shipping ?? 0 : 0} selection={!!acquisitionNames}
+    onClose={() => setAcquisitionOffer(null)}
+    onConfirm={async () => {
+      if (!acquisitionOffer.id) throw new Error("No se encontró la oferta.");
+      setSelectedSimulationNames([]);
+      setBulkActionMessage(`${acquisitionCards.length} cartas añadidas a tu colección.`);
+      if (selectedCollectionId === acquisitionOffer.id) {
+        try { setSelectedAnalysis(await getSimulatedCollection(acquisitionOffer.id, provider)); }
+        catch {
+          setSelectedAnalysis(null);
+          setSelectedError("Las cartas se han añadido. Vuelve a abrir la oferta para actualizar el detalle.");
+        }
+      }
+      await fetchCollections();
+    }}
+  />;
+
   if (selectedCollectionId) {
     return (
       <div className="space-y-6">
@@ -408,7 +473,7 @@ export function SimulatedCollectionsTab({
               className="gap-1.5 h-9 text-xs border-border shrink-0"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span>Volver a Colecciones Simuladas</span>
+              <span>Volver a Evaluar oferta</span>
             </Button>
 
             {selectedAnalysis && (
@@ -463,7 +528,10 @@ export function SimulatedCollectionsTab({
           </div>
         ) : (
           <>
-            {selectedAnalysis.purchaseAnalysis && <SimulatedPurchaseComparison analysis={selectedAnalysis.purchaseAnalysis} onCardDetails={name => setCardForDetail(selectedAnalysis.cards.find(card => normalizeCardName(card.cardName) === normalizeCardName(name)) || null)} />}
+            {selectedAnalysis.origin === "cardmarket" && selectedAnalysis.id && selectedAnalysis.opportunitySubject !== "compra_busca" && <OfferControls key={selectedAnalysis.id} offer={selectedAnalysis} onUpdated={async () => { const fresh = await getSimulatedCollection(selectedAnalysis.id!, provider); setSelectedAnalysis(fresh); await fetchCollections(); }} />}
+            {selectedAnalysis.origin === "cardmarket" && selectedAnalysis.purchaseAnalysis && <SimulatedPurchaseComparison analysis={selectedAnalysis.purchaseAnalysis} onCardDetails={name => setCardForDetail(selectedAnalysis.cards.find(card => normalizeCardName(card.cardName) === normalizeCardName(name)) || null)} />}
+            <p className="text-sm text-muted-foreground">Origen: {selectedAnalysis.origin === "whatsapp" ? "WhatsApp" : selectedAnalysis.origin === "cardmarket" ? "Cardmarket" : selectedAnalysis.origin === "in_person" ? "Venta presencial" : "Otros"} · Completitud global del lote: {(selectedAnalysis.globalCompletionBefore ?? 0).toFixed(2)}% → {(selectedAnalysis.globalCompletionAfter ?? 0).toFixed(2)}%</p>
+            {selectedAnalysis.origin === "cardmarket" && <SimulatedHistorySummary analysis={selectedAnalysis} />}
             {/* 4 Hero Metric Cards with Standardized Card Counts */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {/* Metric 1: Valor Total Lote */}
@@ -551,165 +619,113 @@ export function SimulatedCollectionsTab({
                 </Button>
               </div>
 
-              {activeViewTab === "deck-growth" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-medium mr-1">Formato:</span>
-                  <Button
-                    size="sm"
-                    variant={deckViewFormat === "grid" ? "secondary" : "ghost"}
-                    onClick={() => setDeckViewFormat("grid")}
-                    className="h-8 px-2.5 text-xs gap-1.5 border border-border"
-                    title="Ver en formato cuadrícula"
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                    <span>Grid</span>
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant={deckViewFormat === "list" ? "secondary" : "ghost"}
-                    onClick={() => setDeckViewFormat("list")}
-                    className="h-8 px-2.5 text-xs gap-1.5 border border-border"
-                    title="Ver en formato lista"
-                  >
-                    <List className="h-3.5 w-3.5" />
-                    <span>Lista</span>
-                  </Button>
-                </div>
-              )}
             </div>
 
             {/* TAB 1: CARTAS VIEW (3 COLUMNAS) */}
             {activeViewTab === "cards" && (
               <div className="space-y-4">
-                {/* Search, Filter Pills & Sort Controls */}
-                <div className="space-y-3">
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        aria-label="Buscar cartas simuladas"
-                        placeholder="Filtrar cartas de tu colección simulada por nombre..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9 h-11 text-base"
-                      />
-                    </div>
-
-                    {/* Sort selector */}
-                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                <ViewToolbar
+                  label="Opciones de las cartas de la oferta"
+                  search={
+                    <ToolbarSearch
+                      label="Buscar cartas simuladas"
+                      value={searchQuery}
+                      onChange={setSearchQuery}
+                      placeholder="Filtrar cartas de tu colección simulada por nombre..."
+                    />
+                  }
+                  filters={
+                    <ToolbarChoices
+                      label="Filtrar cartas"
+                      value={cardFilter}
+                      onChange={setCardFilter}
+                      options={[
+                        { value: "all", label: `Todas (${selectedAnalysis.cards.length})` },
+                        {
+                          value: "wants",
+                          label: `Wants (${listCards.filter((card) => matchesSimulationFilter(card, "wants")).length})`,
+                        },
+                        {
+                          value: "decks",
+                          label: `En mazos (${listCards.filter((card) => matchesSimulationFilter(card, "decks")).length})`,
+                        },
+                        {
+                          value: "unrelated",
+                          label: `Fuera de todo (${listCards.filter((card) => matchesSimulationFilter(card, "unrelated")).length})`,
+                        },
+                        {
+                          value: "useful",
+                          label: `Aportan a mazos (${selectedAnalysis.cards.filter((card) => card.usefulCopies > 0 && card.copiesOwnedReal === 0 && !isBasicLand(card.typeLine, card.cardName)).length})`,
+                        },
+                        {
+                          value: "sellable",
+                          label: `Valor vendible (${selectedAnalysis.cards.filter((card) => card.sellableCopies > 0).length})`,
+                        },
+                        {
+                          value: "new",
+                          label: `Nuevas (${selectedAnalysis.cards.filter((card) => card.copiesOwnedReal === 0).length})`,
+                        },
+                        {
+                          value: "owned",
+                          label: `Ya en colección (${selectedAnalysis.cards.filter((card) => card.copiesOwnedReal > 0).length})`,
+                        },
+                      ]}
+                    />
+                  }
+                  sorting={
+                    <ToolbarSort
+                      value={sortOption.split("-")[0]}
+                      direction={sortOption.endsWith("asc") ? "asc" : "desc"}
+                      onChange={(value, dir) => setSortOption(`${value}-${dir}` as SortOption)}
+                      options={[
+                        { value: "price", label: "Mercado total", defaultDesc: true },
+                        { value: "unit", label: "Precio unitario", defaultDesc: true },
+                        { value: "purchase", label: "Precio compra total", defaultDesc: true },
+                        { value: "difference", label: "Precio diferencial", defaultDesc: true },
+                        { value: "gain", label: "Ganancia neta (%)", defaultDesc: true },
+                        { value: "name", label: "Nombre" },
+                        { value: "quantity", label: "Cantidad", defaultDesc: true },
+                      ]}
+                    />
+                  }
+                  display={
+                    <ToolbarChoices
+                      label="Vista de cartas"
+                      value={cardView}
+                      onChange={setCardView}
+                      options={[
+                        { value: "grid", label: "Cuadrícula", icon: <LayoutGrid className="h-3.5 w-3.5" /> },
+                        { value: "list", label: "Listado", icon: <List className="h-3.5 w-3.5" /> },
+                      ]}
+                    />
+                  }
+                  actions={
+                    <>
                       <CardSearchDialog
                         title="Importar una carta a la colección simulada"
                         triggerText="Importar carta"
-                        onAddCard={({ cardName, quantity }) => handleAddSimulationCard({ cardName, quantity })}
+                        onAddCard={({ cardName, quantity }) =>
+                          handleAddSimulationCard({ cardName, quantity })
+                        }
                       />
-                      <ArrowUpDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <select
-                        aria-label="Ordenar cartas simuladas"
-                        value={sortOption}
-                        onChange={(e) => setSortOption(e.target.value as SortOption)}
-                        className="h-11 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      >
-                        <option value="price-desc">Mercado total (Mayor a Menor)</option>
-                        <option value="unit-desc">Precio unitario (Mayor a Menor)</option>
-                        <option value="unit-asc">Precio unitario (Menor a Mayor)</option>
-                        <option value="purchase-desc">Precio compra total (Mayor a Menor)</option>
-                        <option value="purchase-asc">Precio compra total (Menor a Mayor)</option>
-                        <option value="difference-desc">Precio diferencial (Mayor a Menor)</option>
-                        <option value="difference-asc">Precio diferencial (Menor a Mayor)</option>
-                        <option value="price-asc">Mercado total (Menor a Mayor)</option>
-                        <option value="gain-desc">Mayor ganancia neta (%)</option>
-                        <option value="name-asc">Nombre (A - Z)</option>
-                        <option value="name-desc">Nombre (Z - A)</option>
-                        <option value="quantity-desc">Cantidad</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {cardMutationError && <p role="alert" className="text-sm text-destructive">{cardMutationError}</p>}
-                  {bulkActionMessage && <p role="status" className="text-sm text-muted-foreground">{bulkActionMessage}</p>}
-
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs text-muted-foreground">Unitario = mercado por copia · Compra y diferencial = total de las copias. Diferencial positivo = ahorro. Sin datos al final; varias versiones usan la media por copia.</p>
-                    <div role="group" aria-label="Vista de cartas" className="flex shrink-0 items-center rounded-lg border border-border bg-secondary p-1">
-                      <Button type="button" variant="ghost" aria-pressed={cardView === "grid"} onClick={() => setCardView("grid")} className={`min-h-11 gap-1.5 ${cardView === "grid" ? "bg-background shadow" : "text-muted-foreground"}`}><LayoutGrid className="h-4 w-4" aria-hidden="true" />Cuadrícula</Button>
-                      <Button type="button" variant="ghost" aria-pressed={cardView === "list"} onClick={() => setCardView("list")} className={`min-h-11 gap-1.5 ${cardView === "list" ? "bg-background shadow" : "text-muted-foreground"}`}><List className="h-4 w-4" aria-hidden="true" />Listado</Button>
-                    </div>
-                  </div>
-
-                  {/* Filter Pills */}
-                  <div className="flex items-center gap-2 flex-wrap pt-1">
-                    <Button
-                      size="sm"
-                      variant={cardFilter === "all" ? "secondary" : "outline"}
-                      onClick={() => setCardFilter("all")}
-                      className="h-8 text-xs px-3 rounded-full border-border"
-                    >
-                      Todas ({selectedAnalysis.cards.length})
-                    </Button>
-
-                    {([ ["wants", "Wants"], ["decks", "En mazos"], ["unrelated", "Fuera de todo"] ] as const).map(([filter, label]) => (
-                      <Button key={filter} size="sm" variant={cardFilter === filter ? "secondary" : "outline"} aria-pressed={cardFilter === filter} onClick={() => setCardFilter(filter)} className="h-8 rounded-full border-border px-3 text-xs">
-                        {label} ({listCards.filter(card => matchesSimulationFilter(card, filter)).length})
-                      </Button>
-                    ))}
-
-                    {/* Filter 'Aportan a mazos': Filters out cards already in real collection and basic lands */}
-                    <Button
-                      size="sm"
-                      variant={cardFilter === "useful" ? "secondary" : "outline"}
-                      onClick={() => setCardFilter("useful")}
-                      className="h-8 text-xs px-3 rounded-full border-primary/30 text-primary hover:bg-primary/10"
-                    >
-                      Aportan a mazos ({selectedAnalysis.cards.filter((c) => c.usefulCopies > 0 && c.copiesOwnedReal === 0 && !isBasicLand(c.typeLine, c.cardName)).length})
-                    </Button>
-
-                    {/* Filter 'Valor vendible' */}
-                    <Button
-                      size="sm"
-                      variant={cardFilter === "sellable" ? "secondary" : "outline"}
-                      onClick={() => setCardFilter("sellable")}
-                      className="h-8 text-xs px-3 rounded-full border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
-                    >
-                      Valor vendible ({selectedAnalysis.cards.filter((c) => c.sellableCopies > 0).length})
-                    </Button>
-
-                    {/* Filter 'Nuevas en colección' */}
-                    <Button
-                      size="sm"
-                      variant={cardFilter === "new" ? "secondary" : "outline"}
-                      onClick={() => setCardFilter("new")}
-                      className="h-8 text-xs px-3 rounded-full border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                    >
-                      Nuevas ({selectedAnalysis.cards.filter((c) => c.copiesOwnedReal === 0).length})
-                    </Button>
-
-                    {/* Filter 'Ya en colección' */}
-                    <Button
-                      size="sm"
-                      aria-pressed={cardFilter === "owned"}
-                      variant={cardFilter === "owned" ? "secondary" : "outline"}
-                      onClick={() => setCardFilter("owned")}
-                      className="h-8 text-xs px-3 rounded-full border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
-                    >
-                      Ya en colección ({selectedAnalysis.cards.filter((c) => c.copiesOwnedReal > 0).length})
-                    </Button>
-
-                    {(searchQuery || cardFilter !== "all") && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setSearchQuery("");
-                          setCardFilter("all");
-                        }}
-                        className="h-8 text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        Restablecer filtros
-                      </Button>
-                    )}
-                  </div>
-                </div>
+                      {(searchQuery || cardFilter !== "all") && (
+                        <Button
+                          variant="ghost"
+                          className="min-h-11 text-xs"
+                          onClick={() => {
+                            setSearchQuery("");
+                            setCardFilter("all");
+                          }}
+                        >
+                          Restablecer filtros
+                        </Button>
+                      )}
+                    </>
+                  }
+                />
+                <p className="text-xs text-muted-foreground">Unitario = mercado por copia · Compra y diferencial = total de las copias. Diferencial positivo = ahorro. Sin datos al final; varias versiones usan la media por copia.</p>
+                {cardMutationError && <p role="alert" className="text-sm text-destructive">{cardMutationError}</p>}
+                {bulkActionMessage && <p role="status" className="text-sm text-muted-foreground">{bulkActionMessage}</p>}
 
                 {/* 3-COLUMN CARD GRID */}
                 <div ref={cardGridRef} />
@@ -752,6 +768,7 @@ export function SimulatedCollectionsTab({
                                     {card.cardName}
                                   </h3>
                                 </CardPreviewHover>
+                                <UpcomingReprintWarning reprints={card.upcomingReprints} />
                               </div>
 
                               {/* Right: Card Type + Mana Cost */}
@@ -915,16 +932,42 @@ export function SimulatedCollectionsTab({
             {/* TAB 2: CRECIMIENTO DE MAZOS (LISTA O GRID) */}
             {activeViewTab === "deck-growth" && (
               <div className="space-y-4">
-                {/* Search Bar for Decks */}
-                <div className="relative max-w-md">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Filtrar mazos por nombre..."
-                    value={deckSearchQuery}
-                    onChange={(e) => setDeckSearchQuery(e.target.value)}
-                    className="pl-9 h-11 text-sm"
-                  />
-                </div>
+                <ViewToolbar
+                  label="Opciones del crecimiento de mazos"
+                  search={
+                    <ToolbarSearch
+                      value={deckSearchQuery}
+                      onChange={setDeckSearchQuery}
+                      placeholder="Filtrar mazos por nombre..."
+                    />
+                  }
+                  sorting={
+                    <ToolbarSort
+                      value={growthSort}
+                      direction={growthDirection}
+                      onChange={(value, direction) => {
+                        setGrowthSort(value);
+                        setGrowthDirection(direction);
+                      }}
+                      options={[
+                        { value: "name", label: "Nombre" },
+                        { value: "gain", label: "Mejora", defaultDesc: true },
+                        { value: "completion", label: "Completitud", defaultDesc: true },
+                      ]}
+                    />
+                  }
+                  display={
+                    <ToolbarChoices
+                      label="Vista"
+                      value={deckViewFormat}
+                      onChange={setDeckViewFormat}
+                      options={[
+                        { value: "grid", label: "Cuadrícula" },
+                        { value: "list", label: "Lista" },
+                      ]}
+                    />
+                  }
+                />
 
                 {deckGrowthList.length === 0 ? (
                   <div className="py-16 text-center rounded-2xl border border-dashed border-border bg-card/30 space-y-2">
@@ -1129,12 +1172,13 @@ export function SimulatedCollectionsTab({
           </>
         )}
 
-        <div aria-live="polite" className={`fixed bottom-5 left-1/2 z-50 flex w-[min(94vw,34rem)] -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur transition-all duration-200 motion-reduce:transition-none ${activeViewTab === "cards" && selectedSimulationNames.length ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-6 opacity-0"}`} aria-hidden={activeViewTab !== "cards" || !selectedSimulationNames.length}>
+        <div aria-live="polite" className={`fixed bottom-20 md:bottom-5 left-1/2 z-50 flex w-[min(94vw,34rem)] -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur transition-all duration-200 motion-reduce:transition-none ${activeViewTab === "cards" && selectedSimulationNames.length ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-6 opacity-0"}`} aria-hidden={activeViewTab !== "cards" || !selectedSimulationNames.length}>
           <span className="text-sm font-medium tabular-nums">{selectedSimulationNames.length} seleccionadas</span>
-          <div className="flex items-center gap-2"><Button size="sm" disabled={isBulkBusy || !selectedSimulationNames.length} onClick={() => handleBulkSimulation("collection")}>Mover a colección</Button><Button size="sm" variant="destructive" disabled={isBulkBusy || !selectedSimulationNames.length} onClick={() => handleBulkSimulation("delete")}>Eliminar</Button></div>
+          <div className="flex items-center gap-2"><Button size="sm" disabled={isBulkBusy || !selectedSimulationNames.length || (selectedAnalysis?.status === "purchased" || selectedAnalysis?.status === "discarded") || selectedAnalysis?.opportunitySubject === "compra_busca"} onClick={() => { setAcquisitionNames([...selectedSimulationNames]); setAcquisitionOffer(selectedAnalysis); }}>Añadir selección a colección</Button><Button size="sm" variant="destructive" disabled={isBulkBusy || !selectedSimulationNames.length || selectedAnalysis?.status === "purchased"} onClick={() => handleBulkSimulation()}>Eliminar</Button></div>
         </div>
 
         {/* Card Detail Dialog */}
+        {collectionDialog}
         {cardForDetail && (
           <CardDetailDialog
             isOpen={Boolean(cardForDetail)}
@@ -1214,13 +1258,13 @@ export function SimulatedCollectionsTab({
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <FlaskConical className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Colecciones Simuladas</h3>
+            <h3 className="text-lg font-semibold text-foreground">Evaluar oferta</h3>
             <Badge variant="outline" className="text-xs border-primary/30 text-primary bg-primary/5 font-mono">
-              Sandbox
+              Ofertas
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground max-w-2xl">
-            Sube lotes o paquetes temporales de cartas para simular cómo completarían tus mazos e inspeccionar su valor económico, sin alterar en absoluto tu colección real.
+            Importa un enlace, una lista o un carrito, descubre ofertas de WhatsApp y compara su coste e impacto antes de comprar.
           </p>
         </div>
 
@@ -1229,40 +1273,107 @@ export function SimulatedCollectionsTab({
           className="gap-2 h-10 px-4 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shrink-0"
         >
           <Plus className="h-4 w-4" />
-          <span>Nueva Colección Simulada</span>
+          <span>Evaluar nueva oferta</span>
         </Button>
       </div>
 
+      {discovered && <div className="grid gap-3 sm:grid-cols-3" aria-label="Resumen de oportunidades">
+        <div className="rounded-xl border border-border bg-card p-4"><p className="text-xs text-muted-foreground">Cartas analizadas en las fuentes</p><p className="mt-1 text-xl font-bold font-mono">{discovered.total_cards_scanned}</p></div>
+        <div className="rounded-xl border border-border bg-card p-4"><p className="text-xs text-muted-foreground">Coincidencias para comprar / vender</p><p className="mt-1 text-xl font-bold font-mono">{discovered.total_wants_matches} / {discovered.total_collection_matches}</p></div>
+        <div className="rounded-xl border border-border bg-card p-4"><p className="text-xs text-muted-foreground">Completitud global actual</p><p className="mt-1 text-xl font-bold font-mono">{(discovered.global_completion_before ?? 0).toFixed(2)}%</p>{discovered.last_scraped_at && <p className="text-xs text-muted-foreground">Actualizado: {new Date(discovered.last_scraped_at).toLocaleString("es-ES")}</p>}</div>
+      </div>}
+      <ViewToolbar
+        label="Opciones del listado de ofertas"
+        search={
+          <ToolbarSearch
+            value={offerQuery}
+            onChange={setOfferQuery}
+            placeholder="Buscar oferta por nombre o vendedor..."
+          />
+        }
+        filters={
+          <>
+          <ToolbarChoices label="Origen" value={originFilter} onChange={setOriginFilter} options={[{ value: "all", label: "Todos" }, { value: "whatsapp", label: "WhatsApp" }, { value: "cardmarket", label: "Cardmarket" }, { value: "in_person", label: "Venta presencial" }, { value: "other", label: "Otros" }]} />
+          <ToolbarChoices label="Operación" value={subjectFilter} onChange={setSubjectFilter} options={[{ value: "all", label: "Todas" }, { value: "vende", label: "Comprar" }, { value: "compra_busca", label: "Vender" }]} />
+          <ToolbarChoices
+            label="Estado"
+            value={offerStatus}
+            onChange={setOfferStatus}
+            options={[
+              { value: "all", label: "Todas" },
+              { value: "evaluating", label: "Evaluando" },
+              { value: "purchased", label: "Compradas" },
+              { value: "discarded", label: "Descartadas" },
+            ]}
+          />
+          </>
+        }
+        sorting={
+          <ToolbarSort
+            value={offerSort}
+            direction={offerDirection}
+            onChange={(value, dir) => {
+              setOfferSort(value);
+              setOfferDirection(dir);
+            }}
+            options={[
+              { value: "date", label: "Fecha", defaultDesc: true },
+              { value: "name", label: "Nombre" },
+              { value: "value", label: "Valor de mercado", defaultDesc: true },
+              { value: "gain", label: "Impacto en mazos", defaultDesc: true },
+            ]}
+          />
+        }
+        display={
+          <ToolbarChoices
+            label="Vista"
+            value={offerView}
+            onChange={setOfferView}
+            options={[
+              { value: "grid", label: "Cuadrícula" },
+              { value: "list", label: "Listado" },
+            ]}
+          />
+        }
+      />
+
+      {listError && <p role="alert" className="text-sm text-destructive">{listError}</p>}
+      {isLoadingDiscovery && <p role="status" className="text-sm text-muted-foreground">Buscando ofertas adicionales…</p>}
+      {discoveryError && <p role="alert" className="text-sm text-destructive">{discoveryError}</p>}
+      {importing && <p role="status" className="text-sm text-muted-foreground">Importando oferta…</p>}
       {/* Content Area */}
       {isLoadingList ? (
         <div className="flex flex-col items-center justify-center p-16 space-y-3">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <p className="text-xs text-muted-foreground">Cargando colecciones simuladas...</p>
         </div>
-      ) : collections.length === 0 ? (
+      ) : visibleOffers.length === 0 ? (
         /* Empty State */
         <div className="flex flex-col items-center justify-center p-12 text-center rounded-2xl border border-dashed border-border bg-card/30 space-y-4">
           <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20 text-primary">
             <FlaskConical className="h-8 w-8" />
           </div>
           <div className="space-y-1 max-w-md">
-            <h4 className="text-base font-medium text-foreground">No tienes colecciones simuladas</h4>
+            <h4 className="text-base font-medium text-foreground">{collections.length ? "No hay ofertas con estos filtros" : "No tienes colecciones simuladas"}</h4>
             <p className="text-xs text-muted-foreground">
               Puedes pegar un lote de cartas que estés pensando en comprar o cambiar para ver su impacto económico y cuánto mejoran tus mazos.
             </p>
           </div>
+          {collections.length > 0 && <Button variant="ghost" className="min-h-11" onClick={() => {setOfferQuery("");setOfferStatus("all");}}>Restablecer filtros</Button>}
           <Button onClick={handleOpenNew} variant="outline" className="gap-2 text-xs border-border">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Crear primera simulación
+            Pegar tabla del vendedor
           </Button>
         </div>
       ) : (
         /* Grid of Saved Collections */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {collections.map((coll) => (
+        <div className={`grid gap-4 ${offerView === "grid" ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"}`}>
+          {visibleOffers.map((coll) => (
             <div
               key={coll.id}
-              onClick={() => handleSelectCollection(coll.id)}
+              onClick={() => void handleSelectCollection(coll.id)}
+              role="button" tabIndex={0} aria-disabled={importing}
+              onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); void handleSelectCollection(coll.id); } }}
               className="group p-5 rounded-xl border border-border bg-card hover:border-primary/50 transition-all cursor-pointer flex flex-col justify-between space-y-4 shadow-sm hover:shadow-md"
             >
               <div className="space-y-3">
@@ -1277,20 +1388,22 @@ export function SimulatedCollectionsTab({
                       </p>
                     )}
                   </div>
-                  <Button
+                  {!coll.id.startsWith("discovery:") && <Button
                     size="icon"
                     variant="ghost"
                     onClick={(e) => handleDeleteFromList(e, coll.id)}
                     className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                    title="Eliminar colección simulada"
+                    title="Eliminar oferta"
                   >
                     <Trash2 className="h-4 w-4" />
-                  </Button>
+                  </Button>}
                 </div>
 
-                {coll.purchaseAnalysis && (
+                <p className="text-xs text-muted-foreground">{coll.origin === "whatsapp" ? "WhatsApp" : coll.origin === "cardmarket" ? "Cardmarket" : coll.origin === "in_person" ? "Venta presencial" : "Otros"} · {coll.opportunitySubject === "compra_busca" ? "Vender" : "Comprar"}{coll.id.startsWith("discovery:") ? " · Detectada" : ""}</p>
+                {coll.opportunityMatches && <p className="text-xs text-muted-foreground">{coll.opportunityMatches.total_cards_scanned} cartas analizadas · {coll.opportunityMatches.total_wants_matches + coll.opportunityMatches.total_collection_matches} coincidencias · Completitud global {(coll.globalCompletionBefore ?? 0).toFixed(2)}% → {(coll.globalCompletionAfter ?? 0).toFixed(2)}%</p>}
+                {coll.origin === "cardmarket" && coll.purchaseAnalysis && (
                   <p className="text-sm text-foreground">
-                    Compra: {coll.purchaseAnalysis.totalPurchaseCost.toFixed(2)} € · Wants: {coll.purchaseAnalysis.wantsCompletionPercentage.toFixed(1)}%
+                    {coll.status === "purchased" ? "Comprada" : coll.status === "discarded" ? "Descartada" : "Evaluando"} · Compra: {coll.purchaseAnalysis.totalPurchaseCost.toFixed(2)} € · Wants: {coll.purchaseAnalysis.wantsCompletionPercentage.toFixed(1)}%
                   </p>
                 )}
                 {/* 4 Metric Boxes with Standardized Card Counts */}
@@ -1354,6 +1467,13 @@ export function SimulatedCollectionsTab({
 
               </div>
 
+                  {coll.opportunitySubject !== "compra_busca" && <Button
+                    size="sm" variant="outline" className="min-h-11 w-full" aria-label={`Añadir ${coll.name} a colección`}
+                    disabled={!!preparingOfferId || coll.status === "purchased" || coll.status === "discarded" || coll.totalCards === 0}
+                    onClick={event => { event.stopPropagation(); void prepareAcquisition(coll); }}>
+                    {preparingOfferId === coll.id ? "Cargando…" : coll.status === "purchased" ? "En colección" : "Añadir a colección"}
+                  </Button>}
+
               {/* Footer */}
               <div className="flex items-center justify-between pt-3 border-t border-border/60 text-[11px] text-muted-foreground">
                 <div className="flex items-center gap-1">
@@ -1377,7 +1497,10 @@ export function SimulatedCollectionsTab({
         </div>
       )}
 
-      {/* Creation Modal Dialog (Only used when clicking "Nueva Colección Simulada") */}
+      {collectionDialog}
+      {acquisitionError && <p role="alert" className="text-sm text-destructive">{acquisitionError}</p>}
+      {bulkActionMessage && <p role="status" className="text-sm text-emerald-400">{bulkActionMessage}</p>}
+      {/* Creation Modal Dialog (Only used when clicking "Evaluar nueva oferta") */}
       <SimulatedCollectionDialog
         isOpen={isDialogOpen}
         onOpenChange={setIsDialogOpen}

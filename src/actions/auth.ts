@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { backendFetch } from "@/lib/api-client";
 
@@ -42,6 +42,7 @@ export async function getCurrentUserId(): Promise<string> {
       return userId;
     }
   } catch (error) {
+    unstable_rethrow(error);
     console.warn("Could not retrieve user ID from cookie:", error);
   }
 
@@ -88,6 +89,7 @@ export async function getCurrentUser(): Promise<UserSessionState> {
       }
     }
   } catch (error) {
+    unstable_rethrow(error);
     console.warn("Could not retrieve user session:", error);
   }
 

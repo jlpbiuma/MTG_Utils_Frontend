@@ -1,22 +1,14 @@
 "use client";
 
+import { ViewToolbar, ToolbarSearch, ToolbarChoices } from "@/components/view-toolbar";
+
 import React, { useState, useEffect } from "react";
-import {
-  Moon,
-  Coins,
-  Copy,
-  Check,
-  Search,
-  RefreshCw,
-  Sparkles,
-  ExternalLink,
-  ShieldAlert,
-} from "lucide-react";
+import { Moon, Copy, Check, RefreshCw, Sparkles } from "lucide-react";
 import { CardImage as Image } from "@/components/card-image";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+
 import { ManaCost } from "@/components/mana-cost";
-import { CardPreviewHover } from "@/components/card-preview-hover";
+
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import { getDormantCards, type DormantCardItem, type DormantCardsResponse } from "@/actions/collection";
 import type { PriceProvider } from "@/lib/pricing/types";
@@ -139,35 +131,27 @@ export function DormantCardsTab({ provider }: DormantCardsTabProps) {
         </div>
       </div>
 
-      {/* Barra de Filtros */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar entre cartas dormidas..."
+      <ViewToolbar
+        label="Opciones de cartas dormidas"
+        search={
+          <ToolbarSearch
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-10"
+            onChange={setSearchQuery}
+            placeholder="Buscar entre cartas dormidas..."
           />
-        </div>
-
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          <span className="text-xs text-muted-foreground shrink-0 mr-1">Precio mín:</span>
-          {[0, 0.5, 1, 2, 5].map((p) => (
-            <button
-              key={p}
-              onClick={() => setMinPrice(p)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-mono transition-all shrink-0 ${
-                minPrice === p
-                  ? "bg-primary text-primary-foreground font-semibold shadow-sm"
-                  : "bg-secondary text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {p === 0 ? "Todos" : `≥ ${p}${symbol}`}
-            </button>
-          ))}
-        </div>
-      </div>
+        }
+        filters={
+          <ToolbarChoices
+            label="Precio mín"
+            value={String(minPrice)}
+            onChange={(value) => setMinPrice(Number(value))}
+            options={[0, 0.5, 1, 2, 5].map((price) => ({
+              value: String(price),
+              label: price === 0 ? "Todos" : `≥ ${price}${symbol}`,
+            }))}
+          />
+        }
+      />
 
       {/* Grid de Cartas Dormidas */}
       {isLoading ? (

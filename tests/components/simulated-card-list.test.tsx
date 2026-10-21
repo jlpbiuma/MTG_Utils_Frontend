@@ -5,7 +5,7 @@ import * as actions from "@/actions/simulated-collections";
 import fixture from "../fixtures/cardmarket/list-3-analysis.json";
 
 vi.mock("@/actions/simulated-collections", () => ({
-  getSimulatedCollections: vi.fn(), getSimulatedCollection: vi.fn(),
+  getDiscoveredOffers: async () => [], getSimulatedCollections: vi.fn(), getSimulatedCollection: vi.fn(),
   analyzeRawSimulatedCollection: vi.fn(), createSimulatedCollection: vi.fn(), deleteSimulatedCollection: vi.fn(),
   removeCardFromSimulatedCollection: vi.fn(), addCardToSimulatedCollection: vi.fn(), updateSimulatedCardVersion: vi.fn(),
 }));
@@ -46,14 +46,17 @@ function rowNames(table: HTMLElement) {
 
 it("sorts both ways by unit market price, purchase total, and differential, keeping missing values last", async () => {
   const table = await openList();
-  const sorting = screen.getByRole("combobox", { name: "Ordenar cartas simuladas" });
   const cases = {
     "unit-asc": ["Delta", "Alpha", "Beta", "Gamma"], "unit-desc": ["Beta", "Alpha", "Delta", "Gamma"],
     "purchase-asc": ["Gamma", "Delta", "Alpha", "Beta"], "purchase-desc": ["Beta", "Alpha", "Delta", "Gamma"],
     "difference-asc": ["Beta", "Delta", "Alpha", "Gamma"], "difference-desc": ["Alpha", "Delta", "Beta", "Gamma"],
   };
   for (const [value, expected] of Object.entries(cases)) {
-    fireEvent.change(sorting, { target: { value } });
+    const [field,direction] = value.split("-");
+    const label = {unit:"Precio unitario",purchase:"Precio compra total",difference:"Precio diferencial"}[field as "unit" | "purchase" | "difference"];
+    const control = within(screen.getByRole("region", {name:"Opciones de las cartas de la oferta"})).getByRole("button", {name:label});
+    if (control.getAttribute("aria-pressed") !== "true") fireEvent.click(control);
+    if (!within(screen.getByRole("region", {name:"Opciones de las cartas de la oferta"})).queryByRole("button", {name:new RegExp(`Orden ${direction === "asc" ? "ascendente" : "descendente"}:`)})) fireEvent.click(control);
     expect(rowNames(table)).toEqual(expected);
   }
   expect(within(table).getByRole("columnheader", { name: "Tags" })).toBeInTheDocument();
@@ -73,7 +76,8 @@ it("filters by membership including owned cards in decks, and retains filters/se
   }
   fireEvent.click(screen.getByRole("button", { name: /^En mazos \(/ }));
   fireEvent.change(screen.getByPlaceholderText("Filtrar cartas de tu colección simulada por nombre..."), { target: { value: "Beta" } });
-  fireEvent.change(screen.getByRole("combobox", { name: "Ordenar cartas simuladas" }), { target: { value: "purchase-asc" } });
+  fireEvent.click(within(screen.getByRole("region", {name:"Opciones de las cartas de la oferta"})).getByRole("button", { name: "Precio compra total" }));
+  fireEvent.click(within(screen.getByRole("region", {name:"Opciones de las cartas de la oferta"})).getByRole("button", { name: "Precio compra total" }));
   fireEvent.click(screen.getByRole("button", { name: "Cuadrícula" }));
   const grid = screen.getByLabelText("Cuadrícula de cartas simuladas");
   expect(within(grid).getByRole("heading", { name: "Beta" })).toBeInTheDocument();
@@ -81,7 +85,8 @@ it("filters by membership including owned cards in decks, and retains filters/se
   expect(within(grid).getByText("Diferencial total")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Listado" }));
   expect(rowNames(screen.getByRole("table", { name: "Cartas de la colección simulada" }))).toEqual(["Beta"]);
-  expect(screen.getByRole("combobox", { name: "Ordenar cartas simuladas" })).toHaveValue("purchase-asc");
+  expect(within(screen.getByRole("region", {name:"Opciones de las cartas de la oferta"})).getByRole("button", { name: "Precio compra total" })).toHaveAttribute("aria-pressed", "true");
+  expect(within(screen.getByRole("region", {name:"Opciones de las cartas de la oferta"})).getByRole("button", { name: /Orden ascendente:/ })).toBeInTheDocument();
 });
 
 it("deletes selected cards optimistically and continues after one card fails", async () => {
@@ -97,7 +102,7 @@ it("deletes selected cards optimistically and continues after one card fails", a
 
   fireEvent.click(await screen.findByRole("checkbox", { name: "Seleccionar Beta" }));
   fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Gamma" }));
-  expect(screen.getByText("2 seleccionadas").parentElement).toHaveClass("fixed", "bottom-5");
+  expect(screen.getByText("2 seleccionadas").parentElement).toHaveClass("fixed", "bottom-20", "md:bottom-5");
   fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
   expect(screen.queryByRole("heading", { name: "Beta" })).not.toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Gamma" })).not.toBeInTheDocument();
@@ -109,4 +114,44 @@ it("deletes selected cards optimistically and continues after one card fails", a
   expect(actions.removeCardFromSimulatedCollection).toHaveBeenNthCalledWith(2, "saved", "Gamma", "cardmarket");
   expect(screen.getByRole("heading", { name: "Beta" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Gamma" })).not.toBeInTheDocument();
+});
+
+it("keeps saved offers searchable, filters their status and keeps controls in empty results", async () => {
+  vi.mocked(actions.getSimulatedCollections).mockResolvedValue([
+    {...analysis,id:"saved",seller:"Alice",status:"evaluating",createdAt:"2026-09-26",updatedAt:"2026-09-26"},
+    {...analysis,id:"other",name:"Comprada a Bob",seller:"Bob",status:"purchased",createdAt:"2026-09-27",updatedAt:"2026-09-27"},
+  ]);
+  render(<SimulatedCollectionsTab />);
+  await screen.findByText("Comprada a Bob");
+  const toolbar = within(screen.getByRole("region", {name:"Opciones del listado de ofertas"}));
+  fireEvent.click(toolbar.getByRole("button", {name:"Compradas"}));
+  expect(screen.queryByText("Mi carrito")).not.toBeInTheDocument();
+  expect(screen.getByText("Comprada a Bob")).toBeInTheDocument();
+  fireEvent.change(toolbar.getByRole("searchbox"), {target:{value:"unknown"}});
+  expect(screen.getByText("No hay ofertas con estos filtros")).toBeInTheDocument();
+  expect(toolbar.getByRole("button", {name:"Nombre"})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", {name:"Restablecer filtros"}));
+  expect(screen.getByText("Mi carrito")).toBeInTheDocument();
+  expect(screen.getByText("Comprada a Bob")).toBeInTheDocument();
+});
+
+it("searches and sorts benefited decks and retains the choices when switching to a list", async () => {
+  const candidate = (deckId: string, deckName: string, potentialGain: number) => ({deckId,deckName,potentialGain,requestedQuantity:1,assignedQuantity:0,missingQuantity:1,completionPercentage:50,colors:[]});
+  const growthAnalysis = {...analysis,cards:[{...analysis.cards[1],copiesOwnedReal:0,candidateDecks:[candidate("a","Alpha deck",5),candidate("b","Beta deck",10)]}]};
+  vi.mocked(actions.getSimulatedCollection).mockResolvedValue(growthAnalysis);
+  render(<SimulatedCollectionsTab />);
+  fireEvent.click(await screen.findByText("Mi carrito"));
+  fireEvent.click(await screen.findByRole("button",{name:/Crecimiento de Mazos/}));
+  const toolbar=within(screen.getByRole("region",{name:"Opciones del crecimiento de mazos"}));
+  const beta=screen.getByRole("link",{name:"Beta deck"});
+  const alpha=screen.getByRole("link",{name:"Alpha deck"});
+  expect(beta.compareDocumentPosition(alpha) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  fireEvent.click(toolbar.getByRole("button",{name:"Nombre"}));
+  expect(alpha.compareDocumentPosition(beta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  fireEvent.change(toolbar.getByRole("searchbox"),{target:{value:"Beta"}});
+  fireEvent.click(toolbar.getByRole("button",{name:"Lista"}));
+  expect(toolbar.getByRole("searchbox")).toHaveValue("Beta");
+  expect(toolbar.getByRole("button",{name:"Nombre"})).toHaveAttribute("aria-pressed","true");
+  expect(screen.getByRole("link",{name:"Beta deck"})).toBeInTheDocument();
+  expect(screen.queryByRole("link",{name:"Alpha deck"})).not.toBeInTheDocument();
 });

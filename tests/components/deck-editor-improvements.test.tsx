@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { DeckTagManagerDialog, GLOBAL_TAGS } from "@/components/deck-tag-manager-dialog";
@@ -94,6 +94,32 @@ describe("Deck Editor Improvements", () => {
     });
   });
 
+  it("filters the editor cards and retains filters and sorting when changing display", () => {
+    const cards = [
+      {...sampleCard, id:"alpha", cardName:"Alpha", tags:[], missingCount:0},
+      {...sampleCard, id:"beta", cardName:"Beta", tags:[], missingCount:1},
+      {...sampleCard, id:"gamma", cardName:"Gamma", tags:[], missingCount:1},
+    ];
+    const {container} = render(<MoxfieldDeckEditor deck={{id:"d1",userId:"u1",name:"Test Deck",format:"Commander",description:null,commander:null,commanderScryfallId:null,commanderImageUri:null,createdAt:new Date(),updatedAt:new Date(),totalCards:3,uniqueCards:3,ownedCards:1,missingCardsCount:2,completionPercentage:33,cards}} cards={cards} priceSummary={null} onCardsUpdated={vi.fn()} />);
+    const toolbar = within(screen.getByRole("region", {name:"Opciones del editor de mazos"}));
+    expect(container.querySelector("select")).toBeNull();
+    fireEvent.click(toolbar.getByRole("button", {name:"Faltantes"}));
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+    const nameSort = within(toolbar.getByRole("group", {name:"Ordenar por"})).getByRole("button", {name:"Nombre"});
+    fireEvent.click(nameSort);
+    const gamma = screen.getByText("Gamma");
+    const beta = screen.getByText("Beta");
+    expect(gamma.compareDocumentPosition(beta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.change(toolbar.getByRole("searchbox", {name:"Buscar carta en el mazo..."}), {target:{value:"Beta"}});
+    expect(screen.queryByText("Gamma")).not.toBeInTheDocument();
+    fireEvent.click(toolbar.getByRole("button", {name:"Cuadrícula"}));
+    expect(toolbar.getByRole("button", {name:"Faltantes"})).toHaveAttribute("aria-pressed","true");
+    expect(toolbar.getByRole("searchbox")).toHaveValue("Beta");
+    expect(screen.getByRole("img", {name:"Beta"})).toBeInTheDocument();
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+    expect(toolbar.getByRole("button", {name:/Orden descendente:/})).toBeInTheDocument();
+  });
+
   describe("MoxfieldDeckEditor Tag Grouping", () => {
     it("renders cards with tags under their tag and untagged cards under 'Sin tag'", () => {
       const cardWithTag: DeckCardWithOwnership = {
@@ -121,7 +147,7 @@ describe("Deck Editor Improvements", () => {
           deck={sampleDeck}
           cards={[cardWithTag, cardWithoutTag]}
           priceSummary={null}
-          priceProvider="cardmarket"
+
           onCardsUpdated={vi.fn()}
         />
       );

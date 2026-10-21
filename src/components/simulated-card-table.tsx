@@ -1,5 +1,7 @@
 "use client";
 
+import { UpcomingReprintWarning } from "@/components/upcoming-reprint-warning";
+
 import type { SimulationListCard } from "@/lib/simulated-card-list";
 import { CardImage } from "@/components/card-image";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +63,7 @@ export function SimulatedCardTable({ cards, symbol, onDetails, onDecks, onRemove
                 <CardPreviewHover cardName={card.cardName} imageUri={card.imageUri}>
                   <button type="button" onClick={() => onDetails(card)} className="text-left font-semibold hover:text-primary focus-visible:outline-ring">{card.cardName}</button>
                 </CardPreviewHover>
+                <UpcomingReprintWarning reprints={card.upcomingReprints} />
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{card.typeLine || "Tipo sin datos"}</span><ManaCost manaCost={card.manaCost} /></div>
                 {card.purchaseRows.length ? card.purchaseRows.map((row, index) => <p key={index} className="text-xs text-muted-foreground">
                   {row.quantity}× {row.setName?.replaceAll("-", " ") || "Edición sin identificar"} {row.collectorNumber && `#${row.collectorNumber}`} {row.condition} {row.isFoil && "Foil"} · {simulationMoney(row.purchaseUnitPrice, symbol)}/ud.

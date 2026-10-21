@@ -54,7 +54,19 @@ export interface CardExpansionRelease {
   hasPrinting?: boolean | null;
 }
 
+export interface PriceHistoryStatistics {
+  mean: number | null;
+  standardDeviation: number | null;
+  observations: number;
+  firstObservedOn: string | null;
+  lastObservedOn: string | null;
+  provider: string;
+  currency: string;
+}
+
 export interface PrintingPriceSeries {
+  statistics?: PriceHistoryStatistics | null;
+  foilStatistics?: PriceHistoryStatistics | null;
   printingId: string;
   setCode: string;
   collectorNumber: string;

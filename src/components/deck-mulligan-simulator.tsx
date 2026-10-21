@@ -1,5 +1,7 @@
 "use client";
 
+import { ViewToolbar } from "@/components/view-toolbar";
+
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   RotateCcw,
@@ -149,37 +151,42 @@ export function DeckMulliganSimulator({ cards, commanderName }: DeckMulliganSimu
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={startNewHand}
-            className="h-8 text-xs gap-1.5 border-border"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span>Nueva Mano (Reset)</span>
-          </Button>
+        <ViewToolbar
+          label="Opciones del simulador de manos"
+          actions={
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={startNewHand}
+                className="h-8 text-xs gap-1.5 border-border"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>Nueva Mano (Reset)</span>
+              </Button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleLondonMulligan}
-            className="h-8 text-xs gap-1.5 border-border text-amber-300 bg-amber-950/20 hover:bg-amber-950/40"
-          >
-            <Shuffle className="h-3.5 w-3.5" />
-            <span>Mulligan ({mulliganCount + 1})</span>
-          </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleLondonMulligan}
+                className="h-8 text-xs gap-1.5 border-border text-amber-300 bg-amber-950/20 hover:bg-amber-950/40"
+              >
+                <Shuffle className="h-3.5 w-3.5" />
+                <span>Mulligan ({mulliganCount + 1})</span>
+              </Button>
 
-          <Button
-            size="sm"
-            onClick={handleNextTurn}
-            disabled={library.length === 0}
-            className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground font-semibold"
-          >
-            <Play className="h-3 w-3 fill-current" />
-            <span>Avanzar Turno (T{turn + 1})</span>
-          </Button>
-        </div>
+              <Button
+                size="sm"
+                onClick={handleNextTurn}
+                disabled={library.length === 0}
+                className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground font-semibold"
+              >
+                <Play className="h-3 w-3 fill-current" />
+                <span>Avanzar Turno (T{turn + 1})</span>
+              </Button>
+            </>
+          }
+        />
       </div>
 
       {/* KPI Stats Strip */}

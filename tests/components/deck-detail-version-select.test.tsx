@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { DeckDetailView } from "@/components/deck-detail-view";
 import { DeckDetailWithStats } from "@/lib/schemas";
-import * as scryfallActions from "@/actions/scryfall";
+import * as scryfallActions from "@/lib/card-details-client";
 import * as deckActions from "@/actions/decks";
 
 vi.mock("next/navigation", () => ({
@@ -12,8 +12,8 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-vi.mock("@/actions/scryfall", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/actions/scryfall")>();
+vi.mock("@/lib/card-details-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/card-details-client")>();
   return {
     ...actual,
     getCardDetails: vi.fn(),

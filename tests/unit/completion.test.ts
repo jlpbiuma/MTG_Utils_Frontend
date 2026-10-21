@@ -1,111 +1,29 @@
 import { describe, it, expect } from "vitest";
+import { deckCompletionCounts, groupCardsByType } from "@/lib/card-utils";
+import { selectionCompletion } from "@/lib/opportunity-selection";
+import type { WhatsAppDealMatch } from "@/actions/whatsapp-matches";
 
-/**
- * Pure calculation function for deck completion percentage and card counts.
- * Matches the logic in src/actions/decks.ts.
- */
-function calculateDeckCompletion(
-  deckCards: Array<{ cardScryfallId: string; quantity: number }>,
-  collectionMap: Map<string, number>
-) {
-  const totalCards = deckCards.reduce((sum, c) => sum + c.quantity, 0);
-  const uniqueCards = deckCards.length;
-
-  const ownedCards = deckCards.reduce((sum, c) => {
-    const owned = collectionMap.get(c.cardScryfallId) || 0;
-    return sum + Math.min(owned, c.quantity);
-  }, 0);
-
-  const missingCardsCount = Math.max(0, totalCards - ownedCards);
-  const completionPercentage =
-    totalCards > 0 ? Math.round((ownedCards / totalCards) * 1000) / 10 : 0;
-
-  return {
-    totalCards,
-    uniqueCards,
-    ownedCards,
-    missingCardsCount,
-    completionPercentage,
-  };
-}
-
-describe("Deck Completion & Ownership Calculations", () => {
-  it("should return 0% completion and 0 cards for an empty deck", () => {
-    const deckCards: Array<{ cardScryfallId: string; quantity: number }> = [];
-    const collectionMap = new Map<string, number>();
-
-    const stats = calculateDeckCompletion(deckCards, collectionMap);
-
-    expect(stats.totalCards).toBe(0);
-    expect(stats.uniqueCards).toBe(0);
-    expect(stats.ownedCards).toBe(0);
-    expect(stats.missingCardsCount).toBe(0);
-    expect(stats.completionPercentage).toBe(0);
+describe("Presence-based completion across decks and offers", () => {
+  it("one copy covers seven requested copies, including reprints with the same name", () => {
+    const cards = [{ cardName: "Fire // Ice", quantity: 7, ownedInCollection: 1 }, { cardName: " FIRE / Ice ", quantity: 2, ownedInCollection: 0 }];
+    expect(deckCompletionCounts(cards)).toEqual({ total: 1, owned: 1, missing: 0, percentage: 100 });
+    expect(groupCardsByType(cards)[0].completionPercentage).toBe(100);
   });
-
-  it("should return 100% completion when all required cards exist in collection", () => {
-    const deckCards = [
-      { cardScryfallId: "card-1", quantity: 4 },
-      { cardScryfallId: "card-2", quantity: 2 },
-    ];
-    const collectionMap = new Map<string, number>([
-      ["card-1", 4],
-      ["card-2", 2],
-    ]);
-
-    const stats = calculateDeckCompletion(deckCards, collectionMap);
-
-    expect(stats.totalCards).toBe(6);
-    expect(stats.uniqueCards).toBe(2);
-    expect(stats.ownedCards).toBe(6);
-    expect(stats.missingCardsCount).toBe(0);
-    expect(stats.completionPercentage).toBe(100);
+  it("excludes sideboard even if it is marked commander", () => {
+    expect(deckCompletionCounts([{ cardName: "Main", quantity: 7, ownedInCollection: 1 }, { cardName: "Side", quantity: 99, isSideboard: true }])).toEqual({ total: 1, owned: 1, missing: 0, percentage: 100 });
+    expect(deckCompletionCounts([{ cardName: "Side", quantity: 7, isSideboard: true }]).percentage).toBe(0);
   });
-
-  it("should calculate partial completion accurately", () => {
-    // Deck requires 10 cards: 4x Bolt, 4x Counterspell, 2x Island
-    const deckCards = [
-      { cardScryfallId: "bolt", quantity: 4 },
-      { cardScryfallId: "counterspell", quantity: 4 },
-      { cardScryfallId: "island", quantity: 2 },
-    ];
-    // User collection has: 2x Bolt, 4x Counterspell, 0x Island (6 owned of 10)
-    const collectionMap = new Map<string, number>([
-      ["bolt", 2],
-      ["counterspell", 4],
-    ]);
-
-    const stats = calculateDeckCompletion(deckCards, collectionMap);
-
-    expect(stats.totalCards).toBe(10);
-    expect(stats.uniqueCards).toBe(3);
-    expect(stats.ownedCards).toBe(6);
-    expect(stats.missingCardsCount).toBe(4);
-    expect(stats.completionPercentage).toBe(60);
+  it("counts basics as covered and rounds by distinct names", () => {
+    expect(deckCompletionCounts([{ cardName: "Forest", quantity: 40 }, { cardName: "A", quantity: 7 }, { cardName: "B", quantity: 7 }]).percentage).toBe(33.3);
+    expect(deckCompletionCounts([])).toEqual({ total: 0, owned: 0, missing: 0, percentage: 0 });
   });
-
-  it("should not count excess copies beyond what the deck requires", () => {
-    // Deck requires 1x Sol Ring
-    const deckCards = [{ cardScryfallId: "sol-ring", quantity: 1 }];
-    // User has 10x Sol Ring in their collection binder
-    const collectionMap = new Map<string, number>([["sol-ring", 10]]);
-
-    const stats = calculateDeckCompletion(deckCards, collectionMap);
-
-    expect(stats.totalCards).toBe(1);
-    expect(stats.ownedCards).toBe(1); // capped at 1
-    expect(stats.missingCardsCount).toBe(0);
-    expect(stats.completionPercentage).toBe(100);
-  });
-
-  it("should calculate decimals properly rounded to 1 decimal place", () => {
-    // 1 owned out of 3 total cards = 33.3%
-    const deckCards = [{ cardScryfallId: "c1", quantity: 3 }];
-    const collectionMap = new Map<string, number>([["c1", 1]]);
-
-    const stats = calculateDeckCompletion(deckCards, collectionMap);
-
-    expect(stats.completionPercentage).toBe(33.3);
-    expect(stats.missingCardsCount).toBe(2);
+  it("projects 0.5 points for one of two 100-name decks and 1 point for both", () => {
+    const impact = (deck: string) => ({ deck_card_id: deck, deck_id: deck, total_cards: 100, owned_cards: 0, quantity: 7, assigned_quantity: 0, collection_quantity: 0 });
+    const a: WhatsAppDealMatch = { id: 1, card_name: "A", normalized_name: "a", subject: "vende", whatsapp_url: "x", source_phone: "", direct_whatsapp_link: "", extra: {}, trade_quantity: 1, completion_requirements: [impact("a")] };
+    const b = { ...a, id: 2, card_name: "B", normalized_name: "b", completion_requirements: [impact("a"), impact("b")] };
+    expect(selectionCompletion([a], {}, 2, 0).gain).toBe(0.5);
+    expect(selectionCompletion([b], {}, 2, 0).gain).toBe(1);
+    expect(selectionCompletion([a, b], {}, 2, 0).gain).toBe(1.5);
+    expect(selectionCompletion([b, { ...b, id: 3, trade_quantity: 7 }], {}, 2, 0).gain).toBe(1);
   });
 });

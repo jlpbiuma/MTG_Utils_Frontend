@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getPriceSummary, PriceProvider } from "@/lib/pricing";
 import { getDeckPriceSummary, getCollectionPriceSummary, getCardsPriceSummary } from "@/actions/pricing";
 
 export const dynamic = "force-dynamic";
@@ -7,11 +6,10 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const provider: PriceProvider = body.provider || "cardmarket";
-    const bypassCache = Boolean(body.bypassCache);
+    const provider = "cardmarket";
 
     if (body.deckId) {
-      const summary = await getDeckPriceSummary(body.deckId, provider, bypassCache);
+      const summary = await getDeckPriceSummary(body.deckId, provider);
       if (!summary) {
         return NextResponse.json({ error: "Deck not found" }, { status: 404 });
       }
@@ -19,12 +17,12 @@ export async function POST(req: Request) {
     }
 
     if (body.type === "collection") {
-      const summary = await getCollectionPriceSummary(provider, bypassCache);
+      const summary = await getCollectionPriceSummary(provider);
       return NextResponse.json({ success: true, summary });
     }
 
     if (Array.isArray(body.cards)) {
-      const summary = await getCardsPriceSummary(body.cards, provider, bypassCache);
+      const summary = await getCardsPriceSummary(body.cards, provider);
       return NextResponse.json({ success: true, summary });
     }
 

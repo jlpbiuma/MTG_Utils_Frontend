@@ -31,6 +31,7 @@ export interface PriorityDeckInfo {
 }
 
 export interface PriorityItem {
+  inWants?: boolean;
   cardName: string;
   cardScryfallId: string;
   imageUri?: string | null;
@@ -125,7 +126,6 @@ export async function getPriorities(options: {
     cardType,
     page = 1,
     limit = 30,
-    provider = "cardmarket",
   } = options;
 
   const params = new URLSearchParams({
@@ -136,7 +136,7 @@ export async function getPriorities(options: {
     hideOwned: String(hideOwned),
     page: String(page),
     limit: String(limit),
-    provider,
+    provider: "cardmarket",
   });
 
   if (cardType && cardType !== "all") {
@@ -160,13 +160,12 @@ export async function getGoldenWants(options: {
   const {
     budget = 50,
     strategy = "complete_decks",
-    provider = "cardmarket",
   } = options;
 
   const params = new URLSearchParams({
     budget: String(budget),
     strategy,
-    provider,
+    provider: "cardmarket",
   });
 
   return await backendFetch<GoldenWantsResponse>(
@@ -197,7 +196,7 @@ export async function reassignCardBetweenDecks(
     }
   );
 
-  revalidatePath("/priorities");
+  revalidatePath("/buy/needs");
   revalidatePath("/decks");
   return res;
 }

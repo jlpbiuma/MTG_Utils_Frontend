@@ -9,17 +9,17 @@ export function quoteFromPrinting(
   quantity: number = 1,
   provider: PriceProvider = "cardmarket",
 ): CardPriceQuote | null {
+  provider = "cardmarket";
   const trend =
     printing.trend ??
     printing.price_eur ??
-    printing.cardtrader_trend ??
     null;
   if (trend == null || trend <= 0) return null;
 
   const min = printing.min ?? printing.price_eur ?? trend;
   const max = printing.max ?? printing.price_eur ?? trend;
-  const currency = provider === "mtggoldfish" ? "USD" : "EUR";
-  const currencySymbol = currency === "USD" ? "$" : "€";
+  const currency = "EUR";
+  const currencySymbol = "€";
 
   return {
     cardName,
@@ -44,6 +44,7 @@ export function injectPrintingQuote(
   previousScryfallId?: string | null,
   options: { updateTotals?: boolean; ownedQuantity?: number } = {},
 ): PriceSummary | null {
+  provider = "cardmarket";
   const quote = quoteFromPrinting(printing, cardName, quantity, provider);
   if (!quote) return summary;
 

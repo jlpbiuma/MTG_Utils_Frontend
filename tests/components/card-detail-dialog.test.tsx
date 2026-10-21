@@ -1,18 +1,21 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
-import { CardDetailDialog } from "@/components/card-detail-dialog";
-import * as scryfallActions from "@/actions/scryfall";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+import { priceHistoryClientCache, CardDetailDialog } from "@/components/card-detail-dialog";
+import { getCardPriceHistory } from "@/actions/pricing";
+import * as scryfallActions from "@/lib/card-details-client";
 import * as deckActions from "@/actions/decks";
 import * as collectionActions from "@/actions/collection";
 import * as wantActions from "@/actions/wants";
 
-vi.mock("@/actions/scryfall", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/actions/scryfall")>();
+vi.mock("@/lib/card-details-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/card-details-client")>();
   return {
     ...actual,
     getCardDetails: vi.fn(),
   };
 });
+
+vi.mock("@/actions/pricing", () => ({ getCardPriceHistory: vi.fn() }));
 
 vi.mock("@/actions/decks", () => ({
   updateDeckCardVersion: vi.fn().mockResolvedValue({ success: true }),
@@ -28,6 +31,7 @@ vi.mock("@/actions/wants", () => ({
 }));
 
 describe("CardDetailDialog Component (Spanish MTG Details)", () => {
+  beforeEach(() => vi.mocked(scryfallActions.getCardDetails).mockClear());
   const singleFacedCard: scryfallActions.SpanishCardDetails = {
     id: "bolt-123",
     name: "Lightning Bolt",
@@ -138,6 +142,22 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
     prices: { eur: "1.20" },
   };
 
+  it("shows all-time statistics for the selected printing independently of the chart", async () => {
+    priceHistoryClientCache.clear();
+    vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
+    vi.mocked(getCardPriceHistory).mockResolvedValue({ catalogId: "bolt", provider: "cardmarket", currency: "EUR", days: 30, expansions: [],
+      series: [{ printingId: "bolt-123", setCode: "m10", collectorNumber: "146", points: [],
+        statistics: { mean: 2, standardDeviation: 1, observations: 100, firstObservedOn: "2020-01-01", lastObservedOn: "2026-10-01", provider: "cardmarket", currency: "EUR" } }] });
+    render(<CardDetailDialog isOpen onOpenChange={() => {}} cardId="bolt-123" cardName="Lightning Bolt" />);
+    await screen.findByText("Relámpago");
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Precios" }), { button: 0 });
+    const normal = await screen.findByRole("region", { name: "Histórico completo · No foil" });
+    expect(within(normal).getByText(/2,00/)).toBeInTheDocument();
+    expect(within(normal).getByText(/100 fechas observadas/)).toBeInTheDocument();
+    expect(screen.getByText(/no cambian al ajustar la ventana/)).toBeInTheDocument();
+    priceHistoryClientCache.clear();
+  });
+
   it("should render complete card details in Spanish with Versiones as the default tab", async () => {
     vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
 
@@ -206,6 +226,7 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
       ownedInCollection={0} defaultTab="collection" onAddToCollection={onAddToCollection}
     />);
     fireEvent.click(await screen.findByRole("button", { name: "Añadir a la colección" }));
+    fireEvent.click(screen.getByRole("button",{name:"Confirmar incorporación"}));
     await waitFor(() => expect(onAddToCollection).toHaveBeenCalledOnce());
   });
 
@@ -424,6 +445,8 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
     const button = (await screen.findByText("Masters 25")).closest("button")!;
     fireEvent.click(button);
     expect(button).toBeDisabled();
+    expect(screen.getByAltText("Relámpago")).toHaveAttribute("src", expect.stringContaining("bolt-2ba"));
+    expect(scryfallActions.getCardDetails).toHaveBeenCalledTimes(1);
     reject(new Error("No se pudo guardar"));
     await screen.findByRole("alert");
     expect(screen.getByRole("alert")).toHaveTextContent("No se pudo guardar");

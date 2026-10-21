@@ -1,24 +1,19 @@
 "use client";
 
+import { UpcomingReprintWarning } from "@/components/upcoming-reprint-warning";
+
+import { HistoricalPriceSummary } from "@/components/historical-price-summary";
+
+import { ViewToolbar, ToolbarChoices } from "@/components/view-toolbar";
+
 import React, { useState, useEffect } from "react";
 import { CardImage as Image } from "@/components/card-image";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ManaCost } from "@/components/mana-cost";
-import {
-  getCardDetails,
-  SpanishCardDetails,
-  SpanishCardFace,
-  CardPrintingDetail,
-} from "@/actions/scryfall";
+import { getCardDetails, SpanishCardDetails, SpanishCardFace, CardPrintingDetail } from "@/lib/card-details-client";
 import { updateDeckCardVersion } from "@/actions/decks";
 import { updateCollectionAcquiredAt, updateCollectionCardVersion } from "@/actions/collection";
 import { updateWantCardVersion } from "@/actions/wants";
@@ -27,23 +22,10 @@ import { PriceHistoryChart } from "@/components/price-history-chart";
 import type { CardPriceHistoryResponse } from "@/lib/pricing/types";
 import { parseRulesTextTokens, translateRarityEs } from "@/lib/card-spanish-dictionary";
 import { DeckRequirement } from "@/lib/schemas";
-import {
-  Swords,
-  Shield,
-  RotateCw,
-  Coins,
-  Palette,
-  Layers,
-  Sparkles,
-  CheckCircle2,
-  AlertCircle,
-  XCircle,
-  HelpCircle,
-  BookOpen,
-  Library,
-  Calendar,
-  Filter,
-} from "lucide-react";
+import { Swords, Shield, RotateCw, Palette, Layers, CheckCircle2, AlertCircle, XCircle, HelpCircle, BookOpen, Calendar, Filter } from "lucide-react";
+
+import { InventoryAcquisitionDialog } from "@/components/inventory-acquisition-dialog";
+import { CardPurchaseProvenance } from "@/components/card-purchase-provenance";
 
 interface CardDetailDialogProps {
   cardId?: string;
@@ -133,6 +115,7 @@ export function CardDetailDialog({
   simulationVersionSelection = false,
   defaultTab = "versions",
 }: CardDetailDialogProps) {
+  const [acquiring,setAcquiring]=useState(false);
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
   const setIsOpen = controlledOnOpenChange || setInternalIsOpen;
@@ -180,6 +163,7 @@ export function CardDetailDialog({
       await onAddToCollection();
     } catch {
       setAddToCollectionError("No se pudo añadir la carta a tu colección.");
+      throw new Error("No se pudo añadir la carta a tu colección.");
     } finally {
       setIsAddingToCollection(false);
     }
@@ -292,8 +276,9 @@ export function CardDetailDialog({
   const recentPrintings = React.useMemo(() => {
     if (!details?.printings) return [];
     return details.printings.filter((p) => {
-      if (!p.released_at) return true;
-      return p.released_at >= threeYearsAgoIso;
+      const released = p.set_released_at || p.released_at;
+      if (!released) return true;
+      return released >= threeYearsAgoIso;
     });
   }, [details?.printings, threeYearsAgoIso]);
 
@@ -316,6 +301,10 @@ export function CardDetailDialog({
         ? index
         : (details?.printings?.findIndex((p) => p.id === printing.id) ?? 0);
     if (simulationVersionSelection && onVersionSelect) {
+      const previousIndex = activePrintIndex;
+      const previousId = selectedPrintingId;
+      setActivePrintIndex(targetIdx >= 0 ? targetIdx : 0);
+      setSelectedPrintingId(printing.id);
       setIsUpdatingVersion(true);
       setFeedbackMessage(null);
       setVersionError(false);
@@ -325,6 +314,8 @@ export function CardDetailDialog({
         setSelectedPrintingId(printing.id);
         setFeedbackMessage("Versión actualizada y precios de la simulación recalculados.");
       } catch (error) {
+        setActivePrintIndex(previousIndex);
+        setSelectedPrintingId(previousId);
         setVersionError(true);
         setFeedbackMessage(error instanceof Error ? error.message : "No se pudo actualizar la versión. Inténtalo de nuevo.");
       } finally {
@@ -411,6 +402,7 @@ export function CardDetailDialog({
 
   // Active printing (edition) drives set info, prices and artwork.
   const currentPrint = details?.printings?.[activePrintIndex] ?? null;
+  const historicalPrinting = priceHistory?.series.find(series => series.printingId === (currentPrint?.id || selectedPrintingId || details?.id || cardId));
 
   const formatPrice = (value?: number | null) =>
     value == null ? "—" : `${value.toFixed(2)} €`;
@@ -420,7 +412,7 @@ export function CardDetailDialog({
     try {
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return dateStr.slice(0, 4);
-      return d.toLocaleDateString("es-ES", { month: "short", year: "numeric" });
+      return d.toLocaleDateString("es-ES", { month: "short", year: "numeric", timeZone: "UTC" });
     } catch {
       return dateStr.slice(0, 4);
     }
@@ -549,6 +541,7 @@ export function CardDetailDialog({
                 <p className="text-xs text-muted-foreground font-mono mt-1">
                   Nombre original: <span className="text-muted-foreground">{displayNameEn}</span>
                 </p>
+                <UpcomingReprintWarning reprints={details?.upcomingReprints} compact={false} />
               </div>
 
               <div className="flex items-center gap-3">
@@ -787,7 +780,7 @@ export function CardDetailDialog({
                           : details?.printings?.[activePrintIndex]?.id === p.id;
                         const isCurrentlyActive = details?.printings?.[activePrintIndex]?.id === p.id;
                         const thumbUri = p.image_uri_small || p.image_uri || p.image_uri_large;
-                        const releaseFormatted = formatReleaseDate(p.released_at);
+                        const releaseFormatted = formatReleaseDate(p.set_released_at || p.released_at);
 
                         return (
                           <button
@@ -1018,27 +1011,28 @@ export function CardDetailDialog({
                           </span>
                           <span className="text-muted-foreground">Cardmarket</span>
                         </div>
-                        <div
-                          role="group"
-                          aria-label="Ventana temporal del histórico"
-                          className="flex items-center bg-background border border-border rounded-lg p-0.5 text-xs self-start sm:self-auto"
-                        >
-                          {PRICE_HISTORY_RANGES.map((opt) => (
-                            <button
-                              key={opt.days}
-                              type="button"
-                              onClick={() => setPriceHistoryDays(opt.days)}
-                              className={`px-2 py-1 rounded-md font-mono text-[11px] transition-all ${
-                                priceHistoryDays === opt.days
-                                  ? "bg-primary text-primary-foreground font-semibold shadow-sm"
-                                  : "text-muted-foreground hover:text-foreground"
-                              }`}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
+                        <ViewToolbar
+                          label="Opciones del histórico de la carta"
+                          filters={
+                            <ToolbarChoices
+                              label="Ventana temporal del histórico"
+                              value={String(priceHistoryDays)}
+                              onChange={(value) => setPriceHistoryDays(Number(value))}
+                              options={PRICE_HISTORY_RANGES.map((option) => ({
+                                value: String(option.days),
+                                label: option.label,
+                              }))}
+                            />
+                          }
+                        />
                       </div>
+                      {!priceHistoryLoading && <>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <HistoricalPriceSummary label="Histórico completo · No foil" statistics={historicalPrinting?.statistics} />
+                          <HistoricalPriceSummary label="Histórico completo · Foil" statistics={historicalPrinting?.foilStatistics} />
+                        </div>
+                        <p className="text-xs text-muted-foreground px-1">Cardmarket EUR de la impresión seleccionada. Media y desviación típica poblacional de todo el histórico disponible, con una cotización por fecha; no cambian al ajustar la ventana del gráfico. Las fechas sin cotización se omiten.</p>
+                      </>}
                       {priceHistoryLoading ? (
                         <p className="text-center text-muted-foreground py-8">Cargando histórico…</p>
                       ) : (
@@ -1083,13 +1077,14 @@ export function CardDetailDialog({
                   )}
                 </TabsContent>
 
+                {acquiring && onAddToCollection && <InventoryAcquisitionDialog printingId={selectedPrintingId??cardId??""} cardName={cardName} quantity={1} onAdjustment={addToCollection} onSaved={()=>{}} onClose={()=>setAcquiring(false)}/>}
                 {/* Collection & Decks Status Tab */}
                 <TabsContent value="collection" className="mt-3">
                   <div className="p-4 rounded-xl border border-border/80 bg-card/30 text-xs space-y-3">
                     {!collectionCardId && onAddToCollection && (
                       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background/50 p-3">
                         <span className="text-sm text-muted-foreground">Esta carta aún no está en tu colección.</span>
-                        <Button type="button" size="sm" onClick={() => void addToCollection()} disabled={isAddingToCollection}>
+                        <Button type="button" size="sm" onClick={() => setAcquiring(true)} disabled={isAddingToCollection}>
                           {isAddingToCollection ? "Añadiendo…" : "Añadir a la colección"}
                         </Button>
                         {addToCollectionError && <p role="alert" className="w-full text-destructive">{addToCollectionError}</p>}
@@ -1108,6 +1103,7 @@ export function CardDetailDialog({
                         {acquisitionDateError && <p role="alert" className="w-full text-destructive">{acquisitionDateError}</p>}
                       </div>
                     )}
+                    {collectionCardId && <CardPurchaseProvenance collectionCardId={collectionCardId}/>}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       <div className="p-2.5 rounded-lg bg-background/60 border border-border">
                         <span className="text-muted-foreground text-[11px]">En tu Colección</span>

@@ -2,16 +2,16 @@ import { render, screen, fireEvent, within, waitFor } from "@testing-library/rea
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
 import { GoldenWantsTab } from "@/components/golden-wants-tab";
-import { addOrIncrementWant } from "@/actions/wants";
+import { addWantsBulk } from "@/actions/wants";
 import { copyText } from "@/lib/copy-text";
 import type { PriorityItem } from "@/actions/priorities";
 
-vi.mock("@/actions/wants", () => ({ addOrIncrementWant: vi.fn() }));
+vi.mock("@/actions/wants", () => ({ addWantsBulk: vi.fn() }));
 vi.mock("@/lib/copy-text", () => ({ copyText: vi.fn() }));
 
 describe("GoldenWantsTab Component", () => {
   beforeEach(() => {
-    vi.mocked(addOrIncrementWant).mockReset().mockResolvedValue({});
+    vi.mocked(addWantsBulk).mockReset().mockImplementation(async cards => ({ added: cards.map(c => c.cardScryfallId), existing: [] }));
     vi.mocked(copyText).mockReset().mockResolvedValue(undefined);
     vi.stubGlobal("ResizeObserver", class {
       observe() {}
@@ -192,7 +192,7 @@ describe("GoldenWantsTab Component", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "En tendencia a la baja" }));
     expect(screen.queryByText("1x Last Piece")).not.toBeInTheDocument();
     rerender(<GoldenWantsTab onDecksSelect={vi.fn()} onCardSelect={vi.fn()} priceWindowDays={7} items={sampleItems.map((item) => ({ ...item, priceChangePercent: -10 }))} />);
-    expect(screen.getByLabelText("Período de precios")).toHaveValue("7");
+    expect(screen.getByRole("button", { name: "7 días" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("1x Last Piece")).toBeInTheDocument();
     expect(screen.getAllByText("7D").length).toBeGreaterThan(0);
   });
@@ -212,19 +212,20 @@ describe("GoldenWantsTab Component", () => {
     expect(screen.queryByText("¡Copiada al portapapeles!")).not.toBeInTheDocument();
   });
 
-  it("adds individual cards and skips them during bulk addition, retrying only failures", async () => {
+  it("skips added cards during bulk addition and retries an atomic failure", async () => {
     render(<GoldenWantsTab onDecksSelect={vi.fn()} onCardSelect={vi.fn()} items={sampleItems} />);
     fireEvent.click(screen.getByRole("button", { name: "Añadir Last Piece a Wants" }));
-    await screen.findByText("1 cartas añadidas a Wants.");
-    expect(addOrIncrementWant).toHaveBeenCalledWith(expect.objectContaining({ cardScryfallId: "lp-1", quantity: 1 }));
-    vi.mocked(addOrIncrementWant).mockRejectedValueOnce(new Error("Offline"));
+    await screen.findByText("1 cartas añadidas; 0 ya en lista.");
+    expect(addWantsBulk).toHaveBeenCalledWith([expect.objectContaining({ cardScryfallId: "lp-1", quantity: 1 })]);
+    vi.mocked(addWantsBulk).mockRejectedValueOnce(new Error("Offline"));
     fireEvent.click(screen.getByRole("button", { name: "Añadir todas a Wants" }));
-    await screen.findByText(/3 añadidas; 1 no se pudieron añadir/);
-    expect(addOrIncrementWant).toHaveBeenCalledTimes(5);
+    await screen.findByText(/No se pudo añadir la selección/);
+    expect(addWantsBulk).toHaveBeenCalledTimes(2);
     fireEvent.click(screen.getByRole("button", { name: "Añadir todas a Wants" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Añadir todas a Wants" })).toBeDisabled());
-    expect(addOrIncrementWant).toHaveBeenCalledTimes(6);
-    expect(vi.mocked(addOrIncrementWant).mock.calls[5][0].cardScryfallId).toBe("es-1");
+    expect(addWantsBulk).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(addWantsBulk).mock.calls[2][0]).toHaveLength(4);
+    expect(vi.mocked(addWantsBulk).mock.calls[2][0].every(card => card.cardScryfallId !== "lp-1")).toBe(true);
   });
 
   it("omits a card from optimization, copy and Wants, and restores it", async () => {
@@ -235,8 +236,9 @@ describe("GoldenWantsTab Component", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copiar Lista en Texto" }));
     expect(vi.mocked(copyText).mock.calls[0][0]).not.toContain("Last Piece");
     fireEvent.click(screen.getByRole("button", { name: "Añadir todas a Wants" }));
-    await screen.findByText("4 cartas añadidas a Wants.");
-    expect(addOrIncrementWant).toHaveBeenCalledTimes(4);
+    await screen.findByText("4 cartas añadidas; 0 ya en lista.");
+    expect(addWantsBulk).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(addWantsBulk).mock.calls[0][0]).toHaveLength(4);
     fireEvent.click(screen.getByRole("button", { name: "Restaurar omitidas (1)" }));
     expect(screen.getByRole("button", { name: "Ver detalles de Last Piece" })).toBeInTheDocument();
   });

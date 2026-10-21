@@ -6,15 +6,15 @@ import {
   priceHistoryCacheKey,
 } from "@/components/card-detail-dialog";
 import * as pricingActions from "@/actions/pricing";
-import * as scryfallActions from "@/actions/scryfall";
+import * as scryfallActions from "@/lib/card-details-client";
 import type { CardPriceHistoryResponse } from "@/lib/pricing/types";
 
 vi.mock("@/actions/pricing", () => ({
   getCardPriceHistory: vi.fn(),
 }));
 
-vi.mock("@/actions/scryfall", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/actions/scryfall")>();
+vi.mock("@/lib/card-details-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/card-details-client")>();
   return {
     ...actual,
     getCardDetails: vi.fn(),

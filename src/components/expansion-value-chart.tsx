@@ -1,4 +1,5 @@
 "use client";
+import { ToolbarChoices } from "@/components/view-toolbar";
 
 import { useId, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
@@ -61,12 +62,15 @@ export function ExpansionValueChart({ history, days, onDaysChange }: {
         <span className="text-rose-500">{formatPrice(history?.currentTotalValue ?? 0)}</span>
         <span className="text-emerald-500">{formatPrice(history?.currentOwnedValue ?? 0)}</span>
       </div>
-      <label className="flex items-center gap-2 text-xs text-muted-foreground">
-        Periodo
-        <select aria-label="Periodo del gráfico" value={days} onChange={(event) => onDaysChange(Number(event.target.value))} className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground">
-          {[7, 30, 90, 365].map((period) => <option key={period} value={period}>{period} días</option>)}
-        </select>
-      </label>
+      <ToolbarChoices
+        label="Periodo del gráfico"
+        value={String(days)}
+        onChange={(value) => onDaysChange(Number(value))}
+        options={[7, 30, 90, 365].map((period) => ({
+          value: String(period),
+          label: `${period} días`,
+        }))}
+      />
     </div>
     <div className="mb-1 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px]">
       <span className="inline-flex items-center gap-1.5 text-rose-500"><span className="h-0.5 w-4 rounded-full bg-rose-500" />Valor total de la expansión</span>

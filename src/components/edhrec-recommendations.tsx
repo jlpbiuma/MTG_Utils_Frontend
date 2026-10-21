@@ -1,83 +1,24 @@
 "use client";
 
+import { ViewToolbar, ToolbarSearch, ToolbarChoices } from "@/components/view-toolbar";
+
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { CardImage as Image } from "@/components/card-image";
-import {
-  Sparkles,
-  Search,
-  CheckCircle2,
-  AlertCircle,
-  Plus,
-  Loader2,
-  Crown,
-  ExternalLink,
-  Flame,
-  ArrowUpDown,
-  Check,
-  Heart,
-  Eye,
-  RefreshCw,
-  Compass,
-  ArrowUp,
-  Filter,
-  Users,
-  Zap,
-  BookOpen,
-  Box,
-  Wand2,
-  Mountain,
-  Swords,
-  Layers,
-  Trash2,
-  Undo2,
-  BookmarkCheck,
-  Minus,
-  CircleOff,
-} from "lucide-react";
+import { Sparkles, CheckCircle2, AlertCircle, Plus, Loader2, Crown, ExternalLink, Flame, Heart, Eye, Compass, ArrowUp, Users, Zap, BookOpen, Box, Wand2, Mountain, Swords, Layers, Trash2, Undo2, BookmarkCheck, CircleOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { CardPreviewHover } from "@/components/card-preview-hover";
 import { PriceBadge } from "@/components/price-badge";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ColorIdentityPips } from "@/components/color-identity-pips";
-import {
-  EdhrecCardRecommendation,
-  DeckCardWithOwnership,
-  DeckRequirement,
-} from "@/lib/schemas";
-import {
-  getDeckRecommendations,
-  DeckRecommendationsResult,
-} from "@/actions/edhrec";
-import {
-  addCardToDeck,
-  removeCardFromDeck,
-  unassignCardFromDeck,
-  removeCardFromDeckByName,
-  unassignCardFromDeckByName,
-  setDeckCommander,
-} from "@/actions/decks";
-import {
-  deleteCardFromCollectionByName,
-  decrementCardInCollectionByName,
-} from "@/actions/collection";
-import {
-  toEdhrecSlug,
-  groupRecommendationsByCategory,
-  sortEdhrecCards,
-  getCategoryLabel,
-  getCardOwnershipCategory,
-  type EdhrecSortOption,
-} from "@/lib/edhrec";
+import { EdhrecCardRecommendation, DeckCardWithOwnership, DeckRequirement } from "@/lib/schemas";
+import { getDeckRecommendations, DeckRecommendationsResult } from "@/actions/edhrec";
+import { addCardToDeck, removeCardFromDeck, unassignCardFromDeck, removeCardFromDeckByName, unassignCardFromDeckByName, setDeckCommander } from "@/actions/decks";
+import { deleteCardFromCollectionByName } from "@/actions/collection";
+import { toEdhrecSlug, groupRecommendationsByCategory, sortEdhrecCards, getCategoryLabel, getCardOwnershipCategory, type EdhrecSortOption } from "@/lib/edhrec";
 import { addOrIncrementWant } from "@/actions/wants";
 import { PriceProvider, PriceSummary } from "@/lib/pricing";
 import { normalizeCardName } from "@/lib/card-utils";
@@ -158,9 +99,8 @@ export function EdhrecRecommendations({
   } | null>(null);
 
   // Pricing state
-  const [priceProvider, setPriceProvider] = useState<PriceProvider>("cardmarket");
+  const priceProvider = "cardmarket";
   const [priceSummary, setPriceSummary] = useState<PriceSummary | null>(null);
-  const [isLoadingPrices, setIsLoadingPrices] = useState(false);
 
   // Card detail dialog state
   const [selectedCardForDetail, setSelectedCardForDetail] =
@@ -182,11 +122,9 @@ export function EdhrecRecommendations({
   const loadPrices = useCallback(
     async (
       cards: EdhrecCardRecommendation[],
-      provider: PriceProvider = priceProvider,
-      bypassCache = false
+      provider: PriceProvider = priceProvider
     ) => {
       if (!cards || cards.length === 0) return;
-      setIsLoadingPrices(true);
       try {
         const cardsToPrice = cards.map((c) => ({
           name: c.name,
@@ -199,7 +137,6 @@ export function EdhrecRecommendations({
           body: JSON.stringify({
             cards: cardsToPrice,
             provider,
-            bypassCache,
           }),
         });
         if (res.ok) {
@@ -210,8 +147,6 @@ export function EdhrecRecommendations({
         }
       } catch (err) {
         console.error("Failed to load recommendation prices:", err);
-      } finally {
-        setIsLoadingPrices(false);
       }
     },
     [priceProvider]
@@ -263,18 +198,6 @@ export function EdhrecRecommendations({
     loadRecommendations();
   }, [deckId, initialCommander]);
 
-  const handleProviderChange = (newProvider: PriceProvider) => {
-    setPriceProvider(newProvider);
-    if (recommendations.length > 0) {
-      loadPrices(recommendations, newProvider, false);
-    }
-  };
-
-  const handleRefreshPrices = () => {
-    if (recommendations.length > 0) {
-      loadPrices(recommendations, priceProvider, true);
-    }
-  };
 
   const handleAssignCommander = async (
     name: string,
@@ -1241,160 +1164,68 @@ export function EdhrecRecommendations({
         </div>
       </div>
 
-      {/* Ownership Filter Bar (Similar al del mazo) */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-1.5 bg-secondary/40 rounded-xl border border-border">
-        <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 shrink-0 flex items-center gap-1">
-            <Filter className="h-3.5 w-3.5 text-primary" />
-            Filtrar:
-          </span>
-
-          <button
-            onClick={() => setOwnershipFilter("all")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
-              ownershipFilter === "all"
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent"
-            }`}
-          >
-            <span>Todas</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/20">
-              {counts.total}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setOwnershipFilter("collection")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
-              ownershipFilter === "collection"
-                ? "bg-sky-600 text-white shadow-sm"
-                : "text-muted-foreground hover:text-sky-300 hover:bg-sky-950/20"
-            }`}
-            title="Cartas fuera del mazo y dentro de la colección"
-          >
-            <Sparkles className="h-3 w-3" />
-            <span>En colección</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/20">
-              {counts.inCollection}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setOwnershipFilter("deck")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
-              ownershipFilter === "deck"
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "text-muted-foreground hover:text-emerald-300 hover:bg-emerald-950/20"
-            }`}
-            title="Cartas dentro del mazo y dentro de la colección"
-          >
-            <CheckCircle2 className="h-3 w-3" />
-            <span>En mazo</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/20">
-              {counts.inDeck}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* Toolbar: Search, Sort, Pricing provider, View mode */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar cartas recomendadas..."
+      <ViewToolbar
+        label="Opciones de recomendaciones del mazo"
+        search={
+          <ToolbarSearch
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 text-sm focus-visible:ring-ring"
+            onChange={setSearchQuery}
+            placeholder="Buscar carta..."
           />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
-            >
-              Limpiar
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Sort selection */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground shrink-0 flex items-center gap-1">
-              <ArrowUpDown className="h-3.5 w-3.5" />
-              Ordenar:
-            </span>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as EdhrecSortOption)}
-              className="h-9 px-3 rounded-md bg-background border border-border text-xs text-foreground font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="inclusion">% Inclusión (EDHREC)</option>
-              <option value="synergy">Mayor Sinergia (+)</option>
-              <option value="requested_decks">Mazos donde se pide (Mayor a menor)</option>
-              <option value="price_desc">Precio (Mayor a menor)</option>
-              <option value="price_asc">Precio (Menor a mayor)</option>
-              <option value="name">Nombre (A-Z)</option>
-            </select>
-          </div>
-
-          {/* Price provider selector */}
-          <div className="flex items-center gap-1">
-            <select
-              value={priceProvider}
-              onChange={(e) => handleProviderChange(e.target.value as PriceProvider)}
-              className="h-9 px-2 rounded-md bg-background border border-border text-xs text-foreground font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              title="Proveedor de precios para el listado"
-            >
-              <option value="cardmarket">Cardmarket (€)</option>
-            </select>
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleRefreshPrices}
-              disabled={isLoadingPrices}
-              className="h-9 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-              title="Actualizar precios del listado"
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${isLoadingPrices ? "animate-spin text-primary" : ""}`}
-              />
-            </Button>
-          </div>
-
-          {/* Price filter min/max */}
-          <PriceFilter
-            minPrice={minPrice}
-            maxPrice={maxPrice}
-            onMinPriceChange={setMinPrice}
-            onMaxPriceChange={setMaxPrice}
-            currencySymbol={priceSummary?.currencySymbol || "€"}
+        }
+        filters={
+          <>
+            <ToolbarChoices
+              label="Colección"
+              value={ownershipFilter}
+              onChange={setOwnershipFilter}
+              options={[
+                { value: "all", label: `Todas ${counts.total}` },
+                { value: "collection", label: `En colección ${counts.inCollection}` },
+                { value: "deck", label: `En el mazo ${counts.inDeck}` },
+                { value: "missing", label: `Faltantes ${counts.missing}` },
+              ]}
+            />
+            <PriceFilter
+              minPrice={minPrice}
+              maxPrice={maxPrice}
+              onMinPriceChange={setMinPrice}
+              onMaxPriceChange={setMaxPrice}
+              currencySymbol={priceSummary?.currencySymbol || "€"}
+            />
+          </>
+        }
+        sorting={
+          <ToolbarChoices
+            label="Ordenar por"
+            value={sortBy}
+            onChange={setSortBy}
+            options={[
+              { value: "inclusion", label: "% Inclusión (EDHREC)" },
+              { value: "synergy", label: "Mayor Sinergia (+)" },
+              { value: "requested_decks", label: "Mazos donde se pide (Mayor a menor)" },
+              { value: "price_desc", label: "Precio (Mayor a menor)" },
+              { value: "price_asc", label: "Precio (Menor a mayor)" },
+              { value: "name", label: "Nombre (A-Z)" },
+            ]}
           />
-
-          {/* Grouping by section toggle */}
-          <Button
-            type="button"
-            size="sm"
-            variant={groupBySection ? "secondary" : "outline"}
-            onClick={() => setGroupBySection((prev) => !prev)}
-            className="h-9 px-3 text-xs font-medium gap-1.5 border-border"
-            title={
-              groupBySection
-                ? "Desactivar agrupación por secciones para ver todas las cartas en lista continua"
-                : "Agrupar cartas por categorías de EDHREC"
-            }
-          >
-            <Layers className="h-3.5 w-3.5 text-primary" />
-            <span className="hidden sm:inline">
-              {groupBySection ? "Agrupado por secciones" : "Sin agrupar (continuo)"}
-            </span>
-            <span className="sm:hidden">
-              {groupBySection ? "Agrupado" : "Continuo"}
-            </span>
-          </Button>
-        </div>
-      </div>
+        }
+        display={
+          <ToolbarChoices
+            label="Vista"
+            value={groupBySection ? "sections" : "flat"}
+            onChange={(value) => setGroupBySection(value === "sections")}
+            options={[
+              {
+                value: "sections",
+                label: "Agrupado por secciones",
+                icon: <Layers className="h-3.5 w-3.5" />,
+              },
+              { value: "flat", label: "Sin agrupar (continuo)" },
+            ]}
+          />
+        }
+      />
 
       {loading && (
         <div className="flex flex-col items-center justify-center p-16 space-y-4 rounded-lg bg-card border border-border">

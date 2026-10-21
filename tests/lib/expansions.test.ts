@@ -19,16 +19,16 @@ describe("expansion catalog helpers", () => {
     expect(filterExpansions(sets, "TST").map((set) => set.code)).toEqual(["tst"]);
   });
 
-  it("counts each listed printing and guards empty expansions", () => {
-    expect(getExpansionProgress(cards)).toEqual({ owned: 2, total: 3, percentage: 67 });
-    expect(getExpansionProgress([])).toEqual({ owned: 0, total: 0, percentage: 0 });
+  it("counts unique cards and guards empty expansions", () => {
+    expect(getExpansionProgress(cards)).toEqual({ owned: 1, total: 2, alternatives: 1, percentage: 50 });
+    expect(getExpansionProgress([])).toEqual({ owned: 0, total: 0, alternatives: 0, percentage: 0 });
   });
 
-  it("counts a missing special-art printing separately from its owned base printing", () => {
+  it("does not count a missing special-art printing as another card", () => {
     expect(getExpansionProgress([
       { ...cards[0], id: "base-art", catalogId: "same-card", isOwned: true },
       { ...cards[0], id: "special-art", catalogId: "same-card", isOwned: false },
-    ])).toEqual({ owned: 1, total: 2, percentage: 50 });
+    ])).toEqual({ owned: 1, total: 1, alternatives: 1, percentage: 100 });
   });
 
   it("filters, searches, sorts and groups cards without changing the source list", () => {
@@ -64,4 +64,18 @@ describe("expansion catalog helpers", () => {
     expect(balance).toMatchObject({ currentValue: 10, acquisitionValue: 12, absoluteChange: -2, measuredCards: 1 });
     expect(balance.percentageChange).toBeCloseTo(-100 / 6);
   });
+});
+
+it("covers a base card with an alternate from the same edition, once", () => {
+  const base = { id: "base", catalogId: "hero", setCode: "msc", collectorNumber: "1", isBasePrinting: true, isOwned: false, ownedQuantity: 0 };
+  const alternate = { ...base, id: "alt", collectorNumber: "291", isBasePrinting: false, isOwned: true, ownedQuantity: 4 };
+  const foreign = { ...alternate, id: "foreign", setCode: "oth", catalogId: "missing", isBasePrinting: false };
+  const missing = { ...base, id: "missing", catalogId: "missing", collectorNumber: "2" };
+  expect(getExpansionProgress([base, alternate, foreign, missing])).toEqual({ owned: 1, total: 2, alternatives: 1, percentage: 50 });
+  expect(getExpansionProgress([{ ...base, isOwned: true, ownedQuantity: 1 }, alternate])).toEqual({ owned: 1, total: 1, alternatives: 1, percentage: 100 });
+});
+
+it("keeps cards without catalog identity separate and ignores duplicate rows", () => {
+  const unresolved = { id: "p1", setCode: "tst", collectorNumber: "1", cardName: "Same name", isOwned: true, ownedQuantity: 1 };
+  expect(getExpansionProgress([unresolved, unresolved, { ...unresolved, id: "p2", isOwned: false, ownedQuantity: 0 }])).toEqual({ owned: 1, total: 2, alternatives: 0, percentage: 50 });
 });

@@ -99,6 +99,8 @@ export interface DeckRequirement {
 }
 
 export interface DeckCardWithOwnership {
+  oracleText?: string | null;
+  producedMana?: string[];
   inclusionPct?: number;
   synergy?: number;
   isTopCard?: boolean;
@@ -227,4 +229,13 @@ export interface RecommendationCoverage {
   owned: number;
   total: number;
   percentage: number | null;
+}
+
+export interface DeckAssignmentNotice {
+  id: string;
+  deckId: string;
+  cardName: string;
+  deckName: string;
+  quantity: number;
+  createdAt: string;
 }

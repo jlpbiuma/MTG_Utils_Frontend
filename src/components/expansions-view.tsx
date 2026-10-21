@@ -1,15 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ViewToolbar, ToolbarSearch, ToolbarChoices, ToolbarSort } from "@/components/view-toolbar";
+
+import { useQueryState } from "@/hooks/use-query-state";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AcquisitionLots } from "@/components/acquisition-lots";
 import { ExpansionValueChart } from "@/components/expansion-value-chart";
-import { ArrowLeft, Search, Layers3, LoaderCircle, PackageOpen, Sparkles } from "lucide-react";
+import { ArrowLeft, Layers3, LoaderCircle, PackageOpen, Sparkles } from "lucide-react";
 import { addOrIncrementCard } from "@/actions/collection";
 import { getExpansionCards, getExpansions, getExpansionValueHistory, setExpansionMissingAcquisitionDates, type Expansion, type ExpansionCard, type ExpansionValueHistory } from "@/actions/expansions";
+import { PriceBadge } from "@/components/price-badge";
+import { CatalogCardGridItem } from "@/components/catalog-card-grid-item";
 import { CardImage } from "@/components/card-image";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
-import { filterExpansions, getExpansionProgress, organizeExpansionCards, summarizeAcquisitionBalance, type ExpansionFilter, type ExpansionGroup, type ExpansionSort, type SortDirection } from "@/lib/expansions";
+import { filterExpansions, expansionCardIdentity, getExpansionProgress, organizeExpansionCards, summarizeAcquisitionBalance, type ExpansionFilter, type ExpansionGroup, type ExpansionSort, type SortDirection } from "@/lib/expansions";
 
 const PAGE_SIZE = 60;
+const formatAlternatives = (count: number) => `${count} ${count === 1 ? "versión alternativa" : "versiones alternativas"}`;
 const formatPrice = (price?: number | null) => price == null ? "—" : new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(price);
 const formatDelta = (value?: number | null, digits = 2) => value == null ? "—" : `${value > 0 ? "+" : ""}${value.toLocaleString("es-ES", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 const formatAcquiredDate = (value?: string | null) => value ? new Date(value).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : null;
@@ -28,7 +36,9 @@ function SetIcon({ code, iconUri, className }: { code: string; iconUri?: string 
 
 export function ExpansionsView() {
   const [expansions, setExpansions] = useState<Expansion[]>([]);
-  const [selected, setSelected] = useState<Expansion | null>(null);
+  const [selectedCode, setSelectedCode] = useQueryState<string>("set", "");
+  const selected = expansions.find(e => e.code === selectedCode) ?? null;
+  const [scope, setScope] = useQueryState("scope", "mine", ["mine", "all"]);
   const [cards, setCards] = useState<ExpansionCard[]>([]);
   const [valueHistory, setValueHistory] = useState<ExpansionValueHistory | null>(null);
   const [historyDays, setHistoryDays] = useState(7);
@@ -44,13 +54,17 @@ export function ExpansionsView() {
   const [cardsError, setCardsError] = useState<string | null>(null);
   const requestId = useRef(0);
   const historyRequestId = useRef(0);
-  const [setSearch, setSetSearch] = useState("");
-  const [cardSearch, setCardSearch] = useState("");
+  const [setSearch, setSetSearch] = useQueryState<string>("q", "");
+  const [cardSearch, setCardSearch] = useQueryState<string>("cardq", "");
   const [status, setStatus] = useState<ExpansionFilter>("all");
-  const [sort, setSort] = useState<ExpansionSort>("number");
-  const [direction, setDirection] = useState<SortDirection>("asc");
-  const [group, setGroup] = useState<ExpansionGroup>("none");
+  const [sort, setSort] = useQueryState<ExpansionSort>("sort", "number", ["number", "name", "price", "trend_abs", "trend_pct"]);
+  const [direction, setDirection] = useQueryState<SortDirection>("direction", "asc", ["asc", "desc"]);
+  const [group, setGroup] = useQueryState<ExpansionGroup>("group", "none", ["none", "rarity", "type"]);
   const [page, setPage] = useState(1);
+  const [checklist, setChecklist] = useState("base");
+  const [editionSort,setEditionSort] = useQueryState<"date" | "name" | "value" | "completion">("setSort","date",["date","name","value","completion"]);
+  const [editionDirection,setEditionDirection] = useQueryState<SortDirection>("setDirection","desc",["asc","desc"]);
+  const [setView,setSetView] = useQueryState<"grid" | "list">("setView","grid",["grid","list"]);
 
   useEffect(() => {
     let active = true;
@@ -58,38 +72,36 @@ export function ExpansionsView() {
     return () => { active = false; };
   }, []);
 
-  async function openExpansion(expansion: Expansion) {
+  const loadExpansion = useCallback((code: string) => {
     const currentRequest = ++requestId.current;
-    setSelected(expansion);
-    setCards([]);
-    setCardsError(null);
-    setCardSearch("");
-    setStatus("all");
-    setPage(1);
-    setLoadingCards(true);
-    setHistoryDays(7);
-    setValueHistory(null);
-    setHistoryError(false);
-    setHistoryLoading(true);
     const historyRequest = ++historyRequestId.current;
-    getExpansionValueHistory(expansion.code, 7).then((history) => {
-      if (currentRequest === requestId.current && historyRequest === historyRequestId.current) setValueHistory(history);
+    getExpansionValueHistory(code, 7).then(history => {
+      if (currentRequest === requestId.current && historyRequest === historyRequestId.current) { setValueHistory(history); setHistoryError(false); }
     }).catch(() => {
       if (currentRequest === requestId.current && historyRequest === historyRequestId.current) setHistoryError(true);
     }).finally(() => {
       if (currentRequest === requestId.current && historyRequest === historyRequestId.current) setHistoryLoading(false);
     });
-    try {
-      const result = await getExpansionCards(expansion.code);
-      if (currentRequest !== requestId.current) return;
-      setCards(result);
-    } catch {
-      if (currentRequest !== requestId.current) return;
-      setCardsError("No se pudieron cargar las cartas. Comprueba la conexión e inténtalo de nuevo.");
-    } finally {
+    return getExpansionCards(code).then(result => {
+      if (currentRequest === requestId.current) { setCards(result); setCardsError(null); }
+    }).catch(() => {
+      if (currentRequest === requestId.current) setCardsError("No se pudieron cargar las cartas. Comprueba la conexión e inténtalo de nuevo.");
+    }).finally(() => {
       if (currentRequest === requestId.current) setLoadingCards(false);
-    }
+    });
+  }, []);
+
+  function openExpansion(expansion: Expansion) {
+    setCards([]); setCardsError(null); setPage(1); setLoadingCards(true);
+    setHistoryDays(7); setValueHistory(null); setHistoryError(false); setHistoryLoading(true);
+    if (selectedCode === expansion.code) void loadExpansion(expansion.code);
+    else setSelectedCode(expansion.code);
   }
+  const codeToLoad = selected?.code;
+  useEffect(() => {
+    if (codeToLoad) void loadExpansion(codeToLoad);
+    return () => { requestId.current += 1; historyRequestId.current += 1; };
+  }, [codeToLoad, loadExpansion]);
 
   async function changeHistoryDays(days: number) {
     if (!selected) return;
@@ -125,11 +137,19 @@ export function ExpansionsView() {
   function closeExpansion() {
     requestId.current += 1;
     historyRequestId.current += 1;
-    setSelected(null);
+    setSelectedCode("");
     setLoadingCards(false);
   }
 
-  const shownExpansions = useMemo(() => filterExpansions(expansions, setSearch), [expansions, setSearch]);
+  const shownExpansions = useMemo(() => {
+    const items = filterExpansions(scope === "mine" ? expansions.filter(set => set.ownedCount > 0 || (set.batchCount ?? 0) > 0) : expansions,setSearch);
+    return items.sort((first,second) => {
+      if (editionSort === "value" && first.valuesAvailable !== second.valuesAvailable) return first.valuesAvailable === false ? 1 : -1;
+      const comparison = editionSort === "name" ? first.name.localeCompare(second.name) : editionSort === "value" ? first.ownedValueEur-second.ownedValueEur : editionSort === "completion" ? first.completionPercentage-second.completionPercentage : (Date.parse(first.releasedAt ?? "") || 0)-(Date.parse(second.releasedAt ?? "") || 0);
+      return (editionDirection === "asc" ? comparison : -comparison) || first.name.localeCompare(second.name);
+    });
+  },[expansions,setSearch,scope,editionSort,editionDirection]);
+  const ownedCardIdentities = useMemo(() => new Set(cards.filter(card => card.isOwned && card.ownedQuantity > 0).map(expansionCardIdentity)), [cards]);
   const progress = useMemo(() => getExpansionProgress(cards), [cards]);
   const acquisitionBalance = useMemo(() => summarizeAcquisitionBalance(cards), [cards]);
   const cardsWithTrend = useMemo(() => cards.map((card) => ({
@@ -137,7 +157,7 @@ export function ExpansionsView() {
     priceTrendAbsoluteChange: trendBasis === "acquisition" ? card.acquisitionTrendAbsoluteChange : card.priceTrendAbsoluteChange,
     priceTrendPercentageChange: trendBasis === "acquisition" ? card.acquisitionTrendPercentageChange : card.priceTrendPercentageChange,
   })), [cards, trendBasis]);
-  const groups = useMemo(() => organizeExpansionCards(cardsWithTrend, { filter: status, sort, direction, group, query: cardSearch }), [cardsWithTrend, status, sort, direction, group, cardSearch]);
+  const groups = useMemo(() => organizeExpansionCards(checklist === "all" ? cardsWithTrend : cardsWithTrend.filter(card => card.isBasePrinting !== false), { filter: status, sort, direction, group, query: cardSearch }), [cardsWithTrend, checklist, status, sort, direction, group, cardSearch]);
   const missingAcquisitionDates = cards.filter((card) => card.isOwned && !card.acquiredAt).length;
   const matchingCount = groups.reduce((sum, item) => sum + item.cards.length, 0);
   const visibleThrough = page * PAGE_SIZE;
@@ -165,13 +185,14 @@ export function ExpansionsView() {
       {selected ? (
         <>
           <button type="button" onClick={closeExpansion} className="mb-5 inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><ArrowLeft className="h-4 w-4" /> Todas las expansiones</button>
+          <AcquisitionLots key={selected.code} code={selected.code} onChanged={() => { void getExpansions().then(setExpansions); }} />
           <section className="mb-6 rounded-2xl border border-border bg-card p-5 sm:p-6">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-4">
                 {selected.code && <SetIcon code={selected.code} iconUri={selected.iconSvgUri} className="h-10 w-10" />}
                 <div><p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{selected.code}</p><h2 className="text-xl font-semibold">{selected.name}</h2><p className="mt-1 text-sm text-muted-foreground">{selected.releasedAt ? new Date(selected.releasedAt).toLocaleDateString("es-ES", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }) : "Fecha sin datos"}</p></div>
               </div>
-              <div className="min-w-56 sm:w-64"><div className="mb-2 flex items-center justify-between text-sm"><span className="text-muted-foreground">Tu colección</span><span className="font-semibold tabular-nums">{progress.owned} / {progress.total} · {progress.percentage}%</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${progress.percentage}%` }} /></div><p className="mt-1 text-xs text-muted-foreground">{progress.total} cartas del catálogo disponibles</p></div>
+              <div className="min-w-56 sm:w-64"><div className="mb-2 flex items-center justify-between text-sm"><span className="text-muted-foreground">Tu colección</span><span className="font-semibold tabular-nums">{progress.owned} / {progress.total} · {progress.percentage}%</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${progress.percentage}%` }} /></div><p className="mt-1 text-xs text-muted-foreground">{progress.total} {progress.total === 1 ? "carta única" : "cartas únicas"} · {formatAlternatives(progress.alternatives)}</p><p className="mt-1 text-xs text-muted-foreground">Cada carta cuenta una vez; cualquier versión de esta edición cubre la carta.</p></div>
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4" aria-label="Balance desde la adquisición">
               <div><p className="text-sm font-medium">Balance neto desde adquisición</p><p className="mt-0.5 text-xs text-muted-foreground">{acquisitionBalance.measuredCards} cartas con fecha e histórico disponible</p></div>
@@ -191,24 +212,94 @@ export function ExpansionsView() {
           </section>}
 
           <section aria-label="Cartas de la expansión">
-            <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1fr)_auto_auto_auto_auto_auto]">
-              <label className="relative"><span className="sr-only">Buscar cartas</span><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><input value={cardSearch} onChange={(event) => { setCardSearch(event.target.value); setPage(1); }} placeholder="Buscar por nombre o número…" className="h-11 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" /></label>
-              <select aria-label="Filtrar cartas" value={status} onChange={(event) => { setStatus(event.target.value as ExpansionFilter); setPage(1); }} className="h-11 rounded-lg border border-input bg-background px-3 text-sm"><option value="all">Todas</option><option value="owned">En mi colección</option><option value="missing">Me faltan</option></select>
-              <select aria-label="Ordenar cartas" value={sort} onChange={(event) => setSort(event.target.value as ExpansionSort)} className="h-11 rounded-lg border border-input bg-background px-3 text-sm"><option value="number">Número de colección</option><option value="name">Nombre</option><option value="price">Precio actual</option><option value="trend_abs">Tendencia absoluta</option><option value="trend_pct">Tendencia porcentual</option></select>
-              <select aria-label="Periodo de tendencia" value={trendBasis} onChange={(event) => setTrendBasis(event.target.value as "acquisition" | "7d")} className="h-11 rounded-lg border border-input bg-background px-3 text-sm"><option value="acquisition">Desde adquisición</option><option value="7d">Últimos 7 días</option></select>
-              <select aria-label="Dirección" value={direction} onChange={(event) => setDirection(event.target.value as SortDirection)} className="h-11 rounded-lg border border-input bg-background px-3 text-sm"><option value="asc">Ascendente</option><option value="desc">Descendente</option></select>
-              <select aria-label="Agrupar cartas" value={group} onChange={(event) => setGroup(event.target.value as ExpansionGroup)} className="h-11 rounded-lg border border-input bg-background px-3 text-sm"><option value="none">Sin agrupar</option><option value="rarity">Agrupar por rareza</option><option value="type">Agrupar por tipo</option></select>
-            </div>
+            <ViewToolbar
+              label="Opciones de cartas de la expansión"
+              className="mb-5"
+              search={
+                <ToolbarSearch
+                  label="Buscar cartas"
+                  value={cardSearch}
+                  onChange={(value) => {
+                    setCardSearch(value);
+                    setPage(1);
+                  }}
+                  placeholder="Buscar por nombre o número…"
+                />
+              }
+              filters={
+                <>
+                  <ToolbarChoices
+                    label="Filtrar cartas"
+                    value={status}
+                    onChange={(value) => {
+                      setStatus(value);
+                      setPage(1);
+                    }}
+                    options={[
+                      { value: "all", label: "Todas" },
+                      { value: "owned", label: "En mi colección" },
+                      { value: "missing", label: "Me faltan" },
+                    ]}
+                  />
+                  <ToolbarChoices
+                    label="Periodo de tendencia"
+                    value={trendBasis}
+                    onChange={setTrendBasis}
+                    options={[
+                      { value: "acquisition", label: "Desde adquisición" },
+                      { value: "7d", label: "Últimos 7 días" },
+                    ]}
+                  />
+                </>
+              }
+              sorting={
+                <ToolbarSort
+                  label="Ordenar cartas"
+                  value={sort}
+                  direction={direction}
+                  onChange={(value, dir) => {
+                    setSort(value);
+                    setDirection(dir);
+                  }}
+                  options={[
+                    { value: "number", label: "Número de colección" },
+                    { value: "name", label: "Nombre" },
+                    { value: "price", label: "Precio actual", defaultDesc: true },
+                    { value: "trend_abs", label: "Tendencia absoluta", defaultDesc: true },
+                    { value: "trend_pct", label: "Tendencia porcentual", defaultDesc: true },
+                  ]}
+                />
+              }
+              display={
+                <ToolbarChoices
+                  label="Agrupar cartas"
+                  value={group}
+                  onChange={setGroup}
+                  options={[
+                    { value: "none", label: "Sin agrupar" },
+                    { value: "rarity", label: "Por rareza" },
+                    { value: "type", label: "Por tipo" },
+                  ]}
+                />
+              }
+            />
+            {cards.some(card => card.isBasePrinting === false) && <ToolbarChoices label="Lista de cartas" value={checklist} onChange={(value) => { setChecklist(value); setPage(1); }} options={[{ value: "base", label: "Edición base" }, { value: "all", label: "Todas las versiones" }]} />}
             <div className="mb-3 flex items-center justify-between text-sm text-muted-foreground"><span>{matchingCount} {matchingCount === 1 ? "carta" : "cartas"}</span>{loadingCards && <span className="inline-flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin" /> Cargando edición…</span>}</div>
             {loadingCards ? <div className="grid min-h-48 place-items-center rounded-xl border border-dashed border-border"><LoaderCircle className="h-6 w-6 animate-spin text-muted-foreground" /></div> : cardsError ? <div role="alert" className="grid min-h-48 place-items-center rounded-xl border border-dashed border-destructive/50 px-5 text-center text-sm text-destructive">{cardsError}</div> : matchingCount === 0 ? <div className="grid min-h-48 place-items-center rounded-xl border border-dashed border-border px-5 text-center"><div><PackageOpen className="mx-auto mb-3 h-7 w-7 text-muted-foreground" /><p className="font-medium">No hay cartas con estos filtros</p><p className="mt-1 text-sm text-muted-foreground">Prueba a cambiar el filtro o la búsqueda.</p></div></div> : (
               <div className="space-y-6">
                 {visibleGroups.map((section) => <div key={section.key}>
                   <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Layers3 className="h-4 w-4 text-muted-foreground" />{section.key}<span className="font-normal text-muted-foreground">({section.cards.length})</span></h3>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                    {section.visibleCards.map((card) => <button key={card.id} type="button" onClick={() => setSelectedCard(card)} aria-label={`Ver detalle de ${card.cardName || `carta ${card.collectorNumber}`}`} className="group overflow-hidden rounded-xl border border-border bg-card text-left transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" style={{ contentVisibility: "auto", containIntrinsicSize: "250px" }}>
-                      <div className="relative aspect-[5/3] bg-muted">{card.imageUri ? <CardImage src={card.imageUri} alt={card.cardName || "Carta de Magic"} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw" className="object-cover transition-transform duration-200 group-hover:scale-[1.02]" /> : <div className="grid h-full place-items-center text-xs text-muted-foreground">Imagen no disponible</div>}{card.ownedElsewhere && <span title={`Tienes otras versiones en: ${(card.otherPrintings ?? []).map((version) => `${version.setCode ? version.setCode.toUpperCase() : "Edición desconocida"} #${version.collectorNumber} ×${version.quantity}`).join(", ")}`} aria-label="Otra versión en tu colección" tabIndex={0} className="absolute left-2 top-2 max-w-[65%] truncate rounded-full bg-amber-500/95 px-2 py-1 text-[10px] font-semibold text-black shadow-sm">Otra versión en tu colección</span>}<span className={`absolute right-2 top-2 rounded-full px-2 py-1 text-[11px] font-medium shadow-sm ${card.isOwned ? "bg-emerald-600 text-white" : "bg-background/90 text-muted-foreground"}`}>{card.isOwned ? `En colección${card.ownedQuantity > 1 ? ` ×${card.ownedQuantity}` : ""}` : "Faltante"}</span></div>
-                      <div className="p-3"><p className="truncate text-sm font-medium" title={card.cardName || undefined}>{card.cardName || `Carta ${card.collectorNumber}`}</p><div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span className="truncate">#{card.collectorNumber}{card.rarity ? ` · ${card.rarity}` : ""}</span><span className="shrink-0 tabular-nums">{formatPrice(card.priceCardmarketTrend)}</span></div><p className={`mt-1 truncate text-xs tabular-nums ${card.priceTrendAbsoluteChange == null ? "text-muted-foreground" : card.priceTrendAbsoluteChange > 0 ? "text-emerald-500" : card.priceTrendAbsoluteChange < 0 ? "text-rose-500" : "text-muted-foreground"}`} aria-label={`Variación de precio ${trendBasis === "acquisition" ? "desde adquisición" : "en 7 días"}`}>{card.priceTrendAbsoluteChange == null ? (trendBasis === "acquisition" && card.isOwned && !card.acquiredAt ? "Añade la fecha de adquisición" : "Sin histórico de precios") : `${formatDelta(card.priceTrendAbsoluteChange)} € · ${formatDelta(card.priceTrendPercentageChange, 1)}%`}</p>{card.isOwned && <p className="mt-1 truncate text-[10px] text-muted-foreground">{formatAcquiredDate(card.acquiredAt) ? `Adquirida: ${formatAcquiredDate(card.acquiredAt)}` : "Fecha de adquisición pendiente"}</p>}</div>
-                    </button>)}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {section.visibleCards.map((card) => <CatalogCardGridItem key={card.id} name={card.cardName || `Carta ${card.collectorNumber}`} imageUri={card.imageUri} typeLine={card.typeLine} manaCost={card.manaCost} onOpen={() => setSelectedCard(card)} badges={<>
+                      <span className="font-mono font-semibold text-xs px-2 py-0.5 rounded-full bg-secondary border border-border text-primary">{card.isOwned ? `x${card.ownedQuantity}` : "Faltante"}</span>
+                      {card.priceCardmarketTrend == null ? <span className="text-xs text-muted-foreground">—</span> : <PriceBadge quote={{ cardName: card.cardName || "Carta", scryfallId: card.id, provider: "cardmarket", currency: "EUR", currencySymbol: "€", unitPrice: { trend: card.priceCardmarketTrend, min: card.priceCardmarketMin ?? card.priceCardmarketTrend, max: card.priceCardmarketMax ?? card.priceCardmarketTrend }, quantity: Math.max(card.ownedQuantity, 1), subtotal: card.priceCardmarketTrend * Math.max(card.ownedQuantity, 1), lastUpdated: "" }} showSubtotal={card.ownedQuantity > 1} />}
+                    </>} footer={<div className="pt-3 mt-3 border-t border-border space-y-1 text-xs text-muted-foreground">
+                      <div className="flex justify-between gap-2"><span>#{card.collectorNumber} · {card.rarity}</span><span>{card.isOwned ? "En colección" : "Faltante"}</span></div>
+                      <p aria-label={`Variación de precio ${trendBasis === "acquisition" ? "desde adquisición" : "en 7 días"}`}>{card.priceTrendAbsoluteChange == null ? (trendBasis === "acquisition" && card.isOwned && !card.acquiredAt ? "Añade la fecha de adquisición" : "Sin histórico de precios") : `${formatDelta(card.priceTrendAbsoluteChange)} € · ${formatDelta(card.priceTrendPercentageChange, 1)}%`}</p>
+                      {!card.isOwned && ownedCardIdentities.has(expansionCardIdentity(card)) && <p className="text-primary">Carta cubierta por otra versión de esta edición</p>}
+                      {card.isOwned && <p>{formatAcquiredDate(card.acquiredAt) ? `Adquirida: ${formatAcquiredDate(card.acquiredAt)}` : "Fecha de adquisición pendiente"}</p>}
+                      {card.ownedElsewhere && <span title={`Tienes otras versiones en: ${(card.otherPrintings ?? []).map(version => `${version.setCode ? version.setCode.toUpperCase() : "Edición desconocida"} #${version.collectorNumber} ×${version.quantity}`).join(", ")}`} aria-label="Otra versión en tu colección" tabIndex={0} className="block text-amber-500">Otra versión en tu colección</span>}
+                    </div>} />)}
                   </div>
                 </div>)}
               </div>
@@ -233,8 +324,57 @@ export function ExpansionsView() {
         </>
       ) : (
         <>
-          <label className="relative mb-5 block max-w-md"><span className="sr-only">Buscar expansión</span><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><input value={setSearch} onChange={(event) => setSetSearch(event.target.value)} placeholder="Buscar edición por nombre o código…" className="h-11 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" /></label>
-          {loadingSets ? <div className="grid min-h-48 place-items-center"><LoaderCircle className="h-6 w-6 animate-spin text-muted-foreground" /></div> : shownExpansions.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{shownExpansions.map((expansion) => <button key={expansion.code} type="button" onClick={() => void openExpansion(expansion)} className="rounded-xl border border-border bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3">{expansion.code && <SetIcon code={expansion.code} iconUri={expansion.iconSvgUri} className="h-8 w-8" />}<div className="min-w-0"><h2 className="truncate font-semibold">{expansion.name}</h2><p className="mt-0.5 font-mono text-xs uppercase text-muted-foreground">{expansion.code} · {expansion.releasedAt ? new Date(expansion.releasedAt).getUTCFullYear() : "—"}</p></div></div><span className="shrink-0 rounded-full bg-muted px-2 py-1 text-xs tabular-nums">{expansion.completionPercentage}%</span></div><div className="mt-4"><div className="mb-1.5 flex justify-between text-xs text-muted-foreground"><span>{expansion.ownedCount} / {expansion.cardCount} cartas</span><span>{expansion.setType.replaceAll("_", " ")}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${expansion.completionPercentage}%` }} /></div><div className="mt-3 grid grid-cols-3 gap-2 text-[11px]"><span className="text-muted-foreground">Total<strong className="block text-foreground">{formatPrice(expansion.totalValueEur)}</strong></span><span className="text-muted-foreground">Faltante<strong className="block text-rose-400">{formatPrice(expansion.missingValueEur)}</strong></span><span className="text-muted-foreground">En propiedad<strong className="block text-emerald-500">{formatPrice(expansion.ownedValueEur)}</strong></span></div></div></button>)}</div> : <div className="rounded-xl border border-dashed border-border px-5 py-14 text-center text-sm text-muted-foreground">No se encontraron expansiones.</div>}
+          <ViewToolbar
+            label="Opciones del listado de expansiones"
+            className="mb-5"
+            search={
+              <ToolbarSearch
+                label="Buscar expansión"
+                value={setSearch}
+                onChange={setSetSearch}
+                placeholder="Buscar edición por nombre o código…"
+              />
+            }
+            filters={
+              <ToolbarChoices
+                label="Colección"
+                value={scope}
+                onChange={setScope}
+                options={[
+                  { value: "mine", label: "Mis expansiones" },
+                  { value: "all", label: "Todas" },
+                ]}
+              />
+            }
+            sorting={
+              <ToolbarSort
+                value={editionSort}
+                direction={editionDirection}
+                onChange={(value, dir) => {
+                  setEditionSort(value);
+                  setEditionDirection(dir);
+                }}
+                options={[
+                  { value: "date", label: "Fecha", defaultDesc: true },
+                  { value: "name", label: "Nombre" },
+                  { value: "value", label: "Valor en propiedad", defaultDesc: true },
+                  { value: "completion", label: "Completitud", defaultDesc: true },
+                ]}
+              />
+            }
+            display={
+              <ToolbarChoices
+                label="Vista"
+                value={setView}
+                onChange={setSetView}
+                options={[
+                  { value: "grid", label: "Cuadrícula" },
+                  { value: "list", label: "Listado" },
+                ]}
+              />
+            }
+          />
+          {loadingSets ? <div className="grid min-h-48 place-items-center"><LoaderCircle className="h-6 w-6 animate-spin text-muted-foreground" /></div> : shownExpansions.length ? <div className={`grid gap-3 ${setView === "grid" ? "sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"}`}>{shownExpansions.map((expansion) => <button key={expansion.code} type="button" onClick={() => openExpansion(expansion)} className="rounded-xl border border-border bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3">{expansion.code && <SetIcon code={expansion.code} iconUri={expansion.iconSvgUri} className="h-8 w-8" />}<div className="min-w-0"><h2 className="truncate font-semibold">{expansion.name}</h2><p className="mt-0.5 font-mono text-xs uppercase text-muted-foreground">{expansion.code} · {expansion.releasedAt ? new Date(expansion.releasedAt).getUTCFullYear() : "—"}</p></div></div><span className="shrink-0 rounded-full bg-muted px-2 py-1 text-xs tabular-nums">{expansion.completionPercentage}%</span></div><div className="mt-4">{(expansion.batchCount ?? 0) > 0 && <p className="mb-2 text-xs text-primary">{expansion.batchCount} lotes · ROI {expansion.roi == null ? "sin base comparable" : `${expansion.roi.toFixed(1)}%`}</p>}<div className="mb-1.5 flex justify-between text-xs text-muted-foreground"><span title="Cada carta cuenta una vez; cualquier versión de esta edición cubre la carta.">{expansion.ownedCount} / {expansion.cardCount} cartas únicas</span><span>{expansion.setType.replaceAll("_", " ")}</span></div><p className="mb-2 text-xs text-muted-foreground">{formatAlternatives(expansion.alternativeVersionCount ?? 0)}</p><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${expansion.completionPercentage}%` }} /></div><div className="mt-3 grid grid-cols-3 gap-2 text-[11px]"><span className="text-muted-foreground">Total<strong className="block text-foreground">{formatPrice(expansion.valuesAvailable === false ? null : expansion.totalValueEur)}</strong></span><span className="text-muted-foreground">Faltante<strong className="block text-rose-400">{formatPrice(expansion.valuesAvailable === false ? null : expansion.missingValueEur)}</strong></span><span className="text-muted-foreground">En propiedad<strong className="block text-emerald-500">{formatPrice(expansion.valuesAvailable === false ? null : expansion.ownedValueEur)}</strong></span></div></div></button>)}</div> : <div className="rounded-xl border border-dashed border-border px-5 py-14 text-center text-sm text-muted-foreground">No se encontraron expansiones. <button type="button" onClick={() => setScope("all")} className="min-h-11 underline">Explorar todas las ediciones</button></div>}
         </>
       )}
     </main>

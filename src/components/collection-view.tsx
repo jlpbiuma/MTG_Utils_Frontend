@@ -1,19 +1,12 @@
 "use client";
 
+import { ViewToolbar, ToolbarSearch, ToolbarChoices } from "@/components/view-toolbar";
+
+import { useQueryState, useQueryFlag } from "@/hooks/use-query-state";
+
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { CardImage as Image } from "@/components/card-image";
-import {
-  Library,
-  Search,
-  Plus,
-  Minus,
-  Trash2,
-  Sparkles,
-  Image as ImageIcon,
-  FolderTree,
-  LayoutGrid,
-  Eye,
-} from "lucide-react";
+import { CatalogCardGridItem } from "@/components/catalog-card-grid-item";
+import { Library, Plus, Minus, Trash2, FolderTree, LayoutGrid } from "lucide-react";
 import { CollectionValueChart } from "@/components/collection-value-chart";
 import { DormantCardsTab } from "@/components/dormant-cards-tab";
 import { SimulatedCollectionsTab } from "@/components/simulated-collections-tab";
@@ -21,31 +14,19 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ExportListDialog } from "@/components/export-list-dialog";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ManaCost } from "@/components/mana-cost";
-import { CardPreviewHover } from "@/components/card-preview-hover";
+
+
+import { InventoryAcquisitionDialog } from "@/components/inventory-acquisition-dialog";
 import { CardSearchDialog } from "@/components/card-search-dialog";
 import { ImportCollectionDialog } from "@/components/import-collection-dialog";
-import {
-  addOrIncrementCard,
-  updateCollectionQuantity,
-  deleteCollectionCard,
-  getCollectionQuery,
-} from "@/actions/collection";
-import type {
-  CollectionCardDTO,
-  CollectionQueryResponse,
-} from "@/actions/collection";
-import { PriceProvider, PriceSummary } from "@/lib/pricing";
-import { PricingProviderSelector } from "@/components/pricing-provider-selector";
+import { addOrIncrementCard, updateCollectionQuantity, deleteCollectionCard, getCollectionQuery } from "@/actions/collection";
+import type { CollectionCardDTO, CollectionQueryResponse } from "@/actions/collection";
+import { PriceSummary } from "@/lib/pricing";
+import { PricingSummary } from "@/components/pricing-summary";
 import { PriceBadge } from "@/components/price-badge";
 import { CardSortingBar } from "@/components/card-sorting-bar";
 import { PriceFilter } from "@/components/price-filter";
 import { matchesPriceFilter, type SortField, type SortDirection } from "@/lib/sorting";
-import {
-  triggerWeeklyCollectionPricing,
-  getCollectionPricesLastUpdated,
-} from "@/actions/pricing";
 import { normalizeCardName } from "@/lib/card-utils";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import type { CardPrintingDetail } from "@/actions/scryfall";
@@ -69,7 +50,7 @@ export function CollectionView({
   );
   const [isLoadingView, setIsLoadingView] = useState(false);
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useQueryState<string>("q", "");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedCardForDetail, setSelectedCardForDetail] =
@@ -77,31 +58,21 @@ export function CollectionView({
 
   // View mode state: Flat grid by default, Grouped by category is opt-in.
   // If SSR delivered a grouped view, keep the toggle in sync.
-  const [isGroupedByType, setIsGroupedByType] = useState(
-    initialView?.grouped ?? false
-  );
+  const [isGroupedByType, setIsGroupedByType] = useQueryFlag("group", initialView?.grouped ?? false);
 
   // Sorting state
-  const [sortField, setSortField] = useState<SortField>("name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [sortField, setSortField] = useQueryState<SortField>("sort", "name", ["name", "cmc", "type", "quantity", "price_trend", "price_subtotal", "requested_decks"]);
+  const [sortDirection, setSortDirection] = useQueryState<SortDirection>("direction", "asc", ["asc", "desc"]);
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
 
-  // Weekly pricing refresh state
-  const [isUpdatingWeeklyPrices, setIsUpdatingWeeklyPrices] = useState(false);
-  const [lastPricesUpdate, setLastPricesUpdate] = useState<string | null>(null);
-
-  useEffect(() => {
-    getCollectionPricesLastUpdated().then(setLastPricesUpdate);
-  }, []);
-
   // Dynamic pricing state
-  const [priceProvider, setPriceProvider] = useState<PriceProvider>("cardmarket");
+  const priceProvider = "cardmarket" as const;
   const [priceSummary, setPriceSummary] = useState<PriceSummary | null>(null);
   const [isLoadingPrices, setIsLoadingPrices] = useState(false);
 
   const loadPrices = useCallback(
-    async (providerToLoad = priceProvider, bypassCache = false) => {
+    async (providerToLoad = priceProvider) => {
       setIsLoadingPrices(true);
       try {
         const res = await fetch("/api/prices", {
@@ -110,7 +81,6 @@ export function CollectionView({
           body: JSON.stringify({
             type: "collection",
             provider: providerToLoad,
-            bypassCache,
           }),
         });
         if (res.ok) {
@@ -135,7 +105,7 @@ export function CollectionView({
 
   useEffect(() => {
     if (activeTab === "inventory") {
-      loadPrices(priceProvider, false);
+      loadPrices(priceProvider);
     }
   }, [activeTab, priceProvider, loadPrices]);
 
@@ -145,8 +115,8 @@ export function CollectionView({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Grouping is reported to the backend; a search always renders flat results.
-  const grouped = isGroupedByType && !debouncedQuery;
+  // Searching preserves the selected grouping, which is supported by the backend.
+  const grouped = isGroupedByType;
 
   const refreshView = useCallback(async () => {
     const options = {
@@ -182,6 +152,7 @@ export function CollectionView({
     refreshView();
   }, [refreshView, initialView]);
 
+  const [acquisition,setAcquisition]=useState<{printingId:string;cardName:string;quantity:number;isFoil?:boolean;adjustment:()=>Promise<void>}|null>(null);
   const handleAddCard = async (cardData: {
     cardScryfallId: string;
     cardName: string;
@@ -191,18 +162,19 @@ export function CollectionView({
     typeLine?: string | null;
     imageUri?: string | null;
   }) => {
-    await addOrIncrementCard({
+    setAcquisition({printingId:cardData.cardScryfallId,cardName:cardData.cardName,quantity:cardData.quantity,isFoil:cardData.isFoil,adjustment:async()=>{await addOrIncrementCard({
       cardScryfallId: cardData.cardScryfallId,
       cardName: cardData.cardName,
       quantity: cardData.quantity,
+      isFoil: cardData.isFoil,
       manaCost: cardData.manaCost,
       typeLine: cardData.typeLine,
       imageUri: cardData.imageUri,
-    });
-    await refreshView();
+    });}});
   };
 
   const handleUpdateQty = async (cardId: string, currentQty: number, delta: number) => {
+    if(delta>0){const card=[...(view?.cards??[]),...(view?.sections??[]).flatMap(s=>s.cards)].find(c=>c.id===cardId);if(card){setAcquisition({printingId:card.cardScryfallId,cardName:card.cardName,quantity:delta,isFoil:card.isFoil,adjustment:async()=>{await updateCollectionQuantity(cardId,currentQty+delta);}});return;}}
     setBusyId(cardId);
     try {
       const newQty = currentQty + delta;
@@ -275,24 +247,6 @@ export function CollectionView({
         previousScryfallId,
       ),
     );
-  };
-
-  const handleRunWeeklyWorker = async () => {
-    setIsUpdatingWeeklyPrices(true);
-    try {
-      const res = await triggerWeeklyCollectionPricing();
-      if (res.success) {
-        setLastPricesUpdate(res.timestamp);
-        await loadPrices(priceProvider, true);
-        alert(`¡Precios actualizados! Se sincronizaron ${res.updatedCatalogCount} cartas en la base de datos.`);
-      } else {
-        alert("El worker finalizó con algunos avisos.");
-      }
-    } catch (err: any) {
-      alert("Error ejecutando el worker de precios: " + (err?.message || err));
-    } finally {
-      setIsUpdatingWeeklyPrices(false);
-    }
   };
 
   const parsedMinPrice = minPrice.trim() !== "" ? parseFloat(minPrice) : null;
@@ -486,155 +440,64 @@ export function CollectionView({
         </div>
       </div>
 
-      {/* KPI Stats matching Swift KPIStripView */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="p-4 rounded-xl border border-border bg-card">
-          <p className="text-xs text-muted-foreground">Únicas</p>
-          <p className="text-2xl font-medium text-foreground font-mono mt-1 tracking-tight">
-            {initialStats.uniqueCards}
-          </p>
-        </div>
-
-        <div className="p-4 rounded-xl border border-border bg-card">
-          <p className="text-xs text-muted-foreground">Copias</p>
-          <p className="text-2xl font-medium text-foreground font-mono mt-1 tracking-tight">
-            {initialStats.totalCards}
-          </p>
-        </div>
-
-        <div className="p-4 rounded-xl border border-border bg-card col-span-2 sm:col-span-1">
-          <p className="text-xs text-muted-foreground">Mazos</p>
-          <p className="text-2xl font-medium text-foreground font-mono mt-1 tracking-tight">
-            {initialStats.decksCount ?? 0}
-          </p>
-        </div>
-      </div>
+      <p className="flex flex-wrap gap-4 text-sm text-muted-foreground" aria-label="Resumen de inventario"><span><strong className="text-foreground">{initialStats.uniqueCards}</strong> cartas únicas</span><span><strong className="text-foreground">{initialStats.totalCards}</strong> copias</span><span><strong className="text-foreground">{initialStats.decksCount ?? 0}</strong> mazos</span></p>
 
       {/* Tab panels — nav lives in collection layout as subroutes */}
       {activeTab === "inventory" ? (
         <div className="space-y-6">
           {/* Dynamic Pricing Selector & Total Collection Value */}
-          <PricingProviderSelector
-        currentProvider={priceProvider}
-        onProviderChange={(p) => setPriceProvider(p)}
-        onRefreshPrices={() => loadPrices(priceProvider, true)}
+          <PricingSummary
+
         summary={priceSummary}
         isLoading={isLoadingPrices}
         showMissingNetValue={false}
       />
 
-      {/* Weekly pricing sync banner & controls */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-lg border border-border bg-secondary text-xs text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary shrink-0" />
-          <span>
-            {lastPricesUpdate ? (
-              <>
-                Última sincronización semanal de precios:{" "}
-                <span className="font-semibold text-foreground">
-                  {new Date(lastPricesUpdate).toLocaleDateString("es-ES", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </>
-            ) : (
-              "Sincronización semanal automática activa (actualización periódica de mercado)."
-            )}
-          </span>
-        </div>
-
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleRunWeeklyWorker}
-          disabled={isUpdatingWeeklyPrices}
-          className="h-7 text-xs border-border text-primary hover:bg-accent hover:text-accent-foreground gap-1.5 shrink-0"
-        >
-          {isUpdatingWeeklyPrices ? (
-            <>
-              <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              <span>Sincronizando precios...</span>
-            </>
-          ) : (
-            <span>🔄 Sincronizar Precios Semanales Ahora</span>
-          )}
-        </Button>
-      </div>
-
-      {/* Search and Filters */}
-      <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Filtrar cartas de tu colección por nombre..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-11 text-base"
-            />
-          </div>
+      <ViewToolbar
+        label="Opciones del inventario"
+        search={
+          <ToolbarSearch
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Filtrar cartas de tu colección por nombre..."
+          />
+        }
+        filters={
           <PriceFilter
             minPrice={minPrice}
             maxPrice={maxPrice}
             onMinPriceChange={setMinPrice}
             onMaxPriceChange={setMaxPrice}
             currencySymbol={priceSummary?.currencySymbol || "€"}
-            className="self-start sm:self-auto h-11"
           />
-        </div>
-
-        {visibleCardsCount > 0 && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <CardSortingBar
-              currentField={sortField}
-              currentDirection={sortDirection}
-              onSortChange={(f, d) => {
-                setSortField(f);
-                setSortDirection(d);
-              }}
-              showStatusOption={false}
-              showRequestedDecksOption
-            />
-
-            {!searchQuery && (
-              <div className="flex items-center gap-1 bg-background p-1 rounded-lg border border-border self-start sm:self-auto">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setIsGroupedByType(true)}
-                  className={`h-7 px-2.5 text-xs gap-1.5 ${
-                    isGroupedByType
-                      ? "bg-accent text-primary font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title="Agrupar por categoría MTG (Criaturas, Tierras, etc.)"
-                >
-                  <FolderTree className="h-3.5 w-3.5" />
-                  <span>Por Categoría</span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setIsGroupedByType(false)}
-                  className={`h-7 px-2.5 text-xs gap-1.5 ${
-                    !isGroupedByType
-                      ? "bg-accent text-primary font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title="Ver cuadrícula continua sin agrupar"
-                >
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  <span>Cuadrícula</span>
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+        }
+        sorting={
+          <CardSortingBar
+            currentField={sortField}
+            currentDirection={sortDirection}
+            onSortChange={(field, direction) => {
+              setSortField(field);
+              setSortDirection(direction);
+            }}
+            showRequestedDecksOption
+          />
+        }
+        display={
+          <ToolbarChoices
+            label="Vista"
+            value={isGroupedByType ? "type" : "grid"}
+            onChange={(value) => setIsGroupedByType(value === "type")}
+            options={[
+              {
+                value: "type",
+                label: "Por Categoría",
+                icon: <FolderTree className="h-3.5 w-3.5" />,
+              },
+              { value: "grid", label: "Cuadrícula", icon: <LayoutGrid className="h-3.5 w-3.5" /> },
+            ]}
+          />
+        }
+      />
 
       {/* Card Grid / List */}
       <div ref={gridContainerRef} />
@@ -751,10 +614,10 @@ export function CollectionView({
       ) : null}
 
       {activeTab === "simulated" ? (
-        <SimulatedCollectionsTab provider={priceProvider} />
+        <SimulatedCollectionsTab />
       ) : null}
 
-
+      {acquisition && <InventoryAcquisitionDialog {...acquisition} onAdjustment={acquisition.adjustment} onSaved={refreshView} onClose={()=>setAcquisition(null)}/> }
       {selectedCardForDetail && (
         <CardDetailDialog
           key={selectedCardForDetail.id}
@@ -786,82 +649,10 @@ export function CollectionView({
       priceSummary?.quotes[normalizeCardName(card.cardName)];
 
     return (
-      <div
-        key={card.id}
-        className="group relative flex flex-col justify-between p-4 rounded-xl border transition-all duration-200 hover:shadow-lg bg-card border-border hover:border-primary/40"
-      >
-        <div className="space-y-3">
-          {/* Header row: category + quantity badge + price badge */}
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-md bg-secondary border border-border text-muted-foreground truncate max-w-[130px]">
-              {card.typeLine ? card.typeLine.split("—")[0].trim() : "Carta"}
-            </span>
-
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="font-mono font-semibold text-xs px-2 py-0.5 rounded-full bg-secondary border border-border text-primary shrink-0 flex items-center gap-1">
-                x{card.quantity}
-                {card.isFoil && <span className="text-[10px] text-amber-400 font-bold">★ Foil</span>}
-              </span>
-              <PriceBadge quote={quote} showSubtotal={card.quantity > 1} />
-            </div>
-          </div>
-
-          {/* Full MTG Card Image with aspect ratio 63/88 */}
-          <div
-            onClick={() => setSelectedCardForDetail(card)}
-            className="relative cursor-pointer group/img w-full flex justify-center pt-0.5"
-            title="Ver todos los datos en español"
-          >
-            <div
-              className={`relative w-full max-w-[280px] rounded-xl overflow-hidden border-2 border-border/80 group-hover/img:border-primary shadow-md group-hover/img:shadow-xl group-hover/img:scale-[1.02] transition-all duration-200 bg-secondary/30 ${
-                card.isFoil ? "foil-card-effect" : ""
-              }`}
-              style={{ aspectRatio: "63 / 88" }}
-            >
-              {card.imageUri ? (
-                <Image
-                  src={card.imageUri}
-                  alt={card.cardName}
-                  fill
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 320px"
-                  className="object-cover rounded-lg"
-                />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-4 text-center">
-                  <ImageIcon className="w-10 h-10 text-muted-foreground/40" />
-                  <span className="text-xs">Sin imagen</span>
-                </div>
-              )}
-              <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/25 rounded-lg flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity pointer-events-none">
-                <Eye className="w-7 h-7 text-white drop-shadow-lg" />
-              </div>
-            </div>
-          </div>
-
-          {/* Card Title & Info */}
-          <div className="space-y-1.5">
-            <h4
-              onClick={() => setSelectedCardForDetail(card)}
-              className="font-bold text-sm sm:text-base text-foreground hover:text-primary transition-colors cursor-pointer line-clamp-1 leading-snug"
-              title={card.cardName}
-            >
-              {card.cardName}
-            </h4>
-
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span className="truncate max-w-[150px]">{card.typeLine || "Card"}</span>
-              <ManaCost manaCost={card.manaCost} />
-            </div>
-
-            <RequestedDecksBadge
-              cardName={card.cardName}
-              decks={card.requestedInDecks}
-              count={card.requestedInDecksCount}
-            />
-          </div>
-        </div>
-
-        {/* Quantity Controls & Delete */}
+      <CatalogCardGridItem key={card.id} name={card.cardName} imageUri={card.imageUri} typeLine={card.typeLine} manaCost={card.manaCost} isFoil={card.isFoil} onOpen={() => setSelectedCardForDetail(card)} badges={<>
+        <span className="font-mono font-semibold text-xs px-2 py-0.5 rounded-full bg-secondary border border-border text-primary shrink-0 flex items-center gap-1">x{card.quantity}{card.isFoil && <span className="text-[10px] text-amber-400 font-bold">★ Foil</span>}</span>
+        <PriceBadge quote={quote} showSubtotal={card.quantity > 1} />
+      </>} footer={
         <div className="flex items-center justify-between pt-3 mt-3 border-t border-border">
           <div className="flex items-center bg-background border border-border rounded-lg p-0.5">
             <Button
@@ -900,7 +691,9 @@ export function CollectionView({
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>
-      </div>
+      }>
+        <RequestedDecksBadge cardName={card.cardName} decks={card.requestedInDecks} count={card.requestedInDecksCount} />
+      </CatalogCardGridItem>
     );
   }
 }

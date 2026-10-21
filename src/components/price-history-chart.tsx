@@ -1,16 +1,9 @@
 "use client";
 
+import { ViewToolbar, ToolbarToggle, toolbarButtonClass } from "@/components/view-toolbar";
+
 import { useMemo, useState } from "react";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  ReferenceLine,
-} from "recharts";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
 import type { PrintingPriceSeries, CardExpansionRelease } from "@/lib/pricing/types";
 import { CardImage } from "@/components/card-image";
 import { Sparkles, Eye, EyeOff } from "lucide-react";
@@ -163,47 +156,34 @@ export function PriceHistoryChart({
 
   return (
     <div className={`space-y-3 ${className}`}>
-      {/* Chart controls bar (MTGGoldfish style) */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs">
-        <div className="flex items-center gap-2">
-          {activePrintingId && (
-            <div className="flex items-center gap-1.5 bg-background/80 border border-border/80 rounded-lg p-0.5">
-              <button
-                type="button"
-                onClick={showOnlyActive}
-                className="px-2 py-1 rounded-md text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-                title="Mostrar solo la versión seleccionada"
-              >
+      <ViewToolbar
+        label="Opciones del histórico de versiones"
+        filters={
+          <ToolbarToggle
+            pressed={showExpansions}
+            onClick={() => {
+              setShowExpansions(!showExpansions);
+              setHoveredExpansion(null);
+            }}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Lanzamientos de expansión ({expansionMarkers.length})
+          </ToolbarToggle>
+        }
+        display={
+          activePrintingId && (
+            <>
+              <button type="button" onClick={showOnlyActive} className={toolbarButtonClass}>
                 Solo seleccionada
               </button>
-              <button
-                type="button"
-                onClick={showAll}
-                className="px-2 py-1 rounded-md text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-                title="Mostrar todas las versiones"
-              >
+              <button type="button" onClick={showAll} className={toolbarButtonClass}>
                 Todas ({activeSeries.length})
               </button>
-            </div>
-          )}
-        </div>
-
-        {/* Expansion / Reprints toggle (MTGGoldfish style) */}
-        <div className="flex items-center gap-3">
-          <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showExpansions}
-              onChange={(e) => { setShowExpansions(e.target.checked); setHoveredExpansion(null); }}
-              className="rounded border-border text-orange-500 focus:ring-orange-500 h-3.5 w-3.5 bg-background"
-            />
-            <span className="flex items-center gap-1 font-medium">
-              <Sparkles className="h-3 w-3 text-orange-400" />
-              Lanzamientos de expansión ({expansionMarkers.length})
-            </span>
-          </label>
-
-          <div className="hidden sm:flex items-center gap-2.5 text-[11px] text-muted-foreground pl-2 border-l border-border/60">
+            </>
+          )
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2.5 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-orange-500 inline-block" />
               Nueva expansión
@@ -213,8 +193,8 @@ export function PriceHistoryChart({
               Versión carta
             </span>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Main Chart Area */}
       <div className="w-full relative" style={{ height }}>

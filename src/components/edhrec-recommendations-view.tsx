@@ -1,24 +1,12 @@
 "use client";
 
+import { ViewToolbar, ToolbarSearch, ToolbarSort, ToolbarToggle } from "@/components/view-toolbar";
+
 import Link from "next/link";
 
 import React, { useState, useEffect } from "react";
-import {
-  Search,
-  Flame,
-  CheckCircle2,
-  Plus,
-  ArrowUpDown,
-  ArrowDown,
-  ArrowUp,
-  Sparkles,
-  Crown,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  RefreshCw,
-} from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Flame, CheckCircle2, Plus, Sparkles, Crown, ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -26,13 +14,8 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { ColorIdentityPips } from "@/components/color-identity-pips";
 import { CardImage as Image } from "@/components/card-image";
 import { CreateDeckDialog } from "@/components/create-deck-dialog";
-import {
-  getEdhrecCommanderRecommendations,
-  CommanderRecommendationsSortBy,
-} from "@/actions/decks";
-import {
-  CommanderRecommendationsListResponse,
-} from "@/lib/schemas";
+import { getEdhrecCommanderRecommendations, CommanderRecommendationsSortBy } from "@/actions/decks";
+import { CommanderRecommendationsListResponse } from "@/lib/schemas";
 
 const MANA_COLORS = ["W", "U", "B", "R", "G"] as const;
 
@@ -96,21 +79,6 @@ export function EdhrecRecommendationsView() {
     setSubmittedSearch(search);
   };
 
-  const handleSortChange = (mode: CommanderRecommendationsSortBy) => {
-    setLoading(true);
-    setPage(1);
-    if (sortBy === mode) {
-      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(mode);
-      if (mode === "rank" || mode === "name" || mode === "missing_value") {
-        setSortDir("asc");
-      } else {
-        setSortDir("desc");
-      }
-    }
-  };
-
   const toggleColor = (c: string) => {
     setLoading(true);
     setSelectedColors((prev) =>
@@ -165,135 +133,83 @@ export function EdhrecRecommendationsView() {
         </Button>
       </div>
 
-      {/* Search and Filters Section */}
-      <div className="space-y-3 bg-slate-900/40 p-4 rounded-xl border border-slate-800/80">
-        <form onSubmit={handleSearchSubmit} className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar comandante por nombre..."
+      <ViewToolbar
+        label="Opciones de Descubrir"
+        search={
+          <ToolbarSearch
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-10 bg-input text-sm border-border"
+            onChange={setSearch}
+            placeholder="Buscar comandante por nombre..."
+            onSubmit={handleSearchSubmit}
           />
-        </form>
-
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          {/* Quick toggle filters */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              size="sm"
-              variant={top100Only ? "secondary" : "ghost"}
+        }
+        filters={
+          <>
+            <ToolbarToggle
+              pressed={top100Only}
               onClick={() => {
                 setLoading(true);
                 setTop100Only(!top100Only);
                 setPage(1);
               }}
-              className={`h-8 px-3 text-xs gap-1.5 ${
-                top100Only
-                  ? "bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
             >
-              <Flame className="h-3.5 w-3.5 text-amber-400" />
-              <span>Solo Top 100 EDHREC</span>
-            </Button>
-
-            <Button
-              size="sm"
-              variant={ownedCommanderOnly ? "secondary" : "ghost"}
+              <Flame className="h-3.5 w-3.5" />
+              Solo Top 100 EDHREC
+            </ToolbarToggle>
+            <ToolbarToggle
+              pressed={ownedCommanderOnly}
               onClick={() => {
                 setLoading(true);
                 setOwnedCommanderOnly(!ownedCommanderOnly);
                 setPage(1);
               }}
-              className={`h-8 px-3 text-xs gap-1.5 ${
-                ownedCommanderOnly
-                  ? "bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
             >
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-              <span>En mi colección</span>
-            </Button>
-
-            {/* Color Identity Selector */}
-            <div className="flex items-center gap-1 bg-background/80 p-0.5 rounded-lg border border-border">
-              <span className="text-[11px] text-muted-foreground px-2 font-medium">Colores:</span>
-              {MANA_COLORS.map((c) => {
-                const isSelected = selectedColors.includes(c);
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => toggleColor(c)}
-                    className={`h-6 w-6 rounded text-xs font-bold font-mono transition-all flex items-center justify-center ${
-                      isSelected
-                        ? "bg-primary text-primary-foreground shadow-sm scale-105"
-                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
-                    }`}
-                  >
-                    {c}
-                  </button>
-                );
-              })}
-            </div>
-
-            {(search || selectedColors.length > 0 || top100Only || ownedCommanderOnly) && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={clearFilters}
-                className="h-8 px-2.5 text-xs text-muted-foreground hover:text-rose-400"
-              >
-                Limpiar filtros
-              </Button>
-            )}
-          </div>
-
-          {/* Sort Selector */}
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
-            <span className="flex items-center gap-1 text-muted-foreground font-medium shrink-0">
-              <ArrowUpDown className="h-3.5 w-3.5 text-primary" />
-              Ordenar por:
-            </span>
-            {(
-              [
-                ["completion", "Completitud"],
-                ["owned_value", "Valor en colección"],
-                ["missing_value", "Valor faltante"],
-                ["synergy", "Sinergia"],
-                ["top_cards", "Top Cards"],
-                ["rank", "Popularidad"],
-                ["name", "Nombre"],
-              ] as const
-            ).map(([mode, label]) => {
-              const isActive = sortBy === mode;
-              return (
-                <Button
-                  key={mode}
-                  size="sm"
-                  variant={isActive ? "secondary" : "ghost"}
-                  onClick={() => handleSortChange(mode)}
-                  className={`h-7 px-2.5 text-xs flex items-center gap-1 transition-all ${
-                    isActive
-                      ? "bg-primary/20 text-primary font-semibold border border-primary/30"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              En mi colección
+            </ToolbarToggle>
+            <div role="group" aria-label="Colores" className="flex flex-wrap items-center gap-1">
+              <span className="mr-1 text-xs font-medium text-muted-foreground">Colores:</span>
+              {MANA_COLORS.map((color) => (
+                <ToolbarToggle
+                  key={color}
+                  pressed={selectedColors.includes(color)}
+                  onClick={() => toggleColor(color)}
                 >
-                  <span>{label}</span>
-                  {isActive && (
-                    sortDir === "asc" ? (
-                      <ArrowUp className="h-3 w-3 text-primary shrink-0" />
-                    ) : (
-                      <ArrowDown className="h-3 w-3 text-primary shrink-0" />
-                    )
-                  )}
-                </Button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+                  {color}
+                </ToolbarToggle>
+              ))}
+            </div>
+          </>
+        }
+        sorting={
+          <ToolbarSort
+            value={sortBy}
+            direction={sortDir}
+            onChange={(value, dir) => {
+              setLoading(true);
+              setPage(1);
+              setSortBy(value);
+              setSortDir(dir);
+            }}
+            options={[
+              { value: "completion", label: "Completitud", defaultDesc: true },
+              { value: "owned_value", label: "Valor en colección", defaultDesc: true },
+              { value: "missing_value", label: "Valor faltante" },
+              { value: "synergy", label: "Sinergia", defaultDesc: true },
+              { value: "top_cards", label: "Top Cards", defaultDesc: true },
+              { value: "rank", label: "Popularidad" },
+              { value: "name", label: "Nombre" },
+            ]}
+          />
+        }
+        actions={
+          (search || selectedColors.length > 0 || top100Only || ownedCommanderOnly) && (
+            <Button variant="ghost" className="min-h-11 text-xs" onClick={clearFilters}>
+              Limpiar filtros
+            </Button>
+          )
+        }
+      />
 
       {/* Results Count Banner */}
       <div className="flex items-center justify-between text-xs text-muted-foreground">

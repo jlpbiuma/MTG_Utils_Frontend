@@ -237,7 +237,7 @@ export async function getCollectionQuery(options: GetCollectionQueryOptions = {}
   if (options.sort) params.set("sort", options.sort);
   if (options.direction) params.set("direction", options.direction);
   if (options.grouped !== undefined) params.set("grouped", String(options.grouped));
-  if (options.priceProvider) params.set("priceProvider", options.priceProvider);
+  params.set("priceProvider", "cardmarket");
   if (options.page !== undefined) params.set("page", String(options.page));
   if (options.limit !== undefined) params.set("limit", String(options.limit));
 
@@ -277,11 +277,11 @@ export async function getDormantCards(options: {
   minPrice?: number;
   provider?: string;
 } = {}): Promise<DormantCardsResponse> {
-  const { minPrice = 0, provider = "cardmarket" } = options;
+  const { minPrice = 0 } = options;
   const userId = await getCurrentUserId();
   const params = new URLSearchParams({
     minPrice: String(minPrice),
-    provider,
+    provider: "cardmarket",
   });
   return await backendFetch<DormantCardsResponse>(
     `/api/collection/dormant?${params.toString()}`,

@@ -1,22 +1,13 @@
 "use client";
 
+import { ViewToolbar, ToolbarSearch, ToolbarChoices, ToolbarSort } from "@/components/view-toolbar";
+
 import { useCallback, useEffect, useState, useRef, type ReactNode } from "react";
 import { CardImage as Image } from "@/components/card-image";
-import {
-  TrendingUp,
-  ArrowUpRight,
-  ArrowDownRight,
-  Library,
-  Image as ImageIcon,
-} from "lucide-react";
-import { PricingProviderSelector } from "@/components/pricing-provider-selector";
+import { TrendingUp, ArrowUpRight, ArrowDownRight, Library, Image as ImageIcon } from "lucide-react";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import { getPriceMovers } from "@/actions/pricing";
-import {
-  PriceProvider,
-  PriceMoverItem,
-  PriceMoversResponse,
-} from "@/lib/pricing/types";
+import { PriceProvider, PriceMoverItem, PriceMoversResponse } from "@/lib/pricing/types";
 
 interface PriceHistoryViewProps {
   initialMarket: PriceMoversResponse | null;
@@ -27,11 +18,16 @@ export function PriceHistoryView({
   initialMarket,
   initialCollection,
 }: PriceHistoryViewProps) {
-  const [provider, setProvider] = useState<PriceProvider>("cardmarket");
+  const provider = "cardmarket";
   const [market, setMarket] = useState<PriceMoversResponse | null>(initialMarket);
   const [collection, setCollection] = useState<PriceMoversResponse | null>(
     initialCollection
   );
+  const [query, setQuery] = useState("");
+  const [movement, setMovement] = useState<"all" | "up" | "down">("all");
+  const [sort, setSort] = useState<"name" | "price" | "change">("change");
+  const [direction, setDirection] = useState<"asc" | "desc">("desc");
+  const [display, setDisplay] = useState<"grid" | "list">("grid");
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<PriceMoverItem | null>(null);
   const skipInitialFetch = useRef(true);
@@ -65,14 +61,19 @@ export function PriceHistoryView({
     void loadMovers(provider);
   }, [provider, loadMovers]);
 
-  const handleProviderChange = (next: PriceProvider) => {
-    setProvider(next);
-  };
 
   const symbol =
     market?.currencySymbol ??
     collection?.currencySymbol ??
-    (provider === "mtggoldfish" ? "$" : "€");
+    "€";
+
+  const shownMovers = (items: PriceMoverItem[], tone: "up" | "down") => {
+    if (movement !== "all" && movement !== tone) return [];
+    return items.filter((item) => item.cardName.toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => {
+      const comparison = sort === "name" ? a.cardName.localeCompare(b.cardName) : sort === "price" ? a.currentPrice - b.currentPrice : Math.abs(a.changePct) - Math.abs(b.changePct);
+      return comparison * (direction === "asc" ? 1 : -1);
+    });
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 space-y-8">
@@ -87,25 +88,67 @@ export function PriceHistoryView({
         </div>
       </div>
 
-      <PricingProviderSelector
-        currentProvider={provider}
-        onProviderChange={handleProviderChange}
-        onRefreshPrices={async () => {
-          await loadMovers(provider);
-        }}
-        isLoading={loading}
-        showMissingNetValue={false}
-        showValueSummary={false}
+      <ViewToolbar
+        label="Opciones de los movimientos de precios"
+        search={
+          <ToolbarSearch
+            value={query}
+            onChange={setQuery}
+            placeholder="Buscar cartas por precio..."
+          />
+        }
+        filters={
+          <>
+            <ToolbarChoices
+              label="Movimiento"
+              value={movement}
+              onChange={setMovement}
+              options={[
+                { value: "all", label: "Todos" },
+                { value: "up", label: "Subidas" },
+                { value: "down", label: "Bajadas" },
+              ]}
+            />
+          </>
+        }
+        sorting={
+          <ToolbarSort
+            value={sort}
+            direction={direction}
+            onChange={(value, next) => {
+              setSort(value);
+              setDirection(next);
+            }}
+            options={[
+              { value: "name", label: "Nombre" },
+              { value: "price", label: "Precio", defaultDesc: true },
+              { value: "change", label: "Variación", defaultDesc: true },
+            ]}
+          />
+        }
+        display={
+          <ToolbarChoices
+            label="Vista"
+            value={display}
+            onChange={setDisplay}
+            options={[
+              { value: "grid", label: "Cuadrícula" },
+              { value: "list", label: "Lista" },
+            ]}
+          />
+        }
       />
 
       <MoversSection
+        emptyHint={query.trim() || movement !== "all" ? "No hay cartas que coincidan con los filtros." : undefined}
         title="Mercado (30 días)"
         subtitle="Movimientos del catálogo con histórico registrado"
         icon={<TrendingUp className="h-4 w-4 text-primary" />}
-        gainers={market?.gainers ?? []}
-        losers={market?.losers ?? []}
+        gainers={shownMovers(market?.gainers ?? [], "up")}
+        losers={shownMovers(market?.losers ?? [], "down")}
         currencySymbol={symbol}
         loading={loading}
+        display={display}
         onSelect={setSelected}
       />
 
@@ -113,12 +156,13 @@ export function PriceHistoryView({
         title="Mi colección"
         subtitle="Cartas de tu colección que están subiendo o bajando"
         icon={<Library className="h-4 w-4 text-muted-foreground" />}
-        gainers={collection?.gainers ?? []}
-        losers={collection?.losers ?? []}
+        gainers={shownMovers(collection?.gainers ?? [], "up")}
+        losers={shownMovers(collection?.losers ?? [], "down")}
         currencySymbol={symbol}
         loading={loading}
+        display={display}
         onSelect={setSelected}
-        emptyHint="Ninguna carta de tu colección tiene movimientos registrados en 30 días."
+        emptyHint={query.trim() || movement !== "all" ? "No hay cartas que coincidan con los filtros." : "Ninguna carta de tu colección tiene movimientos registrados en 30 días."}
       />
 
       {selected && (
@@ -144,6 +188,7 @@ function MoversSection({
   currencySymbol,
   loading,
   onSelect,
+  display,
   emptyHint = "Sin movimientos registrados en 30 días.",
 }: {
   title: string;
@@ -154,12 +199,13 @@ function MoversSection({
   currencySymbol: string;
   loading: boolean;
   onSelect: (item: PriceMoverItem) => void;
+  display: "grid" | "list";
   emptyHint?: string;
 }) {
   const empty = gainers.length === 0 && losers.length === 0;
 
   return (
-    <section className="space-y-4">
+    <section aria-label={title} className="space-y-4">
       <div className="flex items-center gap-2">
         {icon}
         <div>
@@ -175,7 +221,7 @@ function MoversSection({
           {emptyHint}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className={`grid grid-cols-1 ${display === "grid" ? "lg:grid-cols-2" : ""} gap-4`}>
           <MoverColumn
             title="Top subidas"
             tone="up"

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SectionNav } from "@/components/section-nav";
 import { Navbar } from "@/components/navbar";
 import { EnrichmentProgressBanner } from "@/components/enrichment-progress-banner";
 
@@ -33,7 +34,7 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col bg-background text-foreground font-sans selection:bg-foreground/15 selection:text-foreground">
         <Navbar />
         <EnrichmentProgressBanner />
-        <main className="flex-1">{children}</main>
+        <main className="flex-1 pb-20 md:pb-0">{children}</main>
         <footer className="border-t border-border py-8 mt-auto">
           <div className="container mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
             <p>MTG Utils © 2026 · Datos de Scryfall</p>
@@ -42,6 +43,7 @@ export default function RootLayout({
             </p>
           </div>
         </footer>
+        <SectionNav mobile />
       </body>
     </html>
   );

@@ -15,6 +15,23 @@ interface BackendFetchOptions extends RequestInit {
   };
 }
 
+export class BackendRequestError extends Error {
+  readonly userMessage: string;
+  readonly detail: unknown;
+  constructor(path: string, readonly status: number, body: string) {
+    super(`Backend request to ${path} failed (${status}): ${body}`);
+    this.name = "BackendRequestError";
+    this.userMessage = "No se pudo completar la solicitud. Inténtalo de nuevo.";
+    if (status >= 400 && status < 500) {
+      try {
+        const detail: unknown = JSON.parse(body).detail;
+        this.detail = detail;
+        if (typeof detail === "string") this.userMessage = detail;
+      } catch { /* Non-JSON errors stay on the server. */ }
+    }
+  }
+}
+
 export async function backendFetch<T = any>(
   path: string,
   options: BackendFetchOptions = {}
@@ -71,7 +88,7 @@ export async function backendFetch<T = any>(
 
     if (!res.ok) {
       const errorText = typeof res.text === "function" ? await res.text().catch(() => "") : "";
-      throw new Error(`Backend request to ${path} failed (${res.status}): ${errorText}`);
+      throw new BackendRequestError(path, res.status, errorText);
     }
 
     return await res.json();

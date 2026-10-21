@@ -7,11 +7,6 @@ import type {
   CollectionQueryResponse,
 } from "@/actions/collection";
 
-vi.mock("@/actions/pricing", () => ({
-  getCollectionPricesLastUpdated: vi.fn().mockResolvedValue("2026-09-06T10:00:00Z"),
-  triggerWeeklyCollectionPricing: vi.fn(),
-}));
-
 vi.mock("@/actions/collection", () => ({
   addOrIncrementCard: vi.fn(),
   updateCollectionQuantity: vi.fn(),
@@ -135,14 +130,14 @@ describe("CollectionView Backend-Driven Grouping & KPIs", () => {
     vi.mocked(collectionActions.getCollectionQuery).mockImplementation(
       async (opts?: { searchQuery?: string; grouped?: boolean }) => {
         if (opts?.searchQuery) {
-          return flatResponse(sampleCards.filter((c) => c.cardName === "Lightning Bolt"));
+          return (opts.grouped === false ? flatResponse : groupedResponse)(sampleCards.filter((c) => c.cardName === "Lightning Bolt"));
         }
         return opts?.grouped === false ? flatResponse(sampleCards) : groupedResponse();
       }
     );
   });
 
-  it("should render 3 KPI stats including Mazos count", () => {
+  it("should render compact inventory stats including deck count", () => {
     render(
       <CollectionView
         initialView={groupedResponse()}
@@ -150,14 +145,12 @@ describe("CollectionView Backend-Driven Grouping & KPIs", () => {
       />
     );
 
-    expect(screen.getByText("Únicas")).toBeInTheDocument();
-    expect(screen.getAllByText("3").length).toBeGreaterThanOrEqual(1);
-
-    expect(screen.getByText("Copias")).toBeInTheDocument();
-    expect(screen.getByText("17")).toBeInTheDocument();
-
-    expect(screen.getByText("Mazos")).toBeInTheDocument();
-    expect(screen.getByText("5")).toBeInTheDocument();
+    const summary = screen.getByLabelText("Resumen de inventario");
+    expect(summary).toHaveTextContent("3 cartas únicas");
+    expect(summary).toHaveTextContent("17 copias");
+    expect(summary).toHaveTextContent("5 mazos");
+    expect(screen.queryByRole("button", {name:/Actualizar precios|Sincronizar precios/i})).not.toBeInTheDocument();
+    expect(screen.queryByText(/Última sincronización semanal de precios/)).not.toBeInTheDocument();
   });
 
   it("should render category sections computed on the backend", () => {
@@ -194,7 +187,7 @@ describe("CollectionView Backend-Driven Grouping & KPIs", () => {
     });
   });
 
-  it("should filter on the backend when searching by card name", () => {
+  it("should preserve selected grouping when searching by card name", () => {
     render(
       <CollectionView
         initialView={groupedResponse()}
@@ -209,7 +202,7 @@ describe("CollectionView Backend-Driven Grouping & KPIs", () => {
       expect(collectionActions.getCollectionQuery).toHaveBeenCalledWith(
         expect.objectContaining({
           searchQuery: "Bolt",
-          grouped: false,
+          grouped: true,
         })
       );
     });

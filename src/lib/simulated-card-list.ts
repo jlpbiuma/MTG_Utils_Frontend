@@ -2,7 +2,7 @@ import type { PurchaseCard, SimulatedCardAnalysisItem, SimulatedCollectionAnalys
 import { isBasicLand, normalizeCardName } from "@/lib/card-utils";
 
 export type SimulationFilter = "all" | "wants" | "decks" | "unrelated" | "useful" | "sellable" | "new" | "owned";
-export type SimulationSort = "name-asc" | "name-desc" | "price-desc" | "price-asc" | "unit-desc" | "unit-asc" | "purchase-desc" | "purchase-asc" | "difference-desc" | "difference-asc" | "gain-desc" | "quantity-desc";
+export type SimulationSort = "name-asc" | "name-desc" | "price-desc" | "price-asc" | "unit-desc" | "unit-asc" | "purchase-desc" | "purchase-asc" | "difference-desc" | "difference-asc" | "gain-desc" | "gain-asc" | "quantity-desc" | "quantity-asc";
 export interface SimulationListCard extends SimulatedCardAnalysisItem {
   inWants: boolean;
   inDecks: boolean;
@@ -64,7 +64,9 @@ export function sortSimulationCards(cards: SimulationListCard[], sort: Simulatio
       case "unit-asc": case "unit-desc": return card.marketUnitPrice;
       case "purchase-asc": case "purchase-desc": return card.purchasePrice;
       case "difference-asc": case "difference-desc": return card.priceDifference;
+      case "gain-asc":
       case "gain-desc": return card.netCompletionGain;
+      case "quantity-asc":
       case "quantity-desc": return card.quantity;
       default: return card.marketPrice;
     }

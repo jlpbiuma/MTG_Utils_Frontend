@@ -217,6 +217,18 @@ export interface GroupedCardSection<T> {
   currencySymbol: string;
 }
 
+/** Completion counts names once; a single copy is reusable across every deck. */
+export function deckCompletionCounts(cards: { cardName: string; typeLine?: string | null; quantity: number; isSideboard?: boolean; assignedQuantity?: number; ownedInCollection?: number }[]) {
+  const names = new Map<string, boolean>();
+  for (const card of cards) {
+    if (card.isSideboard || card.quantity <= 0) continue;
+    const name = normalizeCardName(card.cardName);
+    names.set(name, (names.get(name) ?? false) || isBasicLand(card.typeLine, card.cardName) || (card.ownedInCollection ?? 0) > 0 || (card.assignedQuantity ?? 0) > 0);
+  }
+  const owned = [...names.values()].filter(Boolean).length;
+  return { total: names.size, owned, missing: names.size - owned, percentage: names.size ? Math.round(owned / names.size * 1000) / 10 : 0 };
+}
+
 export interface GroupCardsOptions {
   /**
    * When true, basic lands are excluded from the section's completion stats
@@ -237,6 +249,8 @@ export function groupCardsByType<
     typeLine?: string | null;
     quantity: number;
     ownedInCollection?: number;
+    assignedQuantity?: number;
+    isSideboard?: boolean;
     missingCount?: number;
     edhrecCategory?: CardTypeCategory;
   }
@@ -259,6 +273,7 @@ export function groupCardsByType<
     const catCards = buckets.get(cat);
     if (!catCards || catCards.length === 0) continue;
 
+    const coveredNames = new Map<string, boolean>();
     let completionTotalCards = 0;
     let totalCardsCount = 0;
     let ownedCards = 0;
@@ -271,17 +286,15 @@ export function groupCardsByType<
       const isBasic = isBasicLand(card.typeLine, card.cardName);
       const owned = card.ownedInCollection ?? 0;
       // Basic lands are always 100% owned without needing to be in the collection or moved to deck
-      const effectiveOwned = isBasic ? card.quantity : Math.min(owned, card.quantity);
-      const missing = isBasic ? 0 : (card.missingCount ?? Math.max(0, card.quantity - owned));
+      const effectiveOwned = isBasic || owned > 0 || (card.assignedQuantity ?? 0) > 0 ? card.quantity : 0;
 
       totalCardsCount += card.quantity;
 
-      if (excludeBasicLands && isBasic) {
+      if (card.isSideboard || (excludeBasicLands && isBasic)) {
         // Excluded from completion numerator and denominator only if explicitly requested
       } else {
-        completionTotalCards += card.quantity;
-        ownedCards += effectiveOwned;
-        missingCards += missing;
+        const norm = normalizeCardName(card.cardName);
+        coveredNames.set(norm, (coveredNames.get(norm) ?? false) || effectiveOwned > 0);
       }
 
       // Price calculation
@@ -293,8 +306,12 @@ export function groupCardsByType<
       if (quote?.unitPrice?.trend == null) unpricedCards += card.quantity;
       const trend = quote?.unitPrice?.trend ?? 0;
       sectionTotalPrice += trend * card.quantity;
-      sectionMissingPrice += trend * missing;
+      sectionMissingPrice += trend * (isBasic ? 0 : Math.max(0, card.quantity - Math.min(card.quantity, Math.max(owned, card.assignedQuantity ?? 0))));
     }
+
+    completionTotalCards = coveredNames.size;
+    ownedCards = [...coveredNames.values()].filter(Boolean).length;
+    missingCards = completionTotalCards - ownedCards;
 
     // A section made only of basic lands has nothing left to complete.
     const completionPercentage =

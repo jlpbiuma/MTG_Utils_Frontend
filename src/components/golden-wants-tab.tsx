@@ -1,41 +1,23 @@
 "use client";
 
+import { ViewToolbar, ToolbarChoices, ToolbarToggle } from "@/components/view-toolbar";
+
 import React, { useState, useMemo, useTransition, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import {
-  Sparkles,
-  Trophy,
-  Coins,
-  ArrowRight,
-  TrendingUp,
-  ShoppingCart,
-  Copy,
-  Check,
-  Target,
-  Layers,
-  ExternalLink,
-  Heart,
-  X,
-  Loader2,
-} from "lucide-react";
+import { Sparkles, Trophy, Coins, ArrowRight, TrendingUp, ShoppingCart, Copy, Check, Target, Layers, ExternalLink, Heart, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CardPreviewHover } from "@/components/card-preview-hover";
 import { PriceSparkline } from "@/components/price-sparkline";
 import { ManaCost } from "@/components/mana-cost";
 import { CardImage as Image } from "@/components/card-image";
-import { addOrIncrementWant } from "@/actions/wants";
+import { addWantsBulk } from "@/actions/wants";
 import { copyText } from "@/lib/copy-text";
 import { formatPrice } from "@/lib/deck-colors";
 import type { PriorityItem } from "@/actions/priorities";
-import {
-  solveGoldenWants,
-  type GoldenWantsStrategy,
-  type GoldenWantsCartItem,
-  type PriceOpportunityFilter,
-  comparePriceOpportunities,
-} from "@/lib/golden-wants-solver";
+import { solveGoldenWants, type GoldenWantsStrategy, type GoldenWantsCartItem, type PriceOpportunityFilter, comparePriceOpportunities } from "@/lib/golden-wants-solver";
 
 interface GoldenWantsTabProps {
   items: PriorityItem[];
@@ -122,29 +104,13 @@ export function GoldenWantsTab({
     setAddingWants(true);
     setActionMessage("");
     const pending = cards.filter((card) => !addedIds.has(card.cardScryfallId));
-    let succeeded = 0;
-    let failed = 0;
     try {
-      for (const card of pending) {
-        try {
-          await addOrIncrementWant({
-            cardScryfallId: card.cardScryfallId,
-            cardName: card.cardName,
-            quantity: card.quantityToBuy,
-            imageUri: card.imageUri,
-            manaCost: card.manaCost,
-            typeLine: card.typeLine,
-          });
-          succeeded++;
-          setAddedIds((previous) => new Set(previous).add(card.cardScryfallId));
-          setActionMessage(`Añadiendo a Wants: ${succeeded + failed}/${pending.length}`);
-        } catch {
-          failed++;
-        }
-      }
-      setActionMessage(failed
-        ? `${succeeded} añadidas; ${failed} no se pudieron añadir. Puedes reintentar las pendientes.`
-        : `${succeeded} cartas añadidas a Wants.`);
+      if (!pending.length) return;
+      const result = await addWantsBulk(pending.map(card => ({cardScryfallId:card.cardScryfallId,cardName:card.cardName,quantity:card.quantityToBuy,imageUri:card.imageUri,manaCost:card.manaCost,typeLine:card.typeLine})));
+      setAddedIds(previous => new Set([...previous,...result.added,...result.existing]));
+      setActionMessage(`${result.added.length} cartas añadidas; ${result.existing.length} ya en lista.`);
+    } catch {
+      setActionMessage("No se pudo añadir la selección. Puedes reintentar sin duplicar cartas.");
     } finally {
       wantsBusy.current = false;
       setAddingWants(false);
@@ -161,75 +127,116 @@ export function GoldenWantsTab({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_160px] gap-5 items-start">
-          <div className="space-y-2">
-            <label htmlFor="purchase-budget" className="block text-xs font-medium text-muted-foreground">Presupuesto</label>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative w-32 shrink-0">
-                <Input id="purchase-budget" type="number" min="0" step="5" value={budgetInput}
-                  onChange={(e) => setBudgetInput(e.target.value)}
-                  className="h-11 pr-8 font-mono font-bold text-base bg-background"
+        <ViewToolbar
+          label="Opciones de Golden Wants"
+          filters={
+            <>
+              <div
+                role="group"
+                aria-label="Presupuesto"
+                className="flex flex-wrap items-center gap-1"
+              >
+                <label
+                  htmlFor="purchase-budget"
+                  className="mr-1 text-xs font-medium text-muted-foreground"
+                >
+                  Presupuesto:
+                </label>
+                <Input
+                  id="purchase-budget"
+                  type="number"
+                  min="0"
+                  step="5"
+                  value={budgetInput}
+                  onChange={(event) => setBudgetInput(event.target.value)}
+                  className="h-11 w-28 font-mono"
                 />
-                <span className="absolute right-3 top-3 text-sm text-muted-foreground">{currencySymbol}</span>
-              </div>
-              <div className="flex gap-1">
                 {[20, 50, 100].map((preset) => (
-                  <Button key={preset} type="button" size="sm" variant="outline"
+                  <ToolbarToggle
+                    key={preset}
+                    pressed={budget === preset}
                     onClick={() => setBudgetInput(String(preset))}
-                    aria-pressed={budget === preset}
-                    className={`h-11 px-2.5 text-xs font-mono ${budget === preset ? "border-amber-400/60 text-amber-300 bg-amber-500/10" : "text-muted-foreground"}`}
-                  >{preset}{currencySymbol}</Button>
+                  >
+                    {preset}
+                    {currencySymbol}
+                  </ToolbarToggle>
                 ))}
               </div>
-            </div>
-          </div>
-
-          <fieldset className="space-y-2 min-w-0">
-            <legend className="text-xs font-medium text-muted-foreground">Estrategia</legend>
-            <div className="grid grid-cols-2 gap-1 rounded-lg bg-secondary/60 p-1">
-              <button type="button" onClick={() => setStrategy("complete_decks")}
-                aria-label="Cerrar Mazos al 100%" aria-pressed={strategy === "complete_decks"}
-                className={`flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${strategy === "complete_decks" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-              ><Trophy className="h-3.5 w-3.5 shrink-0" /><span>Mazos al 100%</span></button>
-              <button type="button" onClick={() => setStrategy("max_completion")}
-                aria-pressed={strategy === "max_completion"}
-                className={`flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${strategy === "max_completion" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-              ><TrendingUp className="h-3.5 w-3.5 shrink-0" /><span>Max % Global</span></button>
-            </div>
-          </fieldset>
-
-          <div className="space-y-2">
-            <label htmlFor="price-period" className="block text-xs font-medium text-muted-foreground">Período</label>
-            <select id="price-period" aria-label="Período de precios" value={priceWindowDays} disabled={isChangingPeriod}
-              onChange={(e) => {
-                const period = Number(e.target.value);
-                startPeriodTransition(() => router.replace(`/priorities/golden-wants?period=${period}`, { scroll: false }));
-              }}
-              className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-            >
-              {[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{days} días</option>)}
-            </select>
-            {isChangingPeriod && <p role="status" className="text-xs text-muted-foreground">Actualizando…</p>}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-border pt-4">
-          <fieldset className="flex flex-wrap items-center gap-2" aria-label="Seleccionar cartas por precio">
-            <span aria-hidden="true" className="mr-1 text-xs font-medium text-muted-foreground">Precio</span>
-            <label className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border px-3 text-xs transition-colors ${fallingChecked ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" : "border-border text-muted-foreground hover:text-foreground"}`}>
-              <input type="checkbox" aria-label="En tendencia a la baja" className="h-3.5 w-3.5 accent-emerald-500" checked={fallingChecked} onChange={(e) => setPriceChecks(e.target.checked, lowChecked)} />
-              A la baja
+              <ToolbarChoices
+                label="Estrategia"
+                value={strategy}
+                onChange={setStrategy}
+                options={[
+                  {
+                    value: "complete_decks",
+                    label: <span aria-label="Cerrar Mazos al 100%">Mazos al 100%</span>,
+                    icon: <Trophy className="h-3.5 w-3.5" />,
+                  },
+                  {
+                    value: "max_completion",
+                    label: "Max % Global",
+                    icon: <TrendingUp className="h-3.5 w-3.5" />,
+                  },
+                ]}
+              />
+              <ToolbarChoices
+                label="Período de precios"
+                value={String(priceWindowDays)}
+                disabled={isChangingPeriod}
+                onChange={(period) => {
+                  const params = new URLSearchParams(window.location.search);
+                  params.set("period", period);
+                  startPeriodTransition(() =>
+                    router.replace(`/buy/budget?${params}`, { scroll: false }),
+                  );
+                }}
+                options={[7, 30, 90, 180, 365].map((days) => ({
+                  value: String(days),
+                  label: `${days} días`,
+                }))}
+              />
+              <fieldset
+                className="flex flex-wrap items-center gap-1"
+                aria-label="Seleccionar cartas por precio"
+              >
+                <span className="mr-1 text-xs font-medium text-muted-foreground">Precio:</span>
+                <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-xs">
+                  <input
+                    type="checkbox"
+                    aria-label="En tendencia a la baja"
+                    checked={fallingChecked}
+                    onChange={(event) => setPriceChecks(event.target.checked, lowChecked)}
+                    className="h-4 w-4 accent-amber-500"
+                  />
+                  A la baja
+                </label>
+                <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-xs">
+                  <input
+                    type="checkbox"
+                    aria-label="En mínimo histórico"
+                    checked={lowChecked}
+                    onChange={(event) => setPriceChecks(fallingChecked, event.target.checked)}
+                    className="h-4 w-4 accent-amber-500"
+                  />
+                  Mínimo histórico
+                </label>
+              </fieldset>
+            </>
+          }
+          sorting={
+            <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                aria-label="Ordenar compra por oportunidad de precio"
+                checked={opportunitySort}
+                onChange={(event) => setOpportunitySort(event.target.checked)}
+                className="h-4 w-4 accent-amber-500"
+              />
+              Mejores oportunidades primero
             </label>
-            <label className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border px-3 text-xs transition-colors ${lowChecked ? "border-amber-500/40 bg-amber-500/10 text-amber-400" : "border-border text-muted-foreground hover:text-foreground"}`}>
-              <input type="checkbox" aria-label="En mínimo histórico" className="h-3.5 w-3.5 accent-amber-500" checked={lowChecked} onChange={(e) => setPriceChecks(fallingChecked, e.target.checked)} />
-              Mínimo histórico
-            </label>
-          </fieldset>
-          <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 text-xs text-muted-foreground sm:ml-auto">
-            <input type="checkbox" aria-label="Ordenar compra por oportunidad de precio" className="h-3.5 w-3.5 accent-amber-500" checked={opportunitySort} onChange={(e) => setOpportunitySort(e.target.checked)} />
-            Mejores oportunidades primero
-          </label>
-        </div>
+          }
+        />
+        {isChangingPeriod && <p role="status" className="text-xs text-muted-foreground">Actualizando…</p>}
       </section>
 
       {/* KPI Stats Strip */}
@@ -295,7 +302,7 @@ export function GoldenWantsTab({
               100% de cartas en mano!
             </h4>
             <p className="text-xs text-amber-200/80">
-              {result.completedDecks.map((d) => d.deckName).join(", ")}
+              {result.completedDecks.map((d, index) => <React.Fragment key={d.deckId}>{index > 0 && ", "}<Link className="underline" href={`/decks/${d.deckId}`}>{d.deckName}</Link></React.Fragment>)}
             </p>
           </div>
         </div>
@@ -322,9 +329,9 @@ export function GoldenWantsTab({
                   className="p-3 rounded-lg border border-border bg-background space-y-2"
                 >
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-foreground truncate max-w-[200px]">
+                    <Link href={`/decks/${p.deckId}`} className="font-semibold text-foreground truncate max-w-[200px] hover:underline">
                       {p.deckName}
-                    </span>
+                    </Link>
                     <div className="flex items-center gap-1.5 font-mono">
                       <span className="text-muted-foreground">{Number(p.before.toFixed(1))}%</span>
                       <ArrowRight className="h-3 w-3 text-muted-foreground" />

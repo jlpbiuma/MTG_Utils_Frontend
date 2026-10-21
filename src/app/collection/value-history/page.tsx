@@ -1,22 +1,9 @@
-import { getCollectionStats } from "@/actions/collection";
-import { getUserDecks } from "@/actions/decks";
-import { CollectionView } from "@/components/collection-view";
-
-export const dynamic = "force-dynamic";
-
-export default async function CollectionValueHistoryPage() {
-  const [stats, decks] = await Promise.all([
-    getCollectionStats(),
-    getUserDecks().catch(() => []),
-  ]);
-
-  return (
-    <CollectionView
-      activeTab="value-history"
-      initialStats={{
-        ...stats,
-        decksCount: Array.isArray(decks) ? decks.length : 0,
-      }}
-    />
-  );
+import { redirect } from "next/navigation";
+export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(await searchParams)) {
+    if (typeof value === "string") query.set(key, value);
+    else if (Array.isArray(value)) value.forEach(item => query.append(key, item));
+  }
+  redirect("/collection/expansions" + (query.size ? `?${query}` : ""));
 }

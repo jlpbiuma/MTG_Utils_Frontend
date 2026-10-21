@@ -1,11 +1,2 @@
-import { DeckTabPage } from "../deck-tab-page";
-
-export const dynamic = "force-dynamic";
-
-export default async function DeckEditorPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  return <DeckTabPage params={params} tab="editor" />;
-}
+import { redirect } from "next/navigation";
+export default async function Page({ params }: { params: Promise<{ id: string }> }) { const { id } = await params; redirect(`/decks/${encodeURIComponent(id)}?mode=edit`); }

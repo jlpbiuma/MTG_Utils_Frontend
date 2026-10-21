@@ -1,51 +1,24 @@
 "use client";
 
+import { ViewToolbar, ToolbarSearch, ToolbarChoices, ToolbarToggle } from "@/components/view-toolbar";
+
+import { useQueryState, useQueryFlag } from "@/hooks/use-query-state";
+
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import {
-  Sparkles,
-  Layers,
-  ArrowUpDown,
-  Filter,
-  ArrowRightLeft,
-  ExternalLink,
-  ShoppingCart,
-  Coins,
-  CheckCircle2,
-  AlertCircle,
-  HelpCircle,
-  List,
-  LayoutGrid,
-  Heart,
-  Check,
-  Loader2,
-  TrendingUp,
-  Eye,
-} from "lucide-react";
+import { Sparkles, Layers, Filter, ArrowRightLeft, ExternalLink, ShoppingCart, CheckCircle2, List, LayoutGrid, Heart, Check, Loader2, TrendingUp, Eye } from "lucide-react";
 import { CardImage as Image } from "@/components/card-image";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CardPreviewHover } from "@/components/card-preview-hover";
 import { ManaCost } from "@/components/mana-cost";
 import { ColorIdentityPips } from "@/components/color-identity-pips";
 import { formatPrice } from "@/lib/deck-colors";
 import { getCardCategory } from "@/lib/card-utils";
-import {
-  getPriorities,
-  reassignCardBetweenDecks,
-  type PriorityItem,
-  type PrioritiesResponse,
-  type DeckReassignOption,
-} from "@/actions/priorities";
-import { addOrIncrementWant } from "@/actions/wants";
+import { getPriorities, reassignCardBetweenDecks, type PriorityItem, type PrioritiesResponse, type DeckReassignOption } from "@/actions/priorities";
+import { addWantsBulk } from "@/actions/wants";
 import { GoldenWantsTab } from "@/components/golden-wants-tab";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -71,13 +44,17 @@ export function PrioritiesView({
   initialData,
   activeTab = "table",
 }: PrioritiesViewProps) {
+  const globalProvider = "cardmarket";
+  const [selectedNeeds, setSelectedNeeds] = useState<Record<string, PriorityItem>>({});
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
   const [data, setData] = useState<PrioritiesResponse>(initialData);
-  const [sortMode, setSortMode] = useState<"demand" | "impact" | "completion" | "price_opportunity">("demand");
-  const [reassignableOnly, setReassignableOnly] = useState<boolean>(false);
-  const [hideOwned, setHideOwned] = useState<boolean>(true);
-  const [cardType, setCardType] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
-  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [sortMode, setSortMode] = useQueryState<"demand" | "impact" | "completion" | "price_opportunity">("sort", "demand", ["demand","impact","completion","price_opportunity"]);
+  const [reassignableOnly, setReassignableOnly] = useQueryFlag("reassignable", false);
+  const [hideOwned, setHideOwned] = useQueryFlag("hideOwned", true);
+  const [cardType, setCardType] = useQueryState<string>("type", "all", CARD_TYPES.map(t=>t.value));
+  const [viewMode, setViewMode] = useQueryState<"table" | "grid">("group", "table", ["table","grid"]);
+  const [searchQuery, setSearchQuery] = useQueryState<string>("q", "");
 
   // Loading & Pagination states (100 cards per page)
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -110,7 +87,7 @@ export function PrioritiesView({
           cardType: newCardType === "all" ? undefined : newCardType,
           page: 1,
           limit: 100,
-          provider: data.provider,
+          provider: globalProvider,
         });
         setData(res);
         setPage(1);
@@ -120,8 +97,19 @@ export function PrioritiesView({
         setIsLoading(false);
       }
     },
-    [sortMode, reassignableOnly, hideOwned, cardType, data.provider]
+    [sortMode, reassignableOnly, hideOwned, cardType, globalProvider]
   );
+
+  const lastFilterRequest = useRef(JSON.stringify(["demand",false,true,"all",initialData.provider]));
+  useEffect(() => {
+    if (activeTab !== "table") return;
+    let active = true;
+    const signature = JSON.stringify([sortMode,reassignableOnly,hideOwned,cardType,globalProvider]);
+    if (lastFilterRequest.current === signature) return;
+    lastFilterRequest.current = signature;
+    getPriorities({sort:sortMode,reassignableOnly,hideOwned,cardType:cardType === "all" ? undefined : cardType,page:1,limit:100,provider:globalProvider}).then(result=>{if(active){setData(result);setPage(1);}}).catch(()=>{if(active)setBulkMessage("No se pudieron actualizar los filtros.");});
+    return ()=>{active=false;};
+  }, [activeTab, sortMode, reassignableOnly, hideOwned, cardType, globalProvider]);
 
   const handlePageChange = useCallback(
     async (newPage: number) => {
@@ -135,7 +123,7 @@ export function PrioritiesView({
           cardType: cardType === "all" ? undefined : cardType,
           page: newPage,
           limit: 100,
-          provider: data.provider,
+          provider: globalProvider,
         });
         setData(res);
         setPage(newPage);
@@ -146,7 +134,7 @@ export function PrioritiesView({
         setIsLoading(false);
       }
     },
-    [page, sortMode, reassignableOnly, hideOwned, cardType, data.provider]
+    [page, sortMode, reassignableOnly, hideOwned, cardType, globalProvider]
   );
 
   // Filter change handler
@@ -160,7 +148,7 @@ export function PrioritiesView({
     setReassignableOnly(newReassignable);
     setHideOwned(newHideOwned);
     setCardType(newCardType);
-    reloadData(newSort, newReassignable, newHideOwned, newCardType);
+
   };
 
   const handleExecuteReassign = async (option: DeckReassignOption) => {
@@ -179,20 +167,33 @@ export function PrioritiesView({
   const handleAddToWants = async (item: PriorityItem) => {
     setLoadingWantId(item.cardScryfallId);
     try {
-      await addOrIncrementWant({
+      await addWantsBulk([{
         cardScryfallId: item.cardScryfallId,
         cardName: item.cardName,
         quantity: 1,
         manaCost: item.manaCost,
         typeLine: item.typeLine,
         imageUri: item.imageUri,
-      });
+      }]);
       setAddedWants((prev) => ({ ...prev, [item.cardScryfallId]: true }));
     } catch (err) {
       console.error("Error añadiendo a wants:", err);
     } finally {
       setLoadingWantId(null);
     }
+  };
+
+  const toggleNeed = (item: PriorityItem, checked: boolean) => setSelectedNeeds(previous => {
+    const next = { ...previous }; if (checked) next[item.cardScryfallId] = item; else delete next[item.cardScryfallId]; return next;
+  });
+  const addSelected = async () => {
+    setBulkBusy(true); setBulkMessage("");
+    try {
+      const result = await addWantsBulk(Object.values(selectedNeeds).map(item => ({ cardScryfallId: item.cardScryfallId, cardName: item.cardName, quantity: Math.max(1,item.deficit), manaCost:item.manaCost,typeLine:item.typeLine,imageUri:item.imageUri })));
+      setAddedWants(previous => ({...previous,...Object.fromEntries([...result.added,...result.existing].map(id=>[id,true]))}));
+      setSelectedNeeds({}); setBulkMessage(`${result.added.length} cartas añadidas; ${result.existing.length} ya en lista (cantidad actualizada si faltaba).`);
+    } catch { setBulkMessage("No se pudo añadir la selección. Puedes reintentarlo sin duplicar cartas."); }
+    finally { setBulkBusy(false); }
   };
 
   // Client-side search and filtering for instant responsiveness
@@ -254,167 +255,68 @@ export function PrioritiesView({
 
       {/* Tabs: Table/Grid vs Golden Wants — routed as subpaths */}
       <div className="space-y-6">
-        <div
-          role="tablist"
-          className="inline-flex h-10 items-center justify-center rounded-md bg-secondary p-1 border border-border text-muted-foreground gap-1"
-        >
-          <Link
-            href="/priorities"
-            role="tab"
-            aria-selected={activeTab === "table"}
-            className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all ${
-              activeTab === "table"
-                ? "bg-background text-foreground shadow-sm"
-                : "hover:bg-background/50 hover:text-foreground"
-            }`}
-          >
-            <Layers className="h-4 w-4" />
-            <span>Prioridades de Cartas</span>
-            <Badge variant="outline" className="ml-1 text-xs bg-background">
-              {data.totalItems || filteredItems.length}
-            </Badge>
-          </Link>
-          <Link
-            href="/priorities/golden-wants"
-            role="tab"
-            aria-selected={activeTab === "golden-wants"}
-            className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all ${
-              activeTab === "golden-wants"
-                ? "bg-amber-400 text-amber-950 shadow-sm"
-                : "text-amber-300 hover:bg-background/50"
-            }`}
-          >
-            <Sparkles className="h-4 w-4" />
-            <span>Golden Wants (Optimizador Presupuesto)</span>
-          </Link>
-        </div>
-
         {activeTab === "table" ? (
           <div className="space-y-6">
-          {/* Controls Bar: Search, Filters, Sort, Card Type, and View Mode Toggle */}
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Input
-                placeholder="Buscar carta en prioridades..."
+          <ViewToolbar
+            label="Opciones de Necesito"
+            search={
+              <ToolbarSearch
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-10 text-sm"
+                onChange={setSearchQuery}
+                placeholder="Buscar carta en prioridades..."
               />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Card Type Filter Dropdown */}
-              <div className="flex items-center gap-1.5 bg-secondary/80 px-2.5 py-1.5 rounded-lg border border-border text-xs">
-                <span className="text-muted-foreground font-medium">Tipo:</span>
-                <select
+            }
+            filters={
+              <>
+                <ToolbarChoices
+                  label="Tipo"
                   value={cardType}
-                  onChange={(e) => handleFilterChange(sortMode, reassignableOnly, hideOwned, e.target.value)}
-                  className="bg-background border border-border rounded px-2 py-1 text-xs text-foreground cursor-pointer focus:outline-none font-medium"
+                  onChange={(value) =>
+                    handleFilterChange(sortMode, reassignableOnly, hideOwned, value)
+                  }
+                  options={CARD_TYPES.map((type) => ({ value: type.value, label: type.label }))}
+                />
+                <ToolbarToggle
+                  pressed={hideOwned}
+                  onClick={() => handleFilterChange(sortMode, reassignableOnly, !hideOwned, cardType)}
                 >
-                  {CARD_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* View Mode Toggle: Table vs Grid */}
-              <div className="flex items-center bg-secondary p-1 rounded-lg border border-border">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("table")}
-                  className={`p-1.5 rounded transition-all ${
-                    viewMode === "table"
-                      ? "bg-background text-foreground shadow"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title="Vista en tabla"
+                  <Filter className="h-3.5 w-3.5" />
+                  Ocultar en colección
+                </ToolbarToggle>
+                <ToolbarToggle
+                  pressed={reassignableOnly}
+                  onClick={() => handleFilterChange(sortMode, !reassignableOnly, hideOwned, cardType)}
                 >
-                  <List className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("grid")}
-                  className={`p-1.5 rounded transition-all ${
-                    viewMode === "grid"
-                      ? "bg-background text-foreground shadow"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title="Vista en cuadrícula"
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Filter Hide Owned (Active by default!) */}
-              <Button
-                size="sm"
-                variant={hideOwned ? "default" : "outline"}
-                onClick={() => handleFilterChange(sortMode, reassignableOnly, !hideOwned, cardType)}
-                className="h-9 text-xs gap-1.5 border-border"
-              >
-                <Filter className="h-3.5 w-3.5" />
-                <span>Ocultar en colección</span>
-              </Button>
-
-              {/* Filter Reassignable */}
-              <Button
-                size="sm"
-                variant={reassignableOnly ? "default" : "outline"}
-                onClick={() => handleFilterChange(sortMode, !reassignableOnly, hideOwned, cardType)}
-                className="h-9 text-xs gap-1.5 border-border"
-              >
-                <ArrowRightLeft className="h-3.5 w-3.5" />
-                <span>Reasignables</span>
-              </Button>
-
-              {/* Sort Selector */}
-              <div className="flex items-center gap-1 bg-secondary p-1 rounded-lg border border-border text-xs">
-                <span className="text-muted-foreground px-2 font-medium">Ordenar:</span>
-                <button
-                  type="button"
-                  onClick={() => handleFilterChange("demand", reassignableOnly, hideOwned, cardType)}
-                  className={`px-2.5 py-1 rounded font-medium transition-all ${
-                    sortMode === "demand"
-                      ? "bg-background text-foreground shadow"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Nº Mazos
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFilterChange("impact", reassignableOnly, hideOwned, cardType)}
-                  className={`px-2.5 py-1 rounded font-medium transition-all ${
-                    sortMode === "impact"
-                      ? "bg-background text-foreground shadow"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Impacto (€)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFilterChange("completion", reassignableOnly, hideOwned, cardType)}
-                  className={`px-2.5 py-1 rounded font-medium transition-all ${
-                    sortMode === "completion"
-                      ? "bg-background text-foreground shadow"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Casi completos
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFilterChange("price_opportunity", reassignableOnly, hideOwned, cardType)}
-                  className={`px-2.5 py-1 rounded font-medium transition-all ${sortMode === "price_opportunity" ? "bg-background text-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  Oportunidad de precio
-                </button>
-              </div>
-            </div>
-          </div>
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  Reasignables
+                </ToolbarToggle>
+              </>
+            }
+            sorting={
+              <ToolbarChoices
+                label="Ordenar por"
+                value={sortMode}
+                onChange={(value) => handleFilterChange(value, reassignableOnly, hideOwned, cardType)}
+                options={[
+                  { value: "demand", label: "Nº Mazos" },
+                  { value: "impact", label: "Impacto (€)" },
+                  { value: "completion", label: "Casi completos" },
+                  { value: "price_opportunity", label: "Oportunidad de precio" },
+                ]}
+              />
+            }
+            display={
+              <ToolbarChoices
+                label="Vista"
+                value={viewMode}
+                onChange={setViewMode}
+                options={[
+                  { value: "table", label: "Tabla", icon: <List className="h-3.5 w-3.5" /> },
+                  { value: "grid", label: "Cuadrícula", icon: <LayoutGrid className="h-3.5 w-3.5" /> },
+                ]}
+              />
+            }
+          />
 
           {/* Content: Empty State vs Table View vs Grid View */}
           {isLoading && filteredItems.length === 0 ? (
@@ -460,7 +362,7 @@ export function PrioritiesView({
                     const searchUrl = `https://www.cardmarket.com/en/Magic/Products/Search?searchString=${encodeURIComponent(
                       item.cardName
                     )}`;
-                    const isAddedToWants = addedWants[item.cardScryfallId];
+                    const isAddedToWants = addedWants[item.cardScryfallId] || item.inWants;
 
                     return (
                       <tr
@@ -471,6 +373,7 @@ export function PrioritiesView({
                         {/* Carta */}
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
+                            <input type="checkbox" aria-label={`Seleccionar ${item.cardName}`} checked={!!selectedNeeds[item.cardScryfallId]} onChange={e => toggleNeed(item,e.target.checked)} className="h-5 w-5 accent-primary" />
                             <div
                               onClick={() => setSelectedCardForDetail(item)}
                               className="relative w-10 h-14 rounded overflow-hidden border border-border shrink-0 bg-background cursor-pointer hover:ring-2 hover:ring-primary/50 hover:opacity-90 transition-all"
@@ -601,7 +504,7 @@ export function PrioritiesView({
                               size="sm"
                               variant={isAddedToWants ? "secondary" : "outline"}
                               onClick={() => handleAddToWants(item)}
-                              disabled={loadingWantId === item.cardScryfallId}
+                              disabled={loadingWantId === item.cardScryfallId || !!isAddedToWants}
                               className={`h-7 px-2 text-xs font-semibold gap-1 border-border transition-all ${
                                 isAddedToWants
                                   ? "text-emerald-400 bg-emerald-950/40 border-emerald-800/50"
@@ -668,7 +571,7 @@ export function PrioritiesView({
                 const searchUrl = `https://www.cardmarket.com/en/Magic/Products/Search?searchString=${encodeURIComponent(
                   item.cardName
                 )}`;
-                const isAddedToWants = addedWants[item.cardScryfallId];
+                const isAddedToWants = addedWants[item.cardScryfallId] || item.inWants;
 
                 return (
                   <div
@@ -772,6 +675,7 @@ export function PrioritiesView({
                         <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
 
+                      <label className="flex min-h-11 items-center gap-2 px-3 text-sm"><input type="checkbox" aria-label={`Seleccionar ${item.cardName}`} checked={!!selectedNeeds[item.cardScryfallId]} onChange={e => toggleNeed(item,e.target.checked)} className="h-5 w-5 accent-primary" />Seleccionar</label>
                       {/* Action buttons footer: Want + Comprar */}
                       <div className="flex items-center gap-1.5 pt-2 border-t border-border/60">
                         <Button
@@ -788,7 +692,7 @@ export function PrioritiesView({
                           size="sm"
                           variant={isAddedToWants ? "secondary" : "outline"}
                           onClick={() => handleAddToWants(item)}
-                          disabled={loadingWantId === item.cardScryfallId}
+                          disabled={loadingWantId === item.cardScryfallId || !!isAddedToWants}
                           className={`flex-1 h-8 text-xs font-semibold gap-1.5 border-border ${
                             isAddedToWants
                               ? "text-emerald-400 bg-emerald-950/40 border-emerald-800/50"
@@ -854,8 +758,8 @@ export function PrioritiesView({
           <GoldenWantsTab
             onCardSelect={setSelectedCardForDetail}
             onDecksSelect={setSelectedDecksModalItem}
-            items={initialData.items}
-            currencySymbol={initialData.currencySymbol}
+            items={data.items}
+            currencySymbol={data.currencySymbol}
             priceWindowDays={initialData.priceWindowDays}
             globalDeckCount={initialData.globalDeckCount}
             globalCompletionBefore={initialData.globalCompletionBefore}
@@ -866,6 +770,8 @@ export function PrioritiesView({
       {/* ========================================================================= */}
       {/* MODAL 1: Decks Requesting this Card with Net Completion Gain %            */}
       {/* ========================================================================= */}
+      {bulkMessage && <p role="status" className="rounded-lg border border-border p-3 text-sm">{bulkMessage}</p>}
+      {activeTab === "table" && Object.keys(selectedNeeds).length > 0 && <div className="fixed bottom-20 md:bottom-5 left-1/2 z-30 flex w-[min(94vw,36rem)] -translate-x-1/2 items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 shadow-xl"><span className="text-sm">{Object.keys(selectedNeeds).length} seleccionadas</span><Button disabled={bulkBusy} onClick={addSelected}>Añadir {Object.keys(selectedNeeds).length} a la lista de compra</Button><Button variant="ghost" disabled={bulkBusy} onClick={() => setSelectedNeeds({})}>Cancelar</Button></div>}
       {selectedDecksModalItem && (
         <Dialog
           open={Boolean(selectedDecksModalItem)}

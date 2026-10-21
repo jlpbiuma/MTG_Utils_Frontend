@@ -1,14 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { RefreshCw, Coins, ShoppingCart, CheckCircle2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { PriceProvider, PriceSummary, PRICE_PROVIDERS } from "@/lib/pricing";
 
-interface PricingProviderSelectorProps {
-  currentProvider: PriceProvider;
-  onProviderChange: (provider: PriceProvider) => void;
-  onRefreshPrices: () => Promise<void>;
+import { ShoppingCart, CheckCircle2 } from "lucide-react";
+import { PriceSummary } from "@/lib/pricing";
+
+interface PricingSummaryProps {
   summary?: PriceSummary | null;
   isLoading?: boolean;
   showMissingNetValue?: boolean;
@@ -16,78 +12,28 @@ interface PricingProviderSelectorProps {
   className?: string;
 }
 
-export function PricingProviderSelector({
-  currentProvider,
-  onProviderChange,
-  onRefreshPrices,
+export function PricingSummary({
   summary,
   isLoading = false,
   showMissingNetValue = true,
   showValueSummary = true,
   className = "",
-}: PricingProviderSelectorProps) {
-  const [refreshing, setRefreshing] = useState(false);
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await onRefreshPrices();
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const currencySymbol = summary?.currencySymbol ?? PRICE_PROVIDERS[currentProvider]?.currencySymbol ?? "€";
+}: PricingSummaryProps) {
+  const currencySymbol = summary?.currencySymbol ?? "€";
 
   return (
     <div className={`p-4 rounded-lg border border-border bg-card ${className}`}>
-      {/* Top row: Provider Selector & Refresh button */}
-      <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${showValueSummary ? "pb-3 border-b border-border" : ""}`}>
-        <div className="flex items-center gap-2">
-          <Coins className="h-4 w-4 text-primary" />
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Mercado y Precios:</span>
-          <div className="flex items-center gap-1 bg-background p-1 rounded-lg border border-border">
-            {(Object.keys(PRICE_PROVIDERS) as PriceProvider[]).map((p) => {
-              const conf = PRICE_PROVIDERS[p];
-              const active = currentProvider === p;
-              return (
-                <button
-                  key={p}
-                  onClick={() => onProviderChange(p)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
-                    active
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                  }`}
-                >
-                  {conf.logoText} ({conf.currencySymbol})
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isLoading || refreshing}
-          onClick={handleRefresh}
-          className="h-8 text-xs gap-1.5"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 text-primary ${refreshing || isLoading ? "animate-spin" : ""}`} />
-          <span>Actualizar Precios</span>
-        </Button>
-      </div>
+      <p className={`text-xs font-medium text-muted-foreground ${showValueSummary ? "pb-3 border-b border-border" : ""}`}>Cardmarket (€)</p>
 
       {/* Bottom row: Net Value KPIs */}
       {showValueSummary && (
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 pt-3">
         {/* Total Net Value */}
         <div className="flex flex-col">
-          <span className="text-[11px] font-medium text-muted-foreground">Precio Neto Total ({PRICE_PROVIDERS[currentProvider]?.name})</span>
+          <span className="text-[11px] font-medium text-muted-foreground">Precio Neto Total (Cardmarket)</span>
           <div className="flex items-baseline gap-1 mt-0.5">
             {isLoading && !summary ? (
-              <span className="text-sm text-muted-foreground animate-pulse">Calculando precios…</span>
+              <span className="text-sm text-muted-foreground animate-pulse">Cargando precios…</span>
             ) : (
               <>
                 <span className="text-xl font-semibold font-mono text-primary">
@@ -128,7 +74,7 @@ export function PricingProviderSelector({
         )}
 
         {/* Owned Value in Physical Collection */}
-        <div className="flex flex-col">
+        {(!summary || summary.totalOwnedValue == null || Math.abs(summary.totalOwnedValue - summary.totalNetValue) > 0.005) && <div className="flex flex-col">
           <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
             <CheckCircle2 className="h-3 w-3 text-emerald-400" />
             Valor en Posesión
@@ -150,7 +96,7 @@ export function PricingProviderSelector({
               </>
             )}
           </div>
-        </div>
+        </div>}
       </div>
       )}
     </div>

@@ -1,16 +1,10 @@
 "use client";
 
+import { ViewToolbar, ToolbarChoices } from "@/components/view-toolbar";
+
 import React, { useState, useEffect } from "react";
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
-import { TrendingUp, TrendingDown, Calendar, RefreshCw, Layers } from "lucide-react";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { TrendingUp, TrendingDown, Calendar, Layers } from "lucide-react";
 import { getCollectionPriceHistory } from "@/actions/pricing";
 import type { CollectionValueHistoryResponse, CollectionValueHistoryPoint, PriceProvider } from "@/lib/pricing/types";
 import { formatPrice } from "@/lib/deck-colors";
@@ -98,32 +92,20 @@ export function CollectionValueChart({ provider }: CollectionValueChartProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <div className="flex items-center bg-background border border-border rounded-lg p-0.5 text-xs">
-            {RANGE_OPTIONS.map((opt) => (
-              <button
-                key={opt.days}
-                onClick={() => setDays(opt.days)}
-                className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${
-                  days === opt.days
-                    ? "bg-primary text-primary-foreground font-semibold shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={() => loadHistory()}
-            disabled={isLoading}
-            className="p-1.5 rounded-lg border border-border bg-background hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-            title="Recargar gráfico"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-primary" : ""}`} />
-          </button>
-        </div>
+        <ViewToolbar
+          label="Opciones del valor de la colección"
+          filters={
+            <ToolbarChoices
+              label="Periodo"
+              value={String(days)}
+              onChange={(value) => setDays(Number(value))}
+              options={RANGE_OPTIONS.map((option) => ({
+                value: String(option.days),
+                label: option.label,
+              }))}
+            />
+          }
+        />
       </div>
 
       {isLoading && points.length === 0 ? (

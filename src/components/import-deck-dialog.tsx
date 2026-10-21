@@ -1,25 +1,11 @@
 "use client";
 
+import { ToolbarChoices } from "@/components/view-toolbar";
+
 import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import {
-  UploadCloud,
-  FileText,
-  Link2,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-  HelpCircle,
-  Sparkles,
-} from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { UploadCloud, FileText, Link2, Loader2, AlertCircle, HelpCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { importDeckFromText, importDeckFromMoxfieldUrl } from "@/actions/import";
@@ -214,20 +200,12 @@ export function ImportDeckDialog() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Formato
-                  </label>
-                  <select
+                  <ToolbarChoices
+                    label="Formato"
                     value={format}
-                    onChange={(e) => setFormat(e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {MTG_FORMATS.map((fmt) => (
-                      <option key={fmt} value={fmt}>
-                        {fmt}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setFormat}
+                    options={MTG_FORMATS.map((value) => ({ value, label: value }))}
+                  />
                 </div>
               </div>
 

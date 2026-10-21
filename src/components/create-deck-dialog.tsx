@@ -1,15 +1,10 @@
 "use client";
 
+import { ToolbarChoices } from "@/components/view-toolbar";
+
 import React, { useState } from "react";
 import { Plus, Layers, Loader2, Crown, Tag, X } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createDeck } from "@/actions/decks";
@@ -170,20 +165,12 @@ export function CreateDeckDialog({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Formato
-            </label>
-            <select
+            <ToolbarChoices
+              label="Formato"
               value={format}
-              onChange={(e) => setFormat(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {MTG_FORMATS.map((fmt) => (
-                <option key={fmt} value={fmt}>
-                  {fmt}
-                </option>
-              ))}
-            </select>
+              onChange={setFormat}
+              options={MTG_FORMATS.map((value) => ({ value, label: value }))}
+            />
           </div>
 
           <div className="space-y-1.5">

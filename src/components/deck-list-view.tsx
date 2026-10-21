@@ -1,32 +1,17 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import {
-  Search,
-  ArrowUp,
-  ArrowDown,
-  ArrowUpDown,
-  Layers,
-  Archive,
-  FolderTree,
-  LayoutGrid,
-  Wallet,
-  Gauge,
-  Tag,
-  ShoppingCart,
-} from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { ViewToolbar, ToolbarSearch, ToolbarChoices, ToolbarSort } from "@/components/view-toolbar";
+
+import { useQueryState, useQueryFlag } from "@/hooks/use-query-state";
+
+import React, { useMemo } from "react";
+import { Layers, Archive, FolderTree, LayoutGrid, Wallet, Gauge, Tag, ShoppingCart } from "lucide-react";
+
 import { DeckCardItem } from "@/components/deck-card-item";
 import { CreateDeckDialog } from "@/components/create-deck-dialog";
 import { ImportDeckDialog } from "@/components/import-deck-dialog";
 import { DeckWithCompletion } from "@/lib/schemas";
-import {
-  COLOR_GROUPS,
-  ColorGroupInfo,
-  NO_COLOR_GROUP,
-  buildColorIdentity,
-} from "@/lib/deck-colors";
+import { COLOR_GROUPS, ColorGroupInfo, NO_COLOR_GROUP, buildColorIdentity } from "@/lib/deck-colors";
 import { ColorIdentityPips } from "@/components/color-identity-pips";
 
 type DeckSortMode = "price" | "price_missing" | "completion" | "name";
@@ -48,11 +33,11 @@ function deckIdentity(deck: DeckWithCompletion): string {
 }
 
 export function DeckListView({ decks, isArchivedView = false }: DeckListViewProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortMode, setSortMode] = useState<DeckSortMode>("completion");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [groupedByColor, setGroupedByColor] = useState(false);
-  const [completionFilter, setCompletionFilter] = useState<CompletionFilter>("all");
+  const [searchQuery, setSearchQuery] = useQueryState<string>("q", "");
+  const [sortMode, setSortMode] = useQueryState<DeckSortMode>("sort", "completion", ["completion", "name", "price", "price_missing"]);
+  const [sortDirection, setSortDirection] = useQueryState<SortDirection>("direction", "desc", ["asc", "desc"]);
+  const [groupedByColor, setGroupedByColor] = useQueryFlag("group", false);
+  const [completionFilter, setCompletionFilter] = useQueryState<CompletionFilter>("filter", "all", ["all", "complete", "incomplete"]);
 
   const query = searchQuery.trim().toLowerCase();
 
@@ -140,15 +125,6 @@ export function DeckListView({ decks, isArchivedView = false }: DeckListViewProp
       ? "1 mazo"
       : `${sortedDecks.length} mazos`;
 
-  const handleSortChange = (mode: DeckSortMode, defaultDesc: boolean) => {
-    if (mode === sortMode) {
-      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortMode(mode);
-      setSortDirection(defaultDesc ? "desc" : "asc");
-    }
-  };
-
   const sortOptions: Array<{
     mode: DeckSortMode;
     label: string;
@@ -171,113 +147,59 @@ export function DeckListView({ decks, isArchivedView = false }: DeckListViewProp
 
   return (
     <div className="space-y-4">
-      {/* Search by deck name OR commander name */}
-      <div className="relative">
-        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar mazo por nombre o por comandante..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 h-11 bg-input text-base border-border"
-        />
-      </div>
-
-      <div className="flex items-center gap-1 flex-wrap">
-        {(
-          [
-            ["all", "Todos"],
-            ["complete", "Completos"],
-            ["incomplete", "Incompletos"],
-          ] as const
-        ).map(([value, label]) => (
-          <Button
-            key={value}
-            size="sm"
-            variant="ghost"
-            onClick={() => setCompletionFilter(value)}
-            className={`h-8 px-3 text-xs ${
-              completionFilter === value
-                ? "bg-primary/20 text-primary font-semibold border border-primary/30"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
-      {sortedDecks.length > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Sorting controls */}
-          <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
-            <span className="flex items-center gap-1 text-muted-foreground font-medium mr-1">
-              <ArrowUpDown className="h-3.5 w-3.5 text-primary" />
-              Ordenar por:
-            </span>
-            <div className="flex items-center gap-1">
-              {sortOptions.map((opt) => {
-                const isActive = sortMode === opt.mode;
-                return (
-                  <Button
-                    key={opt.mode}
-                    size="sm"
-                    variant={isActive ? "secondary" : "ghost"}
-                    onClick={() => handleSortChange(opt.mode, opt.defaultDesc)}
-                    className={`h-7 px-2.5 text-xs gap-1.5 ${
-                      isActive
-                        ? "bg-primary/20 text-primary font-semibold border border-primary/30"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {opt.icon}
-                    <span>{opt.label}</span>
-                    {isActive && (
-                      <span className="text-primary font-bold">
-                        {sortDirection === "asc" ? (
-                          <ArrowUp className="h-3 w-3" />
-                        ) : (
-                          <ArrowDown className="h-3 w-3" />
-                        )}
-                      </span>
-                    )}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Group by color toggle */}
-          <div className="flex items-center gap-1 bg-background p-1 rounded-lg border border-border self-start sm:self-auto">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setGroupedByColor(true)}
-              className={`h-7 px-2.5 text-xs gap-1.5 ${
-                groupedByColor
-                  ? "bg-primary/20 text-primary font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              title="Agrupar mazos por identidad de color y número de colores (como EDHREC)"
-            >
-              <FolderTree className="h-3.5 w-3.5" />
-              <span>Por Colores</span>
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setGroupedByColor(false)}
-              className={`h-7 px-2.5 text-xs gap-1.5 ${
-                !groupedByColor
-                  ? "bg-primary/20 text-primary font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              title="Ver todos los mazos en una cuadrícula continua"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              <span>Cuadrícula</span>
-            </Button>
-          </div>
-        </div>
-      )}
+      <ViewToolbar
+        label="Opciones del listado de mazos"
+        search={
+          <ToolbarSearch
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Buscar mazo por nombre o por comandante..."
+          />
+        }
+        filters={
+          <ToolbarChoices
+            label="Completitud"
+            value={completionFilter}
+            onChange={setCompletionFilter}
+            options={[
+              { value: "all", label: "Todos" },
+              { value: "complete", label: "Completos" },
+              { value: "incomplete", label: "Incompletos" },
+            ]}
+          />
+        }
+        sorting={
+          <ToolbarSort
+            value={sortMode}
+            direction={sortDirection}
+            onChange={(mode, direction) => {
+              setSortMode(mode);
+              setSortDirection(direction);
+            }}
+            options={sortOptions.map((option) => ({
+              value: option.mode,
+              label: option.label,
+              icon: option.icon,
+              defaultDesc: option.defaultDesc,
+            }))}
+          />
+        }
+        display={
+          <ToolbarChoices
+            label="Vista"
+            value={groupedByColor ? "color" : "grid"}
+            onChange={(value) => setGroupedByColor(value === "color")}
+            options={[
+              {
+                value: "color",
+                label: "Por Colores",
+                icon: <FolderTree className="h-3.5 w-3.5" />,
+              },
+              { value: "grid", label: "Cuadrícula", icon: <LayoutGrid className="h-3.5 w-3.5" /> },
+            ]}
+          />
+        }
+      />
 
       <p className="text-xs text-muted-foreground">
         {query ? (

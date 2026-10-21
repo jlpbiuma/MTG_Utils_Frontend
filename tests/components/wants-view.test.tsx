@@ -78,7 +78,7 @@ describe("WantsView listing", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Faeburrow Elder" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Sol Ring" }));
     const tray = screen.getByText("2 seleccionadas").parentElement!;
-    expect(tray).toHaveClass("fixed", "bottom-5");
+    expect(tray).toHaveClass("fixed", "bottom-20", "md:bottom-5");
     fireEvent.click(screen.getByRole("button", { name: "Mover a colección" }));
     expect(screen.queryByText("Sol Ring")).not.toBeInTheDocument();
     await act(async () => rejectFirstAdd(new Error("collection unavailable")));
