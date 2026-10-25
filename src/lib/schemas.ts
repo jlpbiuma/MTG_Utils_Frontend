@@ -238,4 +238,5 @@ export interface DeckAssignmentNotice {
   deckName: string;
   quantity: number;
   createdAt: string;
+  imageUri?: string | null;
 }
