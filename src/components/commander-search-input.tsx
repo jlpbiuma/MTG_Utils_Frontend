@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { searchCards, type ScryfallCardResult } from "@/actions/scryfall";
+import { type ScryfallCardResult } from "@/actions/scryfall";
 import { CardImage } from "@/components/card-image";
 import { Input } from "@/components/ui/input";
+import { searchCards } from "@/lib/reads";
 
 export function CommanderSearchInput({ value, onChange, required }: {
   value: string;

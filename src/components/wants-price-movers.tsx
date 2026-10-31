@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from "react";
 import { TrendingUp, TrendingDown, RefreshCw, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
 import { CardImage as Image } from "@/components/card-image";
-import { getPriceMovers } from "@/actions/pricing";
+
 import type { PriceMoversResponse, PriceProvider, PriceMoverItem } from "@/lib/pricing/types";
 import { formatPrice } from "@/lib/deck-colors";
+import { getPriceMovers } from "@/lib/reads";
 
 interface WantsPriceMoversProps {
   provider: PriceProvider;

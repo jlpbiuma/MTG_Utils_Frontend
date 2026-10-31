@@ -14,7 +14,8 @@ import { CardPreviewHover } from "@/components/card-preview-hover";
 import { DeckCardWithOwnership } from "@/lib/schemas";
 import { normalizeCardName, getPartnerInfo } from "@/lib/card-utils";
 import { setDeckCommander } from "@/actions/decks";
-import { getCardNamed, resolveCardsInBulk, searchCards, ScryfallCardResult } from "@/actions/scryfall";
+import { resolveCardsInBulk, ScryfallCardResult } from "@/actions/scryfall";
+import { getCardNamed, searchCards } from "@/lib/reads";
 
 interface SelectCommanderDialogProps {
   deckId: string;

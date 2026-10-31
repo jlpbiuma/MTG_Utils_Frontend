@@ -45,15 +45,15 @@ export function SimulatedCardTable({ cards, symbol, onDetails, onDecks, onRemove
   selectedNames?: string[];
   onToggleSelect?: (card: SimulationListCard, checked: boolean) => void;
 }) {
-  return <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-    <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
+  return <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm max-md:overflow-visible max-md:border-0 max-md:bg-transparent max-md:shadow-none">
+    <table className="responsive-table w-full min-w-[1100px] border-collapse text-left text-sm">
       <caption className="sr-only">Cartas de la colección simulada</caption>
       <thead className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
         <tr>{["Carta e información", "Tags", "Cantidad", "Precio unitario (mercado)", "Mercado total", "Compra / ud.", "Precio compra (total)", "Precio diferencial (total)", "Utilidad", ...(onRemove ? ["Acciones"] : [])].map(label => <th key={label} scope="col" className="px-3 py-3">{label}</th>)}</tr>
       </thead>
       <tbody className="divide-y divide-border">
         {cards.map(card => <tr key={card.cardName} className="align-top transition-colors hover:bg-secondary/30">
-          <th scope="row" className="min-w-72 px-4 py-3 font-normal">
+          <th scope="row" data-primary="" className="min-w-72 max-md:min-w-0 px-4 py-3 font-normal">
             <div className="flex items-start gap-3">
               {onToggleSelect && <input type="checkbox" checked={selectedNames?.includes(card.cardName) ?? false} onChange={(event) => onToggleSelect(card, event.target.checked)} aria-label={`Seleccionar ${card.cardName}`} className="mt-2 h-4 w-4" />}
               <button type="button" onClick={() => onDetails(card)} aria-label={`Ver detalles de ${card.cardName}`} className="min-h-11 min-w-11 shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -73,22 +73,22 @@ export function SimulatedCardTable({ cards, symbol, onDetails, onDecks, onRemove
               </div>
             </div>
           </th>
-          <td className="min-w-40 px-3 py-3"><div className="flex flex-wrap gap-1">
+          <td data-wide="" className="min-w-40 max-md:min-w-0 px-3 py-3"><div className="flex flex-wrap gap-1">
             <SimulationMembershipTags card={card} />
             <Badge variant="outline">{card.copiesOwnedReal ? `En col: x${card.copiesOwnedReal}` : "Nueva"}</Badge>
             {card.sellableCopies > 0 && <Badge variant="outline">Vendible: x{card.sellableCopies}</Badge>}
             {card.netCompletionGain > 0 && <Badge variant="outline">+{card.netCompletionGain.toFixed(2)}% neto</Badge>}
           </div></td>
-          <td className="px-3 py-3 text-center tabular-nums">{card.quantity}</td>
-          {[card.marketUnitPrice, card.marketPrice, card.purchaseUnitPrice, card.purchasePrice].map((value, index) => <td key={index} className="whitespace-nowrap px-3 py-3 text-right font-mono">{simulationMoney(value, symbol)}</td>)}
-          <td className="whitespace-nowrap px-3 py-3 text-right font-mono">{simulationDifference(card.priceDifference, symbol)}</td>
-          <td className="min-w-40 px-3 py-3 text-xs">
+          <td data-label="Cantidad" className="px-3 py-3 text-center tabular-nums">{card.quantity}</td>
+          {[card.marketUnitPrice, card.marketPrice, card.purchaseUnitPrice, card.purchasePrice].map((value, index) => <td key={index} data-label={["Mercado / ud.", "Mercado total", "Compra / ud.", "Compra total"][index]} className="whitespace-nowrap px-3 py-3 text-right font-mono">{simulationMoney(value, symbol)}</td>)}
+          <td data-label="Diferencial" className="whitespace-nowrap px-3 py-3 text-right font-mono">{simulationDifference(card.priceDifference, symbol)}</td>
+          <td data-label="Utilidad" data-wide="" className="min-w-40 max-md:min-w-0 px-3 py-3 text-xs">
             <p>Útiles: {card.usefulCopies} · Sobrantes: {card.surplusCopies}</p>
             <p>Necesarias en mazos: {card.copiesNeededTotal}</p>
             <p>Valor vendible: {simulationMoney(card.sellableValue, symbol)}</p>
             {card.candidateDecks.length > 0 && <button type="button" onClick={() => onDecks(card)} className="min-h-11 text-left text-primary underline focus-visible:outline-ring">Ver mazos que la necesitan ({card.candidateDeckCount})</button>}
           </td>
-          {onRemove && <td className="px-3 py-3 text-right">
+          {onRemove && <td data-wide="" className="px-3 py-3 text-right max-md:items-end">
             <Button
               type="button"
               variant="ghost"

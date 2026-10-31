@@ -14,7 +14,7 @@ import { ManaCost } from "@/components/mana-cost";
 
 import { CardSearchDialog } from "@/components/card-search-dialog";
 import { ExportListDialog } from "@/components/export-list-dialog";
-import { addOrIncrementWant, updateWantQuantity, deleteWantCard, getWantQuery, type WantCardDTO, type WantQueryResponse } from "@/actions/wants";
+import { addOrIncrementWant, updateWantQuantity, deleteWantCard, type WantCardDTO, type WantQueryResponse } from "@/actions/wants";
 import { PriceSummary } from "@/lib/pricing";
 import { PricingSummary } from "@/components/pricing-summary";
 import { PriceBadge } from "@/components/price-badge";
@@ -31,6 +31,7 @@ import { CARD_TYPE_GROUPS } from "@/lib/card-utils";
 import { COLOR_ORDER } from "@/lib/deck-colors";
 import { addOrIncrementCard, decrementCardInCollectionByName } from "@/actions/collection";
 import { runBulkAction } from "@/lib/bulk-actions";
+import { getWantQuery } from "@/lib/reads";
 
 interface WantsViewProps {
   initialView?: WantQueryResponse | null;

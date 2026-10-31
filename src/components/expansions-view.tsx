@@ -9,12 +9,13 @@ import { AcquisitionLots } from "@/components/acquisition-lots";
 import { ExpansionValueChart } from "@/components/expansion-value-chart";
 import { ArrowLeft, Layers3, LoaderCircle, PackageOpen, Sparkles } from "lucide-react";
 import { addOrIncrementCard } from "@/actions/collection";
-import { getExpansionCards, getExpansions, getExpansionValueHistory, setExpansionMissingAcquisitionDates, type Expansion, type ExpansionCard, type ExpansionValueHistory } from "@/actions/expansions";
+import { setExpansionMissingAcquisitionDates, type Expansion, type ExpansionCard, type ExpansionValueHistory } from "@/actions/expansions";
 import { PriceBadge } from "@/components/price-badge";
 import { CatalogCardGridItem } from "@/components/catalog-card-grid-item";
 import { CardImage } from "@/components/card-image";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import { filterExpansions, expansionCardIdentity, getExpansionProgress, organizeExpansionCards, summarizeAcquisitionBalance, type ExpansionFilter, type ExpansionGroup, type ExpansionSort, type SortDirection } from "@/lib/expansions";
+import { getExpansionCards, getExpansionValueHistory, getExpansions } from "@/lib/reads";
 
 const PAGE_SIZE = 60;
 const formatAlternatives = (count: number) => `${count} ${count === 1 ? "versión alternativa" : "versiones alternativas"}`;

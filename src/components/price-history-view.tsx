@@ -6,8 +6,9 @@ import { useCallback, useEffect, useState, useRef, type ReactNode } from "react"
 import { CardImage as Image } from "@/components/card-image";
 import { TrendingUp, ArrowUpRight, ArrowDownRight, Library, Image as ImageIcon } from "lucide-react";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
-import { getPriceMovers } from "@/actions/pricing";
+
 import { PriceProvider, PriceMoverItem, PriceMoversResponse } from "@/lib/pricing/types";
+import { getPriceMovers } from "@/lib/reads";
 
 interface PriceHistoryViewProps {
   initialMarket: PriceMoversResponse | null;

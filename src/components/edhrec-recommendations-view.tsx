@@ -14,8 +14,9 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { ColorIdentityPips } from "@/components/color-identity-pips";
 import { CardImage as Image } from "@/components/card-image";
 import { CreateDeckDialog } from "@/components/create-deck-dialog";
-import { getEdhrecCommanderRecommendations, CommanderRecommendationsSortBy } from "@/actions/decks";
+import { CommanderRecommendationsSortBy } from "@/actions/decks";
 import { CommanderRecommendationsListResponse } from "@/lib/schemas";
+import { getEdhrecCommanderRecommendations } from "@/lib/reads";
 
 const MANA_COLORS = ["W", "U", "B", "R", "G"] as const;
 

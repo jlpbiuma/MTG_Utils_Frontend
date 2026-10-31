@@ -158,6 +158,35 @@ describe("CardDetailDialog Component (Spanish MTG Details)", () => {
     priceHistoryClientCache.clear();
   });
 
+  it("hides combat, loyalty and defense chips when the API returns null stats", async () => {
+    vi.mocked(scryfallActions.getCardDetails).mockResolvedValue({
+      ...singleFacedCard,
+      power: null,
+      toughness: null,
+      loyalty: null,
+      defense: null,
+    } as unknown as scryfallActions.SpanishCardDetails);
+    render(<CardDetailDialog isOpen onOpenChange={() => {}} cardId="bolt-123" cardName="Lightning Bolt" />);
+    await screen.findByText("Relámpago");
+    expect(screen.queryByText(/Lealtad:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Defensa:/)).not.toBeInTheDocument();
+  });
+
+  it("shows the defense of a battle", async () => {
+    vi.mocked(scryfallActions.getCardDetails).mockResolvedValue({
+      ...singleFacedCard,
+      type_line: "Battle — Siege",
+      type_line_es: "Batalla — Asedio",
+      power: null,
+      toughness: null,
+      loyalty: null,
+      defense: "6",
+    } as unknown as scryfallActions.SpanishCardDetails);
+    render(<CardDetailDialog isOpen onOpenChange={() => {}} cardId="bolt-123" cardName="Lightning Bolt" />);
+    expect(await screen.findByText("Defensa: 6")).toBeInTheDocument();
+    expect(screen.queryByText(/Lealtad:/)).not.toBeInTheDocument();
+  });
+
   it("should render complete card details in Spanish with Versiones as the default tab", async () => {
     vi.mocked(scryfallActions.getCardDetails).mockResolvedValue(singleFacedCard);
 

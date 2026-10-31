@@ -12,6 +12,16 @@ import fixture from "../fixtures/cardmarket/list-3-analysis.json";
 vi.mock("next/navigation", () => ({ usePathname: () => "/buy/offers" }));
 vi.mock("@/actions/simulated-collections", () => ({ getDiscoveredOffers: vi.fn().mockResolvedValue([]), getSimulatedCollections: vi.fn(), getSimulatedCollection: vi.fn(), analyzeRawSimulatedCollection: vi.fn(), createSimulatedCollection: vi.fn(), importOfferLink: vi.fn(), deleteSimulatedCollection: vi.fn() }));
 vi.mock("@/actions/whatsapp-matches", () => ({ getWhatsAppMatches: vi.fn() }));
+vi.mock("@/lib/reads", async () => {
+  const offers = await import("@/actions/simulated-collections");
+  const matches = await import("@/actions/whatsapp-matches");
+  return {
+    getSimulatedCollections: (...args: Parameters<typeof offers.getSimulatedCollections>) => offers.getSimulatedCollections(...args),
+    getSimulatedCollection: (...args: Parameters<typeof offers.getSimulatedCollection>) => offers.getSimulatedCollection(...args),
+    getDiscoveredOffers: (...args: Parameters<typeof offers.getDiscoveredOffers>) => offers.getDiscoveredOffers(...args),
+    getWhatsAppMatches: (...args: Parameters<typeof matches.getWhatsAppMatches>) => matches.getWhatsAppMatches(...args),
+  };
+});
 vi.mock("@/components/card-detail-dialog", () => ({ CardDetailDialog: () => null }));
 const response = fixture as actions.SimulatedCollectionAnalysisResponse;
 const match: discovery.WhatsAppDealMatch = { id: 1, card_name: "Alpha", normalized_name: "alpha", subject: "vende", whatsapp_url: "https://manabox.app/decks/x", source_phone: "123", source_chat: "Grupo", direct_whatsapp_link: "https://wa.me/123", extra: { quantity: 7 }, trade_quantity: 1, unit_price: 2, trend_unit_price: 3, completion_gain: 0.5, global_completion_after: 0.5, completion_requirements: [{ deck_card_id: "a", deck_id: "a", total_cards: 100, owned_cards: 0, quantity: 1, assigned_quantity: 0, collection_quantity: 0 }], matched_want: { want_id: "", quantity_wanted: 1, requested_decks: ["Deck A"] } };

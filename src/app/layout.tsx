@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SectionNav } from "@/components/section-nav";
@@ -21,6 +21,15 @@ export const metadata: Metadata = {
     "Aplicación fullstack para gestionar mazos de Magic: The Gathering, inventario de colección física y cálculo automático de completitud de mazos.",
 };
 
+// viewport-fit=cover lets env(safe-area-inset-*) keep the bottom navigation and
+// sheets clear of the home indicator and notch on phones.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#000000",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -34,8 +43,8 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col bg-background text-foreground font-sans selection:bg-foreground/15 selection:text-foreground">
         <Navbar />
         <EnrichmentProgressBanner />
-        <main className="flex-1 pb-20 md:pb-0">{children}</main>
-        <footer className="border-t border-border py-8 mt-auto">
+        <main className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">{children}</main>
+        <footer className="hidden border-t border-border py-8 mt-auto md:block">
           <div className="container mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
             <p>MTG Utils © 2026 · Datos de Scryfall</p>
             <p className="text-muted-foreground/60">

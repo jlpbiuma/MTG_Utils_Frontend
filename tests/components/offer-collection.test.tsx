@@ -9,6 +9,16 @@ import { OfferCollectionDialog } from "@/components/offer-collection-dialog";
 import fixture from "../fixtures/cardmarket/list-3-analysis.json";
 vi.mock("@/actions/simulated-collections", () => ({ getSimulatedCollections: vi.fn(), getSimulatedCollection: vi.fn(), getDiscoveredOffers: vi.fn(), importOfferLink: vi.fn(), deleteSimulatedCollection: vi.fn(), updateSimulatedCardVersion: vi.fn(), addCardToSimulatedCollection: vi.fn(), removeCardFromSimulatedCollection: vi.fn() }));
 vi.mock("@/actions/whatsapp-matches", () => ({ getWhatsAppMatches: vi.fn().mockResolvedValue({ wants_matches: [], collection_matches: [], total_cards_scanned: 0, total_wants_matches: 0, total_collection_matches: 0 }) }));
+vi.mock("@/lib/reads", async () => {
+  const offers = await import("@/actions/simulated-collections");
+  const matches = await import("@/actions/whatsapp-matches");
+  return {
+    getSimulatedCollections: (...args: Parameters<typeof offers.getSimulatedCollections>) => offers.getSimulatedCollections(...args),
+    getSimulatedCollection: (...args: Parameters<typeof offers.getSimulatedCollection>) => offers.getSimulatedCollection(...args),
+    getDiscoveredOffers: (...args: Parameters<typeof offers.getDiscoveredOffers>) => offers.getDiscoveredOffers(...args),
+    getWhatsAppMatches: (...args: Parameters<typeof matches.getWhatsAppMatches>) => matches.getWhatsAppMatches(...args),
+  };
+});
 vi.mock("@/actions/acquisitions",()=>({prepareOfferPurchase:vi.fn(),commitPurchase:vi.fn()}));
 vi.mock("@/actions/purchases", () => ({ confirmOffer: vi.fn(), updateOffer: vi.fn() }));
 vi.mock("@/components/card-detail-dialog", () => ({ CardDetailDialog: () => null }));

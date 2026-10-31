@@ -1,13 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getPurchaseProvenance } from "@/actions/acquisitions";
+
+import { getPurchaseProvenance } from "@/lib/reads";
 import {
   euro,
   originLabels,
   type PurchaseOrigin,
   type PurchaseProvenance,
 } from "@/lib/acquisitions";
+
 export function CardPurchaseProvenance({
   collectionCardId,
 }: {

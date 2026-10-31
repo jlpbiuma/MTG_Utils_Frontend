@@ -23,7 +23,7 @@ import { EdhrecRecommendations } from "@/components/edhrec-recommendations";
 import { SelectCommanderDialog } from "@/components/select-commander-dialog";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import { RequestedDecksBadge } from "@/components/requested-decks-badge";
-import { getCardNamed, CardPrintingDetail } from "@/actions/scryfall";
+import { CardPrintingDetail } from "@/actions/scryfall";
 import { ConfirmDeleteDeckDialog } from "@/components/confirm-delete-deck-dialog";
 import { DeckAnalyticsView } from "@/components/deck-analytics-view";
 import { DeckMulliganSimulator } from "@/components/deck-mulligan-simulator";
@@ -43,6 +43,7 @@ import { PriceFilter } from "@/components/price-filter";
 import { SortField, SortDirection, sortCards, matchesPriceFilter } from "@/lib/sorting";
 import { normalizeCardName, groupCardsByType, isBasicLand } from "@/lib/card-utils";
 import { copyText } from "@/lib/copy-text";
+import { getCardNamed } from "@/lib/reads";
 
 interface DeckDetailViewProps {
   initialDeck: DeckDetailWithStats;

@@ -17,9 +17,10 @@ import type { DeckCardWithOwnership, DeckDetailWithStats } from "@/lib/schemas";
 import type { PriceSummary } from "@/lib/pricing/types";
 import { normalizeCardName, getCardCategory } from "@/lib/card-utils";
 import { parseManaValue, getCardColorBucket } from "@/lib/deck-analytics";
-import { searchCards, ScryfallCardResult } from "@/actions/scryfall";
+import { ScryfallCardResult } from "@/actions/scryfall";
 import { addCardToDeck, updateDeckCardQuantity, updateDeckCardTags, updateDeckTags, removeCardFromDeck, moveCardToSideboard } from "@/actions/decks";
 import { addDeckMissingToWants } from "@/actions/wants";
+import { searchCards } from "@/lib/reads";
 
 interface MoxfieldDeckEditorProps {
   deck: DeckDetailWithStats;

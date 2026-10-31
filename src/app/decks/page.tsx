@@ -10,6 +10,8 @@ import { OnboardingChecklist } from "@/components/onboarding-checklist";
 import { RoutedDeckTabs } from "@/components/routed-deck-tabs";
 import { TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatPrice } from "@/lib/deck-colors";
+import { MobileScroller } from "@/components/ui/mobile-scroller";
+import { PageActions } from "@/components/ui/page-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -77,16 +79,16 @@ export default async function DecksPage({ searchParams }: {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <PageActions>
           <ImportDeckDialog />
           <CreateDeckDialog />
-        </div>
+        </PageActions>
       </div>
 
       <OnboardingChecklist userId={userId} hasDecks={activeDecks.length > 0} />
       {/* Main Tabs Navigation */}
       <RoutedDeckTabs initialTab={tab === "edhrec" || tab === "archived" ? tab : "my-decks"} className="w-full space-y-6 mt-6">
-        <TabsList className="bg-slate-900/90 border border-slate-800 p-1 rounded-xl h-11 flex-wrap">
+        <TabsList className="snap-row bg-slate-900/90 border border-slate-800 p-1 rounded-xl h-11 w-full justify-start overflow-x-auto sm:w-auto [&>*]:shrink-0">
           <TabsTrigger value="my-decks" className="gap-2 text-xs sm:text-sm px-4">
             <Layers className="h-4 w-4 text-primary" />
             <span>Mis mazos</span>
@@ -117,7 +119,7 @@ export default async function DecksPage({ searchParams }: {
         {/* Tab 1: Mis mazos (Active Decks) */}
         <TabsContent value="my-decks" className="space-y-8 mt-0 focus-visible:ring-0">
           {/* Financial Valuation KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <MobileScroller label="Valor de tus mazos" className="sm:grid-cols-3 sm:gap-4">
             {/* Valor Neto Total */}
             <div className="p-5 rounded-xl border border-slate-800/80 bg-slate-900/50 backdrop-blur-md relative overflow-hidden group hover:border-amber-500/40 transition-all shadow-lg shadow-amber-500/5">
               <div className="flex items-center justify-between">
@@ -171,7 +173,7 @@ export default async function DecksPage({ searchParams }: {
                 Coste estimado para completar tus mazos activos
               </p>
             </div>
-          </div>
+          </MobileScroller>
 
           {/* Summary KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

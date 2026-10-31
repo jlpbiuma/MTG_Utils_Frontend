@@ -116,3 +116,103 @@ body {
 .foil-card-effect:hover::after {
   opacity: 0.75;
 }
+
+/* ---------------------------------------------------------------------------
+ * Mobile patterns (see docs/patrones-diseno-movil.md)
+ * ------------------------------------------------------------------------- */
+
+/* Touch targets: on touch screens every control is at least 40px tall and
+   icon-only buttons are square, without changing the desktop density. */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
+    min-height: 2.5rem;
+  }
+  button:has(> svg:only-child),
+  a:has(> svg:only-child) {
+    min-width: 2.5rem;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+}
+
+/* iOS zooms into inputs with a font under 16px; keep them at 16px on phones. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Stacked table: below md each row becomes a card and every cell shows its
+   column name from data-label. Add `responsive-table` to the <table>, give
+   each <td> a data-label, and mark the main cell with data-primary. */
+@media (max-width: 767px) {
+  table.responsive-table {
+    min-width: 0 !important;
+    border-collapse: separate;
+    border-spacing: 0 0.5rem;
+  }
+  table.responsive-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  table.responsive-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+  }
+  table.responsive-table tbody td,
+  table.responsive-table tbody th {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+    min-width: 0;
+    padding: 0 !important;
+    border: 0 !important;
+    text-align: left !important;
+  }
+  table.responsive-table tbody :is(td, th)[data-label]:not([data-primary])::before {
+    content: attr(data-label);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted-foreground);
+  }
+  table.responsive-table tbody :is(td, th)[data-primary],
+  table.responsive-table tbody :is(td, th)[data-wide] {
+    grid-column: 1 / -1;
+  }
+  table.responsive-table tbody :is(td, th)[data-mobile-hidden] {
+    display: none;
+  }
+}
+
+/* Horizontal snap row used by MobileScroller and toolbar choices on phones. */
+.snap-row {
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.snap-row::-webkit-scrollbar {
+  display: none;
+}
+.snap-row > * {
+  scroll-snap-align: start;
+}

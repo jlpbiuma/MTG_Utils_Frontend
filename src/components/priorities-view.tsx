@@ -17,11 +17,14 @@ import { ManaCost } from "@/components/mana-cost";
 import { ColorIdentityPips } from "@/components/color-identity-pips";
 import { formatPrice } from "@/lib/deck-colors";
 import { getCardCategory } from "@/lib/card-utils";
-import { getPriorities, reassignCardBetweenDecks, type PriorityItem, type PrioritiesResponse, type DeckReassignOption } from "@/actions/priorities";
+import { reassignCardBetweenDecks, type PriorityItem, type PrioritiesResponse, type DeckReassignOption } from "@/actions/priorities";
 import { addWantsBulk } from "@/actions/wants";
 import { GoldenWantsTab } from "@/components/golden-wants-tab";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { getPriorities } from "@/lib/reads";
+import { PRIORITIES_PAGE_SIZE } from "@/lib/page-sizes";
+
 
 const CARD_TYPES = [
   { value: "all", label: "Todos los tipos" },
@@ -86,7 +89,7 @@ export function PrioritiesView({
           hideOwned: newHideOwned,
           cardType: newCardType === "all" ? undefined : newCardType,
           page: 1,
-          limit: 100,
+          limit: PRIORITIES_PAGE_SIZE,
           provider: globalProvider,
         });
         setData(res);
@@ -100,14 +103,15 @@ export function PrioritiesView({
     [sortMode, reassignableOnly, hideOwned, cardType, globalProvider]
   );
 
-  const lastFilterRequest = useRef(JSON.stringify(["demand",false,true,"all",initialData.provider]));
+  // The server rendered the first page with the URL filters, so only later changes refetch.
+  const lastFilterRequest = useRef(JSON.stringify([sortMode,reassignableOnly,hideOwned,cardType,initialData.provider]));
   useEffect(() => {
     if (activeTab !== "table") return;
     let active = true;
     const signature = JSON.stringify([sortMode,reassignableOnly,hideOwned,cardType,globalProvider]);
     if (lastFilterRequest.current === signature) return;
     lastFilterRequest.current = signature;
-    getPriorities({sort:sortMode,reassignableOnly,hideOwned,cardType:cardType === "all" ? undefined : cardType,page:1,limit:100,provider:globalProvider}).then(result=>{if(active){setData(result);setPage(1);}}).catch(()=>{if(active)setBulkMessage("No se pudieron actualizar los filtros.");});
+    getPriorities({sort:sortMode,reassignableOnly,hideOwned,cardType:cardType === "all" ? undefined : cardType,page:1,limit:PRIORITIES_PAGE_SIZE,provider:globalProvider}).then(result=>{if(active){setData(result);setPage(1);}}).catch(()=>{if(active)setBulkMessage("No se pudieron actualizar los filtros.");});
     return ()=>{active=false;};
   }, [activeTab, sortMode, reassignableOnly, hideOwned, cardType, globalProvider]);
 
@@ -122,7 +126,7 @@ export function PrioritiesView({
           hideOwned,
           cardType: cardType === "all" ? undefined : cardType,
           page: newPage,
-          limit: 100,
+          limit: PRIORITIES_PAGE_SIZE,
           provider: globalProvider,
         });
         setData(res);
@@ -259,6 +263,7 @@ export function PrioritiesView({
           <div className="space-y-6">
           <ViewToolbar
             label="Opciones de Necesito"
+            activeFilters={[cardType !== "all", !hideOwned, reassignableOnly, sortMode !== "demand"].filter(Boolean).length}
             search={
               <ToolbarSearch
                 value={searchQuery}
@@ -342,8 +347,8 @@ export function PrioritiesView({
             /* ========================================================================= */
             /* TABLE VIEW: Fixed-height rows with memory-optimized rendering             */
             /* ========================================================================= */
-            <div className="rounded-xl border border-border bg-card overflow-x-auto shadow-sm">
-              <table className="w-full text-left text-sm border-collapse min-w-[980px]">
+            <div className="rounded-xl border border-border bg-card overflow-x-auto shadow-sm max-md:overflow-visible max-md:border-0 max-md:bg-transparent max-md:shadow-none">
+              <table className="responsive-table w-full text-left text-sm border-collapse min-w-[980px]">
                 <thead>
                   <tr className="border-b border-border bg-secondary/40 text-xs font-semibold text-muted-foreground">
                     <th className="py-3 px-4">Carta</th>
@@ -371,7 +376,7 @@ export function PrioritiesView({
                         className="hover:bg-secondary/30 transition-colors group"
                       >
                         {/* Carta */}
-                        <td className="py-3 px-4">
+                        <td data-primary="" className="py-3 px-4">
                           <div className="flex items-center gap-3">
                             <input type="checkbox" aria-label={`Seleccionar ${item.cardName}`} checked={!!selectedNeeds[item.cardScryfallId]} onChange={e => toggleNeed(item,e.target.checked)} className="h-5 w-5 accent-primary" />
                             <div
@@ -421,7 +426,7 @@ export function PrioritiesView({
                         </td>
 
                         {/* Nº Mazos (Clickable to open modal with all decks) */}
-                        <td className="py-3 px-3 text-center">
+                        <td data-label="Mazos" className="py-3 px-3 text-center">
                           <button
                             type="button"
                             onClick={() => setSelectedDecksModalItem(item)}
@@ -437,7 +442,7 @@ export function PrioritiesView({
                         </td>
 
                         {/* % Completitud Neto Total para todos los mazos */}
-                        <td className="py-3 px-3 text-center">
+                        <td data-label="% neto total" className="py-3 px-3 text-center">
                           <div className="inline-flex flex-col items-center">
                             <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-950/40 border border-emerald-800/40 text-emerald-400 text-xs font-mono font-bold">
                               <TrendingUp className="h-3 w-3" />
@@ -453,17 +458,17 @@ export function PrioritiesView({
                         </td>
 
                         {/* Tienes */}
-                        <td className="py-3 px-3 text-center font-mono font-semibold text-foreground">
+                        <td data-label="Tienes" className="py-3 px-3 text-center font-mono font-semibold text-foreground">
                           {item.copiesOwned}
                         </td>
 
                         {/* Necesitas */}
-                        <td className="py-3 px-3 text-center font-mono font-semibold text-muted-foreground">
+                        <td data-label="Necesitas" className="py-3 px-3 text-center font-mono font-semibold text-muted-foreground">
                           {item.copiesNeeded}
                         </td>
 
                         {/* Déficit */}
-                        <td className="py-3 px-3 text-center">
+                        <td data-label="Déficit" className="py-3 px-3 text-center">
                           <span
                             className={`inline-block font-mono font-bold px-2 py-0.5 rounded text-xs ${
                               item.deficit > 0
@@ -476,17 +481,17 @@ export function PrioritiesView({
                         </td>
 
                         {/* Precio (versión más barata) */}
-                        <td className="py-3 px-4 text-right font-mono font-semibold text-foreground">
+                        <td data-label="Precio mín." className="py-3 px-4 text-right font-mono font-semibold text-foreground">
                           {formatPrice(item.price, data.currencySymbol)}
                         </td>
 
                         {/* Coste Déficit */}
-                        <td className="py-3 px-4 text-right font-mono font-bold text-foreground">
+                        <td data-label="Coste déficit" className="py-3 px-4 text-right font-mono font-bold text-foreground">
                           {formatPrice(item.totalDeficitCost, data.currencySymbol)}
                         </td>
 
                         {/* Acciones: Want + Comprar + Mover */}
-                        <td className="py-3 px-4 text-center">
+                        <td data-wide="" className="py-3 px-4 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             {/* Ver Detalles */}
                             <Button
@@ -743,13 +748,13 @@ export function PrioritiesView({
             </div>
           )}
 
-          {/* Pagination Controls (100 cards per page) */}
+          {/* Pagination from the page the backend actually returned */}
           <PaginationControls
-            currentPage={page}
-            totalPages={Math.max(1, Math.ceil((data.totalItems || data.totalUniqueCards || data.items.length) / 100))}
-            totalCards={data.totalItems || data.totalUniqueCards || data.items.length}
-            startIndex={(page - 1) * 100}
-            endIndex={Math.min(page * 100, data.totalItems || data.totalUniqueCards || data.items.length)}
+            currentPage={data.page || page}
+            totalPages={Math.max(1, Math.ceil((data.totalItems ?? data.items.length) / (data.limit || PRIORITIES_PAGE_SIZE)))}
+            totalCards={data.totalItems ?? data.items.length}
+            startIndex={((data.page || page) - 1) * (data.limit || PRIORITIES_PAGE_SIZE)}
+            endIndex={Math.min(((data.page || page) - 1) * (data.limit || PRIORITIES_PAGE_SIZE) + data.items.length, data.totalItems ?? data.items.length)}
             onPageChange={handlePageChange}
             itemLabel="cartas prioritarias"
           />

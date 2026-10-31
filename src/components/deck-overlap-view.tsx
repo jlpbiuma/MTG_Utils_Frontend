@@ -12,7 +12,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { CardPreviewHover } from "@/components/card-preview-hover";
 import { ManaCost } from "@/components/mana-cost";
 import { ColorIdentityPips } from "@/components/color-identity-pips";
-import { getDecksOverlap, reassignCardToDeck, type DecksOverlapResponse, type DeckOverlapPair } from "@/actions/decks";
+import { reassignCardToDeck, type DecksOverlapResponse, type DeckOverlapPair } from "@/actions/decks";
+import { getDecksOverlap } from "@/lib/reads";
 
 export function DeckOverlapView() {
   const [query, setQuery] = useState("");

@@ -72,39 +72,61 @@ describe("CollectionView Full-Collection Backend Operations", () => {
     expect(screen.getByText(/Mostrando 1 - 20 de 20 cartas/i)).toBeInTheDocument();
   });
 
-  it("should paginate collection limiting to 200 cards per page", async () => {
-    // 250 cards: Page 1 should show cards 1-200, Page 2 should show cards 201-250
+  it("asks the backend for each page and shows totals of the whole filtered collection", async () => {
+    // 250 cards in the account, 120 per page: the server returns one page at a time.
     const allCards = Array.from({ length: 250 }, (_, i) => createMockCard(i + 1));
+    const page = (n: number): CollectionQueryResponse => ({
+      ...flatResponse(allCards.slice((n - 1) * 120, n * 120)),
+      totalCards: 250,
+      uniqueCards: 250,
+      page: n,
+      limit: 120,
+      hasMore: n * 120 < 250,
+    });
+    vi.mocked(collectionActions.getCollectionQuery).mockImplementation(async (options) => page(options?.page ?? 1));
 
     render(
       <CollectionView
-        initialView={flatResponse(allCards)}
+        initialView={page(1)}
         initialStats={{ uniqueCards: 250, totalCards: 250, decksCount: 1 }}
       />
     );
 
-    // Page 1: Card 1 and Card 200 are visible, Card 201 is not
     expect(screen.getByText("Card Number 01")).toBeInTheDocument();
-    expect(screen.getByText("Card Number 200")).toBeInTheDocument();
-    expect(screen.queryByText("Card Number 201")).not.toBeInTheDocument();
+    expect(screen.getByText("Card Number 120")).toBeInTheDocument();
+    expect(screen.queryByText("Card Number 121")).not.toBeInTheDocument();
+    expect(screen.getByText(/Mostrando 1 - 120 de 250 cartas/i)).toBeInTheDocument();
+    expect(screen.getByText(/Página 1 de 3/i)).toBeInTheDocument();
 
-    // Pagination summary
-    expect(screen.getByText(/Mostrando 1 - 200 de 250 cartas/i)).toBeInTheDocument();
-    expect(screen.getByText(/Página 1 de 2/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Página siguiente/i }));
 
-    // Go to Page 2
-    const nextPageBtn = screen.getByRole("button", { name: /Página siguiente/i });
-    fireEvent.click(nextPageBtn);
-
-    // Page 2: Card 201 and Card 250 are visible, Card 1 is not
     await waitFor(() => {
-      expect(screen.getByText("Card Number 201")).toBeInTheDocument();
-      expect(screen.getByText("Card Number 250")).toBeInTheDocument();
+      expect(screen.getByText("Card Number 121")).toBeInTheDocument();
       expect(screen.queryByText("Card Number 01")).not.toBeInTheDocument();
-      expect(screen.getByText(/Mostrando 201 - 250 de 250 cartas/i)).toBeInTheDocument();
-      expect(screen.getByText(/Página 2 de 2/i)).toBeInTheDocument();
+      expect(screen.getByText(/Mostrando 121 - 240 de 250 cartas/i)).toBeInTheDocument();
+      expect(screen.getByText(/Página 2 de 3/i)).toBeInTheDocument();
     });
+    expect(collectionActions.getCollectionQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 2, limit: 120, grouped: false })
+    );
   }, 15000);
+
+  it("keeps the same page size when grouping, and sends price filters to the backend", async () => {
+    render(
+      <CollectionView
+        initialView={flatResponse([createMockCard(1)])}
+        initialStats={{ uniqueCards: 1, totalCards: 1, decksCount: 1 }}
+      />
+    );
+
+    fireEvent.change(screen.getAllByPlaceholderText(/mín/i)[0], { target: { value: "2" } });
+
+    await waitFor(() => {
+      expect(collectionActions.getCollectionQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ minPrice: 2, page: 1, limit: 120 })
+      );
+    }, { timeout: 2000 });
+  });
 
   it("should request sort on the backend when the sorting bar changes", () => {
     const allCards = Array.from({ length: 3 }, (_, i) => createMockCard(i + 1));

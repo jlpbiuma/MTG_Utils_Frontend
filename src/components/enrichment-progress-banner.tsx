@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Loader2, X } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { getCollectionImportProgress } from "@/actions/import";
+import { getCollectionImportProgress } from "@/lib/reads";
+
 
 const LAST_IMPORT_STORAGE_KEY = "mtg-collection-last-import";
 

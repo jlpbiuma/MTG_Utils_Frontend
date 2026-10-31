@@ -14,24 +14,26 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ExportListDialog } from "@/components/export-list-dialog";
 
 import { Button } from "@/components/ui/button";
-
+import { PageActions } from "@/components/ui/page-actions";
 
 import { InventoryAcquisitionDialog } from "@/components/inventory-acquisition-dialog";
 import { CardSearchDialog } from "@/components/card-search-dialog";
 import { ImportCollectionDialog } from "@/components/import-collection-dialog";
-import { addOrIncrementCard, updateCollectionQuantity, deleteCollectionCard, getCollectionQuery } from "@/actions/collection";
+import { addOrIncrementCard, updateCollectionQuantity, deleteCollectionCard } from "@/actions/collection";
 import type { CollectionCardDTO, CollectionQueryResponse } from "@/actions/collection";
 import { PriceSummary } from "@/lib/pricing";
 import { PricingSummary } from "@/components/pricing-summary";
 import { PriceBadge } from "@/components/price-badge";
 import { CardSortingBar } from "@/components/card-sorting-bar";
 import { PriceFilter } from "@/components/price-filter";
-import { matchesPriceFilter, type SortField, type SortDirection } from "@/lib/sorting";
+import { type SortField, type SortDirection } from "@/lib/sorting";
+import { COLLECTION_PAGE_SIZE } from "@/lib/page-sizes";
 import { normalizeCardName } from "@/lib/card-utils";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
 import type { CardPrintingDetail } from "@/actions/scryfall";
 import { injectPrintingQuote } from "@/lib/printing-quote";
 import { RequestedDecksBadge } from "@/components/requested-decks-badge";
+import { getCollectionQuery, getCollectionStats } from "@/lib/reads";
 
 interface CollectionViewProps {
   activeTab?: "inventory" | "value-history" | "dormant" | "simulated";
@@ -49,6 +51,7 @@ export function CollectionView({
     initialView ?? null
   );
   const [isLoadingView, setIsLoadingView] = useState(false);
+  const [stats, setStats] = useState(initialStats);
 
   const [searchQuery, setSearchQuery] = useQueryState<string>("q", "");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -69,7 +72,9 @@ export function CollectionView({
   // Dynamic pricing state
   const priceProvider = "cardmarket" as const;
   const [priceSummary, setPriceSummary] = useState<PriceSummary | null>(null);
-  const [isLoadingPrices, setIsLoadingPrices] = useState(false);
+  // Prices load right after mount on the inventory tab: start in the loading
+  // state so the summary never flashes "No se pudieron cargar los precios".
+  const [isLoadingPrices, setIsLoadingPrices] = useState(activeTab === "inventory");
 
   const loadPrices = useCallback(
     async (providerToLoad = priceProvider) => {
@@ -109,38 +114,67 @@ export function CollectionView({
     }
   }, [activeTab, priceProvider, loadPrices]);
 
-  // Debounce the search input before running the backend query.
+  // Debounce the search and price inputs before running the backend query.
+  const [debouncedPrices, setDebouncedPrices] = useState<{ min: number | null; max: number | null }>({ min: null, max: null });
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 400);
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery.trim());
+      const parse = (value: string) => {
+        const parsed = value.trim() === "" ? NaN : parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      };
+      setDebouncedPrices((prev) => {
+        const next = { min: parse(minPrice), max: parse(maxPrice) };
+        return prev.min === next.min && prev.max === next.max ? prev : next;
+      });
+    }, 400);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, minPrice, maxPrice]);
 
   // Searching preserves the selected grouping, which is supported by the backend.
   const grouped = isGroupedByType;
+  const filterKey = `${debouncedQuery}|${debouncedPrices.min}|${debouncedPrices.max}|${sortField}|${sortDirection}|${grouped}`;
+  // The page belongs to the filters it was chosen for: a new filter, sort or
+  // grouping always starts again at page 1.
+  const [pageState, setPageState] = useState({ key: filterKey, page: 1 });
+  const page = pageState.key === filterKey ? pageState.page : 1;
 
+  const filterOptions = useMemo(() => ({
+    searchQuery: debouncedQuery,
+    sort: sortField,
+    direction: sortDirection,
+    grouped,
+    priceProvider,
+    minPrice: debouncedPrices.min,
+    maxPrice: debouncedPrices.max,
+  }), [debouncedQuery, sortField, sortDirection, grouped, priceProvider, debouncedPrices]);
+
+  // Only the latest request may update the view: a slow earlier page must
+  // never overwrite a newer one.
+  const requestSeqRef = useRef(0);
   const refreshView = useCallback(async () => {
-    const options = {
-      searchQuery: debouncedQuery,
-      sort: sortField,
-      direction: sortDirection,
-      grouped,
-      priceProvider,
-      ...(grouped || debouncedQuery
-        ? {}
-        : { page: 1, limit: 200 }),
-    };
+    const seq = ++requestSeqRef.current;
     setIsLoadingView(true);
     try {
-      const res = await getCollectionQuery(options);
-      if (res) setView(res);
+      const res = await getCollectionQuery({ ...filterOptions, page, limit: COLLECTION_PAGE_SIZE });
+      if (res && seq === requestSeqRef.current) setView(res);
     } catch (err) {
       console.error("Error consultando la colección:", err);
     } finally {
-      setIsLoadingView(false);
+      if (seq === requestSeqRef.current) setIsLoadingView(false);
     }
-  }, [debouncedQuery, sortField, sortDirection, grouped, priceProvider]);
+  }, [filterOptions, page]);
 
-  // Keep the view in sync with grouping/sorting/filtering/provider changes.
+  const refreshStats = useCallback(async () => {
+    try {
+      const next = await getCollectionStats();
+      setStats(next);
+    } catch (err) {
+      console.error("Error actualizando el resumen de la colección:", err);
+    }
+  }, []);
+
+  // Keep the view in sync with grouping/sorting/filtering/page changes.
   // The initial render already carries the same backend-processed result, so
   // we only re-query when the parameters change or SSR delivered no data.
   const skippedInitialRef = useRef(false);
@@ -179,7 +213,7 @@ export function CollectionView({
     try {
       const newQty = currentQty + delta;
       await updateCollectionQuantity(cardId, newQty);
-      await refreshView();
+      await Promise.all([refreshView(), refreshStats()]);
     } finally {
       setBusyId(null);
     }
@@ -190,7 +224,7 @@ export function CollectionView({
     setBusyId(cardId);
     try {
       await deleteCollectionCard(cardId);
-      await refreshView();
+      await Promise.all([refreshView(), refreshStats()]);
     } finally {
       setBusyId(null);
     }
@@ -249,167 +283,37 @@ export function CollectionView({
     );
   };
 
-  const parsedMinPrice = minPrice.trim() !== "" ? parseFloat(minPrice) : null;
-  const parsedMaxPrice = maxPrice.trim() !== "" ? parseFloat(maxPrice) : null;
-  const hasPriceFilter = parsedMinPrice !== null || parsedMaxPrice !== null;
+  const hasPriceFilter = debouncedPrices.min !== null || debouncedPrices.max !== null;
 
-  const displaySections = useMemo(() => {
-    if (!view?.sections) return [];
-    if (!hasPriceFilter) return view.sections;
-    return view.sections
-      .map((sec) => {
-        const matchingCards = sec.cards.filter((card) =>
-          matchesPriceFilter(
-            card.cardName,
-            card.cardScryfallId,
-            parsedMinPrice,
-            parsedMaxPrice,
-            priceSummary?.quotes
-          )
-        );
-        return {
-          ...sec,
-          cards: matchingCards,
-          totalCards: matchingCards.reduce((acc, c) => acc + c.quantity, 0),
-          uniqueCards: matchingCards.length,
-          sectionTotalPrice: matchingCards.reduce((acc, c) => {
-            const q =
-              priceSummary?.quotes[c.cardScryfallId] ||
-              priceSummary?.quotes[normalizeCardName(c.cardName)];
-            const p = q?.unitPrice?.trend ?? q?.subtotal ?? 0;
-            return acc + p * c.quantity;
-          }, 0),
-        };
-      })
-      .filter((sec) => sec.cards.length > 0);
-  }, [view?.sections, hasPriceFilter, parsedMinPrice, parsedMaxPrice, priceSummary?.quotes]);
-
-  const displayFlatCards = useMemo(() => {
-    if (!view?.cards) return [];
-    if (!hasPriceFilter) return view.cards;
-    return view.cards.filter((card) =>
-      matchesPriceFilter(
-        card.cardName,
-        card.cardScryfallId,
-        parsedMinPrice,
-        parsedMaxPrice,
-        priceSummary?.quotes
-      )
-    );
-  }, [view?.cards, hasPriceFilter, parsedMinPrice, parsedMaxPrice, priceSummary?.quotes]);
-
-  const visibleCardsCount = isGroupedByType && view?.sections?.length
-    ? displaySections.reduce((sum: number, s) => sum + s.cards.length, 0)
-    : displayFlatCards.length;
-
-  // Pagination state (limit to 200 cards per page)
-  const ITEMS_PER_PAGE = 200;
-  const [currentPage, setCurrentPage] = useState(1);
+  // The backend returns exactly one page, whatever the mode.
+  const paginatedFlatCards = view?.cards ?? [];
+  const paginatedSections = view?.sections ?? [];
+  const pageSize = view?.limit ?? COLLECTION_PAGE_SIZE;
+  const totalCardsToPaginate = view?.uniqueCards ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCardsToPaginate / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, view?.page ?? page), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalCardsToPaginate);
   const gridContainerRef = useRef<HTMLDivElement>(null);
 
-  // Reset page when filters or sorting change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedQuery, minPrice, maxPrice, sortField, sortDirection, isGroupedByType]);
-
-  const totalCardsToPaginate = isGroupedByType && view?.sections?.length
-    ? visibleCardsCount
-    : displayFlatCards.length;
-
-  const totalPages = Math.max(1, Math.ceil(totalCardsToPaginate / ITEMS_PER_PAGE));
-  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
-
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalCardsToPaginate);
-
-  const paginatedFlatCards = useMemo(() => {
-    return displayFlatCards.slice(startIndex, endIndex);
-  }, [displayFlatCards, startIndex, endIndex]);
-
-  const allSectionCards = useMemo(() => {
-    if (!isGroupedByType || !displaySections.length) return [];
-    return displaySections.flatMap((s) =>
-      s.cards.map((c) => ({
-        card: c,
-        sectionKey: s.key,
-        sectionLabel: s.label,
-        sectionOrder: s.order,
-        currencySymbol: s.currencySymbol,
-      }))
-    );
-  }, [isGroupedByType, displaySections]);
-
-  const paginatedSections = useMemo(() => {
-    if (!isGroupedByType || !displaySections.length) return [];
-    const pageItems = allSectionCards.slice(startIndex, endIndex);
-
-    const sectionMap = new Map<
-      string,
-      {
-        key: string;
-        label: string;
-        order: number;
-        currencySymbol: string;
-        totalCards: number;
-        uniqueCards: number;
-        sectionTotalPrice: number;
-        cards: CollectionCardDTO[];
-      }
-    >();
-
-    const originalSectionsMap = new Map(displaySections.map((s) => [s.key, s]));
-
-    for (const item of pageItems) {
-      if (!sectionMap.has(item.sectionKey)) {
-        const orig = originalSectionsMap.get(item.sectionKey);
-        sectionMap.set(item.sectionKey, {
-          key: item.sectionKey,
-          label: item.sectionLabel,
-          order: item.sectionOrder,
-          currencySymbol: item.currencySymbol,
-          totalCards: orig?.totalCards ?? item.card.quantity,
-          uniqueCards: orig?.uniqueCards ?? 1,
-          sectionTotalPrice: orig?.sectionTotalPrice ?? 0,
-          cards: [],
-        });
-      }
-      sectionMap.get(item.sectionKey)!.cards.push(item.card);
-    }
-
-    return Array.from(sectionMap.values()).sort((a, b) => a.order - b.order);
-  }, [isGroupedByType, displaySections, allSectionCards, startIndex, endIndex]);
-
   const handlePageChange = (newPage: number) => {
-    setCurrentPage(newPage);
+    setPageState({ key: filterKey, page: newPage });
     gridContainerRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   };
 
-  const exportableFilteredCards = useMemo(() => {
-    if (isGroupedByType && displaySections.length > 0) {
-      return displaySections.flatMap((s) =>
-        s.cards.map((c) => ({ cardName: c.cardName, quantity: c.quantity }))
-      );
-    }
-    return displayFlatCards.map((c) => ({
-      cardName: c.cardName,
-      quantity: c.quantity,
-    }));
-  }, [isGroupedByType, displaySections, displayFlatCards]);
-
-  const exportableAllCards = useMemo(() => {
-    if (view?.sections && view.sections.length > 0) {
-      return view.sections.flatMap((s) =>
-        s.cards.map((c) => ({ cardName: c.cardName, quantity: c.quantity }))
-      );
-    }
-    if (view?.cards && view.cards.length > 0) {
-      return view.cards.map((c) => ({
+  // Exports cover every page: the filtered result and the whole inventory.
+  const loadExportCards = useCallback(async () => {
+    const toItems = (res: CollectionQueryResponse | null | undefined) =>
+      [...(res?.cards ?? []), ...(res?.sections ?? []).flatMap((section) => section.cards)].map((c) => ({
         cardName: c.cardName,
         quantity: c.quantity,
       }));
-    }
-    return [];
-  }, [view]);
+    const [filtered, all] = await Promise.all([
+      getCollectionQuery({ ...filterOptions, grouped: false }),
+      getCollectionQuery({ sort: "name", direction: "asc", grouped: false, priceProvider }),
+    ]);
+    return { current: toItems(filtered), all: toItems(all) };
+  }, [filterOptions, priceProvider]);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl space-y-8">
@@ -424,10 +328,9 @@ export function CollectionView({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <PageActions>
           <ExportListDialog
-            cards={exportableFilteredCards}
-            allCards={exportableAllCards}
+            loadCards={loadExportCards}
             title="Exportar Colección"
             fileNamePrefix="coleccion"
           />
@@ -437,10 +340,10 @@ export function CollectionView({
             title="Añadir a mi Colección"
             triggerText="Añadir cartas"
           />
-        </div>
+        </PageActions>
       </div>
 
-      <p className="flex flex-wrap gap-4 text-sm text-muted-foreground" aria-label="Resumen de inventario"><span><strong className="text-foreground">{initialStats.uniqueCards}</strong> cartas únicas</span><span><strong className="text-foreground">{initialStats.totalCards}</strong> copias</span><span><strong className="text-foreground">{initialStats.decksCount ?? 0}</strong> mazos</span></p>
+      <p className="flex flex-wrap gap-4 text-sm text-muted-foreground" aria-label="Resumen de inventario"><span><strong className="text-foreground">{stats.uniqueCards}</strong> cartas únicas</span><span><strong className="text-foreground">{stats.totalCards}</strong> copias</span><span><strong className="text-foreground">{stats.decksCount ?? 0}</strong> mazos</span></p>
 
       {/* Tab panels — nav lives in collection layout as subroutes */}
       {activeTab === "inventory" ? (
@@ -455,6 +358,7 @@ export function CollectionView({
 
       <ViewToolbar
         label="Opciones del inventario"
+        activeFilters={[hasPriceFilter, sortField !== "name" || sortDirection !== "asc", isGroupedByType].filter(Boolean).length}
         search={
           <ToolbarSearch
             value={searchQuery}
@@ -501,13 +405,16 @@ export function CollectionView({
 
       {/* Card Grid / List */}
       <div ref={gridContainerRef} />
+      {view !== null && isLoadingView && (
+        <p className="text-xs text-muted-foreground" role="status">Actualizando resultados…</p>
+      )}
       {view === null && isLoadingView ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <p className="text-sm text-muted-foreground">Procesando tu colección...</p>
         </div>
       ) : isGroupedByType && paginatedSections.length > 0 ? (
-        /* Categorized sections computed over the filtered collection (paginated to 200 cards max) */
+        /* One backend page of the section-ordered, filtered collection */
         <div className="space-y-8">
           {paginatedSections.map((section) => (
             <div key={section.key} className="space-y-3">
@@ -532,7 +439,7 @@ export function CollectionView({
           ))}
         </div>
       ) : !isGroupedByType && paginatedFlatCards.length > 0 ? (
-        /* Flat grid mode (also used while searching, paginated to 200 cards max) */
+        /* One backend page of the filtered, sorted collection */
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {paginatedFlatCards.map((card) => renderCard(card))}
         </div>
@@ -542,16 +449,16 @@ export function CollectionView({
             <Library className="h-8 w-8" />
           </div>
           <h2 className="text-xl font-semibold text-foreground">
-            {debouncedQuery || minPrice || maxPrice
+            {debouncedQuery || hasPriceFilter
               ? "Sin resultados para los filtros seleccionados"
               : "Tu colección está vacía"}
           </h2>
           <p className="text-sm text-muted-foreground mt-2">
-            {debouncedQuery || minPrice || maxPrice
+            {debouncedQuery || hasPriceFilter
               ? "Prueba modificando el término de búsqueda o ajustando el rango de precio."
               : "Busca cartas en la base de datos de Scryfall e introduce el número de copias que tienes."}
           </p>
-          {(debouncedQuery || minPrice || maxPrice) && (
+          {(debouncedQuery || hasPriceFilter) && (
             <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
               {debouncedQuery && (
                 <Button
@@ -563,7 +470,7 @@ export function CollectionView({
                   Limpiar búsqueda
                 </Button>
               )}
-              {(minPrice || maxPrice) && (
+              {hasPriceFilter && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -578,7 +485,7 @@ export function CollectionView({
               )}
             </div>
           )}
-          {!debouncedQuery && !minPrice && !maxPrice && (
+          {!debouncedQuery && !hasPriceFilter && (
             <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
               <ImportCollectionDialog />
               <CardSearchDialog

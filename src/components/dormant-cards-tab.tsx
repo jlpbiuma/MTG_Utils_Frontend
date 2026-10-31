@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button";
 import { ManaCost } from "@/components/mana-cost";
 
 import { CardDetailDialog } from "@/components/card-detail-dialog";
-import { getDormantCards, type DormantCardItem, type DormantCardsResponse } from "@/actions/collection";
+import { type DormantCardItem, type DormantCardsResponse } from "@/actions/collection";
 import type { PriceProvider } from "@/lib/pricing/types";
 import { formatPrice } from "@/lib/deck-colors";
+import { getDormantCards } from "@/lib/reads";
 
 interface DormantCardsTabProps {
   provider: PriceProvider;

@@ -223,6 +223,8 @@ export interface GetCollectionQueryOptions {
   priceProvider?: PriceProvider;
   page?: number;
   limit?: number;
+  minPrice?: number | null;
+  maxPrice?: number | null;
 }
 
 /**
@@ -240,6 +242,8 @@ export async function getCollectionQuery(options: GetCollectionQueryOptions = {}
   params.set("priceProvider", "cardmarket");
   if (options.page !== undefined) params.set("page", String(options.page));
   if (options.limit !== undefined) params.set("limit", String(options.limit));
+  if (options.minPrice != null) params.set("minPrice", String(options.minPrice));
+  if (options.maxPrice != null) params.set("maxPrice", String(options.maxPrice));
 
   const queryString = params.toString() ? `?${params.toString()}` : "";
   return await backendFetch<CollectionQueryResponse>(

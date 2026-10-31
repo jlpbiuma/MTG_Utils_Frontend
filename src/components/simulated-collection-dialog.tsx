@@ -34,17 +34,11 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
-import {
-  analyzeRawSimulatedCollection, applySimulatedPrinting, importOfferLink, type OfferOrigin,
-  createSimulatedCollection,
-  getSimulatedCollection,
-  deleteSimulatedCollection,
-  type SimulatedCollectionAnalysisResponse,
-  type SimulatedCardAnalysisItem,
-} from "@/actions/simulated-collections";
+import { analyzeRawSimulatedCollection, applySimulatedPrinting, importOfferLink, type OfferOrigin, createSimulatedCollection, deleteSimulatedCollection, type SimulatedCollectionAnalysisResponse, type SimulatedCardAnalysisItem } from "@/actions/simulated-collections";
 import { SimulatedPurchaseComparison } from "@/components/simulated-purchase-comparison";
 import type { CardPrintingDetail } from "@/actions/scryfall";
 import { normalizeCardName, isBasicLand } from "@/lib/card-utils";
+import { getSimulatedCollection } from "@/lib/reads";
 
 interface SimulatedCollectionDialogProps {
   isOpen: boolean;

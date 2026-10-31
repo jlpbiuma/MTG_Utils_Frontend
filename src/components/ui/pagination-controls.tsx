@@ -48,7 +48,7 @@ export function PaginationControls({
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
+          className="h-11 w-11 sm:h-8 sm:w-8"
           onClick={() => onPageChange(1)}
           disabled={currentPage <= 1}
           title="Primera página"
@@ -59,7 +59,7 @@ export function PaginationControls({
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
+          className="h-11 w-11 sm:h-8 sm:w-8"
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage <= 1}
           title="Página anterior"
@@ -74,7 +74,7 @@ export function PaginationControls({
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
+          className="h-11 w-11 sm:h-8 sm:w-8"
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
           title="Página siguiente"
@@ -85,7 +85,7 @@ export function PaginationControls({
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
+          className="h-11 w-11 sm:h-8 sm:w-8"
           onClick={() => onPageChange(totalPages)}
           disabled={currentPage >= totalPages}
           title="Última página"

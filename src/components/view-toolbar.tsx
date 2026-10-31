@@ -1,13 +1,22 @@
 "use client";
 
-import type { ReactNode, FormEventHandler } from "react";
-import { Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { useId, useState, type ReactNode, type FormEventHandler } from "react";
+import { Search, ArrowUpDown, ArrowUp, ArrowDown, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 export const toolbarButtonClass =
   "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";
 
+/**
+ * Search, filters, sorting, display and actions for a list view.
+ *
+ * Phones (below md) keep the search and the actions visible and fold
+ * filters, sorting and display into a "Filtros y orden" panel, so results
+ * start within the first screen. ``activeFilters`` shows how many options
+ * differ from their defaults while the panel is closed. From md up the layout
+ * is the single wrapping row it always was.
+ */
 export function ViewToolbar({
   label = "Opciones y filtros",
   search,
@@ -15,6 +24,7 @@ export function ViewToolbar({
   sorting,
   display,
   actions,
+  activeFilters = 0,
   className,
 }: {
   label?: string;
@@ -23,8 +33,12 @@ export function ViewToolbar({
   sorting?: ReactNode;
   display?: ReactNode;
   actions?: ReactNode;
+  activeFilters?: number;
   className?: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const foldable = Boolean(filters || sorting || display);
   return (
     <div
       role="region"
@@ -39,28 +53,63 @@ export function ViewToolbar({
           {search}
         </div>
       )}
-      {filters && (
-        <div
-          data-toolbar-slot="filters"
-          className="flex min-w-0 max-w-full flex-wrap items-center gap-3"
+      {foldable && (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => setOpen((value) => !value)}
+          className={cn(
+            toolbarButtonClass,
+            "w-full justify-between border-border bg-card text-foreground md:hidden",
+          )}
         >
-          {filters}
-        </div>
+          <span className="inline-flex items-center gap-2">
+            <SlidersHorizontal aria-hidden className="h-4 w-4" />
+            Filtros y orden
+            {activeFilters > 0 && (
+              <span className="rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
+                {activeFilters}
+              </span>
+            )}
+          </span>
+          <ChevronDown aria-hidden className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+        </button>
       )}
-      {sorting && (
+      {foldable && (
         <div
-          data-toolbar-slot="sorting"
-          className="flex min-w-0 max-w-full flex-wrap items-center gap-3"
+          id={panelId}
+          data-toolbar-panel=""
+          data-open={open ? "true" : "false"}
+          className={cn(
+            "w-full min-w-0 flex-col gap-3 rounded-lg border border-border bg-card/60 p-3 md:contents",
+            open ? "flex" : "hidden",
+          )}
         >
-          {sorting}
-        </div>
-      )}
-      {display && (
-        <div
-          data-toolbar-slot="display"
-          className="flex min-w-0 max-w-full flex-wrap items-center gap-3"
-        >
-          {display}
+          {filters && (
+            <div
+              data-toolbar-slot="filters"
+              className="flex min-w-0 max-w-full flex-wrap items-center gap-3"
+            >
+              {filters}
+            </div>
+          )}
+          {sorting && (
+            <div
+              data-toolbar-slot="sorting"
+              className="flex min-w-0 max-w-full flex-wrap items-center gap-3"
+            >
+              {sorting}
+            </div>
+          )}
+          {display && (
+            <div
+              data-toolbar-slot="display"
+              className="flex min-w-0 max-w-full flex-wrap items-center gap-3"
+            >
+              {display}
+            </div>
+          )}
         </div>
       )}
       {actions && (
@@ -133,11 +182,12 @@ export function ToolbarChoices<T extends string>({
       role="group"
       aria-label={label}
       className={cn(
-        "flex min-w-0 max-w-full flex-wrap items-center gap-1",
+        // Phones: one swipeable row instead of several wrapped lines of chips.
+        "snap-row flex min-w-0 max-w-full items-center gap-1 overflow-x-auto max-md:-mx-1 max-md:px-1 md:flex-wrap md:overflow-visible [&>button]:shrink-0",
         className,
       )}
     >
-      <span className="mr-1 text-xs font-medium text-muted-foreground">
+      <span className="mr-1 shrink-0 text-xs font-medium text-muted-foreground">
         {label}:
       </span>
       {options.map((option) => (

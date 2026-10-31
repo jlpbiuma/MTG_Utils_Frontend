@@ -5,9 +5,10 @@ import { ViewToolbar, ToolbarChoices } from "@/components/view-toolbar";
 import React, { useState, useEffect } from "react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { TrendingUp, TrendingDown, Calendar, Layers } from "lucide-react";
-import { getCollectionPriceHistory } from "@/actions/pricing";
+
 import type { CollectionValueHistoryResponse, CollectionValueHistoryPoint, PriceProvider } from "@/lib/pricing/types";
 import { formatPrice } from "@/lib/deck-colors";
+import { getCollectionPriceHistory } from "@/lib/reads";
 
 interface CollectionValueChartProps {
   provider: PriceProvider;

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { getFunctionTargets, saveFunctionTargets } from "@/actions/purchases";
+import { saveFunctionTargets } from "@/actions/purchases";
 import { Button } from "@/components/ui/button";
 import {
   FUNCTION_LABELS,
@@ -9,6 +9,7 @@ import {
   type DeckFunction,
 } from "@/lib/deck-functions";
 import type { DeckCardWithOwnership } from "@/lib/schemas";
+import { getFunctionTargets } from "@/lib/reads";
 export function DeckFunctions({
   cards,
   deckId,

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { Download, Copy, Check, FileText } from "lucide-react";
 import {
   Dialog,
@@ -20,8 +20,10 @@ export interface ExportCardItem {
 }
 
 interface ExportListDialogProps {
-  cards: ExportCardItem[];
+  cards?: ExportCardItem[];
   allCards?: ExportCardItem[];
+  /** Loads both lists when the dialog opens, for views that hold one page only. */
+  loadCards?: () => Promise<{ current: ExportCardItem[]; all: ExportCardItem[] }>;
   title?: string;
   description?: string;
   triggerText?: string;
@@ -29,8 +31,9 @@ interface ExportListDialogProps {
 }
 
 export function ExportListDialog({
-  cards,
-  allCards,
+  cards: givenCards = [],
+  allCards: givenAllCards,
+  loadCards,
   title = "Exportar Lista",
   description = "Lista en formato de texto estándar (1 Carta). Compatible con Moxfield, Archidekt, MTGO y tiendas.",
   triggerText = "Exportar lista",
@@ -40,6 +43,24 @@ export function ExportListDialog({
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const [exportScope, setExportScope] = useState<"current" | "all">("current");
+  const [loaded, setLoaded] = useState<{ current: ExportCardItem[]; all: ExportCardItem[] } | null>(null);
+  const [isLoadingCards, setIsLoadingCards] = useState(false);
+
+  // Each opening reloads both lists; a late answer from a previous opening is ignored.
+  const loadSeq = useRef(0);
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next || !loadCards) return;
+    const seq = ++loadSeq.current;
+    setIsLoadingCards(true);
+    loadCards()
+      .then((lists) => { if (seq === loadSeq.current) setLoaded(lists); })
+      .catch((err) => console.error("Error cargando la lista para exportar:", err))
+      .finally(() => { if (seq === loadSeq.current) setIsLoadingCards(false); });
+  };
+
+  const cards = loadCards ? loaded?.current ?? [] : givenCards;
+  const allCards = loadCards ? loaded?.all : givenAllCards;
 
   const hasDifferentAll = Boolean(
     allCards &&
@@ -102,7 +123,7 @@ export function ExportListDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button
           variant="outline"
@@ -184,7 +205,7 @@ export function ExportListDialog({
             value={formattedText}
             onClick={(e) => (e.target as HTMLTextAreaElement).select()}
             className="w-full h-full min-h-[220px] max-h-[50vh] p-3 font-mono text-xs leading-relaxed bg-background/80 rounded-lg border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none selection:bg-primary/20"
-            placeholder="No hay cartas para exportar"
+            placeholder={isLoadingCards ? "Cargando la lista completa…" : "No hay cartas para exportar"}
           />
         </div>
         {copyError ? <p role="alert" className="text-sm text-destructive">No se pudo copiar. Selecciona el texto o descarga la lista.</p> : null}

@@ -17,7 +17,7 @@ import { getCardDetails, SpanishCardDetails, SpanishCardFace, CardPrintingDetail
 import { updateDeckCardVersion } from "@/actions/decks";
 import { updateCollectionAcquiredAt, updateCollectionCardVersion } from "@/actions/collection";
 import { updateWantCardVersion } from "@/actions/wants";
-import { getCardPriceHistory } from "@/actions/pricing";
+
 import { PriceHistoryChart } from "@/components/price-history-chart";
 import type { CardPriceHistoryResponse } from "@/lib/pricing/types";
 import { parseRulesTextTokens, translateRarityEs } from "@/lib/card-spanish-dictionary";
@@ -26,6 +26,7 @@ import { Swords, Shield, RotateCw, Palette, Layers, CheckCircle2, AlertCircle, X
 
 import { InventoryAcquisitionDialog } from "@/components/inventory-acquisition-dialog";
 import { CardPurchaseProvenance } from "@/components/card-purchase-provenance";
+import { getCardPriceHistory } from "@/lib/reads";
 
 interface CardDetailDialogProps {
   cardId?: string;
@@ -425,6 +426,8 @@ export function CardDetailDialog({
   const displayManaCost = currentFace?.mana_cost ?? details?.mana_cost ?? manaCost;
   const displayRulesEs = currentFace?.oracle_text_es ?? details?.oracle_text_es ?? "";
   const displayFlavorEs = currentFace?.flavor_text_es ?? details?.flavor_text_es ?? "";
+  // Stats come back as null for cards without them (lands, spells): show only real values.
+  const hasStat = (value: string | number | null | undefined) => value != null && value !== "";
   const displayPower = currentFace?.power ?? details?.power;
   const displayToughness = currentFace?.toughness ?? details?.toughness;
   const displayLoyalty = currentFace?.loyalty ?? details?.loyalty;
@@ -627,13 +630,13 @@ export function CardDetailDialog({
             {/* Right Column: Card Details, Rules, Combat, and Tabs */}
             <div className="md:col-span-7 space-y-5">
               {/* Type line & Combat Stats */}
-              <div className="flex items-center justify-between gap-3 p-3.5 rounded-lg border border-border bg-card">
-                <div>
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-lg border border-border bg-card">
+                <div className="min-w-0">
                   <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Tipo de Carta</p>
                   <p className="text-base font-semibold text-primary mt-0.5">{displayTypeEs}</p>
                 </div>
 
-                {displayPower !== undefined && displayToughness !== undefined && (
+                {hasStat(displayPower) && hasStat(displayToughness) && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-950/40 border border-rose-800/50 text-rose-300 font-semibold text-base font-mono">
                     <Swords className="h-4 w-4" />
                     <span>
@@ -642,14 +645,14 @@ export function CardDetailDialog({
                   </div>
                 )}
 
-                {displayLoyalty !== undefined && (
+                {hasStat(displayLoyalty) && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/30 text-primary font-semibold text-base font-mono">
                     <Shield className="h-4 w-4" />
                     <span>Lealtad: {displayLoyalty}</span>
                   </div>
                 )}
 
-                {displayDefense !== undefined && (
+                {hasStat(displayDefense) && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-950/40 border border-sky-800/50 text-sky-300 font-semibold text-base font-mono">
                     <Shield className="h-4 w-4" />
                     <span>Defensa: {displayDefense}</span>
@@ -685,8 +688,8 @@ export function CardDetailDialog({
 
               {/* Tabs for Technical Data, Legalities, Prices & Collection */}
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="w-full">
-                <TabsList className="flex flex-wrap bg-card border border-border">
-                  <TabsTrigger value="versions" className="text-xs flex-1 min-w-0 flex items-center justify-center gap-1.5 font-semibold">
+                <TabsList className="snap-row flex w-full justify-start overflow-x-auto bg-card border border-border sm:flex-wrap sm:justify-center sm:overflow-visible">
+                  <TabsTrigger value="versions" className="text-xs shrink-0 sm:flex-1 sm:min-w-0 flex items-center justify-center gap-1.5 font-semibold">
                     <Layers className="h-3.5 w-3.5 text-primary" />
                     <span>Versiones</span>
                     {details?.printings?.length ? (
@@ -697,16 +700,16 @@ export function CardDetailDialog({
                       </span>
                     ) : null}
                   </TabsTrigger>
-                  <TabsTrigger value="legalities" className="text-xs flex-1 min-w-0">
+                  <TabsTrigger value="legalities" className="text-xs shrink-0 sm:flex-1 sm:min-w-0">
                     Legalidad
                   </TabsTrigger>
-                  <TabsTrigger value="prices" className="text-xs flex-1 min-w-0">
+                  <TabsTrigger value="prices" className="text-xs shrink-0 sm:flex-1 sm:min-w-0">
                     Precios
                   </TabsTrigger>
-                  <TabsTrigger value="rulings" className="text-xs flex-1 min-w-0">
+                  <TabsTrigger value="rulings" className="text-xs shrink-0 sm:flex-1 sm:min-w-0">
                     Rulings
                   </TabsTrigger>
-                  <TabsTrigger value="collection" className="text-xs flex-1 min-w-0">
+                  <TabsTrigger value="collection" className="text-xs shrink-0 sm:flex-1 sm:min-w-0">
                     Mi Colección
                   </TabsTrigger>
                 </TabsList>

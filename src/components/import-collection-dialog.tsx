@@ -19,15 +19,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import {
-  importCollectionFromText,
-  getCollectionImportProgress,
-  retryCollectionImport,
-  type CollectionImportResult,
-} from "@/actions/import";
+import { importCollectionFromText, retryCollectionImport, type CollectionImportResult } from "@/actions/import";
 
 import { createSimulatedCollection, type SimulatedCollectionAnalysisResponse } from "@/actions/simulated-collections";
 import { OfferCollectionDialog } from "@/components/offer-collection-dialog";
+import { getCollectionImportProgress } from "@/lib/reads";
 const LAST_IMPORT_STORAGE_KEY = "mtg-collection-last-import";
 
 export function ImportCollectionDialog() {

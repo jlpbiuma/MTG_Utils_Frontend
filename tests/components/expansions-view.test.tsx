@@ -4,6 +4,7 @@ import { ExpansionsView } from "@/components/expansions-view";
 
 const { getExpansions, getExpansionCards, getExpansionValueHistory, setExpansionMissingAcquisitionDates, addOrIncrementCard } = vi.hoisted(() => ({ getExpansions: vi.fn(), getExpansionCards: vi.fn(), getExpansionValueHistory: vi.fn(), setExpansionMissingAcquisitionDates: vi.fn(), addOrIncrementCard: vi.fn() }));
 vi.mock("@/actions/expansions", () => ({ getExpansions, getExpansionCards, getExpansionValueHistory, setExpansionMissingAcquisitionDates }));
+vi.mock("@/lib/reads", () => ({ getExpansions, getExpansionCards, getExpansionValueHistory }));
 vi.mock("@/actions/collection", () => ({ updateCollectionAcquiredAt: vi.fn(), addOrIncrementCard }));
 vi.mock("@/components/card-detail-dialog", () => ({
   CardDetailDialog: ({ cardId, cardName, onOpenChange, onAddToCollection }: { cardId: string; cardName: string; onOpenChange: (open: boolean) => void; onAddToCollection?: () => Promise<void> }) => <div role="dialog"><span>{cardName} details</span><span data-testid="detail-card-id">{cardId}</span>{onAddToCollection && <button onClick={() => void onAddToCollection()}>Añadir a la colección</button>}<button onClick={() => onOpenChange(false)}>Cerrar detalle</button></div>,

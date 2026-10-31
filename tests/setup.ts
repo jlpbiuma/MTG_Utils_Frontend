@@ -41,3 +41,41 @@ vi.mock("next/headers", () => ({
   }),
   headers: vi.fn().mockResolvedValue(new Headers()),
 }));
+
+// Browser reads go through /api/reads in the app. Tests keep mocking the
+// actions modules, so each read wrapper forwards to its (possibly mocked) action.
+vi.mock("@/lib/reads", () => {
+  const modules: Record<string, () => Promise<Record<string, unknown>>> = {
+    collection: () => import("@/actions/collection"),
+    priorities: () => import("@/actions/priorities"),
+    purchases: () => import("@/actions/purchases"),
+    decks: () => import("@/actions/decks"),
+    pricing: () => import("@/actions/pricing"),
+    import: () => import("@/actions/import"),
+    wants: () => import("@/actions/wants"),
+    "whatsapp-matches": () => import("@/actions/whatsapp-matches"),
+    "simulated-collections": () => import("@/actions/simulated-collections"),
+    acquisitions: () => import("@/actions/acquisitions"),
+    edhrec: () => import("@/actions/edhrec"),
+    expansions: () => import("@/actions/expansions"),
+    scryfall: () => import("@/actions/scryfall"),
+  };
+  const owners: Record<string, string> = {
+    getCollectionQuery: "collection", getCollectionStats: "collection", getDormantCards: "collection",
+    getPriorities: "priorities", getDeckValueHistory: "purchases", getFunctionTargets: "purchases",
+    getEdhrecCommanderRecommendations: "decks", getDecksOverlap: "decks",
+    getPriceMovers: "pricing", getCollectionPriceHistory: "pricing", getCardPriceHistory: "pricing",
+    getCollectionImportProgress: "import", getWantQuery: "wants", getWhatsAppMatches: "whatsapp-matches",
+    getDiscoveredOffers: "simulated-collections", getSimulatedCollections: "simulated-collections",
+    getSimulatedCollection: "simulated-collections", getPurchaseProvenance: "acquisitions",
+    getDeckRecommendations: "edhrec", getExpansionCards: "expansions", getExpansions: "expansions",
+    getExpansionValueHistory: "expansions", searchCards: "scryfall", getCardNamed: "scryfall",
+  };
+  return Object.fromEntries(Object.entries(owners).map(([name, owner]) => [
+    name,
+    async (...args: unknown[]) => {
+      const mod = await modules[owner]();
+      return (mod[name] as (...values: unknown[]) => unknown)(...args);
+    },
+  ]));
+});

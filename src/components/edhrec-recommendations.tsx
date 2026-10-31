@@ -15,7 +15,7 @@ import { CardDetailDialog } from "@/components/card-detail-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ColorIdentityPips } from "@/components/color-identity-pips";
 import { EdhrecCardRecommendation, DeckCardWithOwnership, DeckRequirement } from "@/lib/schemas";
-import { getDeckRecommendations, DeckRecommendationsResult } from "@/actions/edhrec";
+import { DeckRecommendationsResult } from "@/actions/edhrec";
 import { addCardToDeck, removeCardFromDeck, unassignCardFromDeck, removeCardFromDeckByName, unassignCardFromDeckByName, setDeckCommander } from "@/actions/decks";
 import { deleteCardFromCollectionByName } from "@/actions/collection";
 import { toEdhrecSlug, groupRecommendationsByCategory, sortEdhrecCards, getCategoryLabel, getCardOwnershipCategory, type EdhrecSortOption } from "@/lib/edhrec";
@@ -24,6 +24,7 @@ import { PriceProvider, PriceSummary } from "@/lib/pricing";
 import { normalizeCardName } from "@/lib/card-utils";
 import { PriceFilter } from "@/components/price-filter";
 import { matchesPriceFilter } from "@/lib/sorting";
+import { getDeckRecommendations } from "@/lib/reads";
 
 interface EdhrecRecommendationsProps {
   deckId: string;

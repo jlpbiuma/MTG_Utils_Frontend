@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { getDeckValueHistory } from "@/actions/purchases";
+
+import { getDeckValueHistory } from "@/lib/reads";
 import {
   ResponsiveContainer,
   LineChart,
@@ -9,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+
 export function DeckValueMiniChart({ deckId }: { deckId: string }) {
   const [history, setHistory] = useState<Awaited<
     ReturnType<typeof getDeckValueHistory>
