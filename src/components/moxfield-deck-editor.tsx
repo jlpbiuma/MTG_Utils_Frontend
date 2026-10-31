@@ -394,7 +394,7 @@ export function MoxfieldDeckEditor({
         if (card.isCommander) {
           addCardToGroup("Commander", card);
         } else {
-          const cmc = parseManaValue(card.manaCost);
+          const cmc = parseManaValue(card.manaCost, card.typeLine);
           addCardToGroup(`Coste ${cmc}`, card);
         }
       }
@@ -442,7 +442,7 @@ export function MoxfieldDeckEditor({
     Object.values(groups).forEach((g) => {
       g.cards.sort((a, b) => {
         if (sortBy === "cmc") {
-          return (parseManaValue(a.manaCost) - parseManaValue(b.manaCost)) * (sortDirection === "asc" ? 1 : -1);
+          return (parseManaValue(a.manaCost, a.typeLine) - parseManaValue(b.manaCost, b.typeLine)) * (sortDirection === "asc" ? 1 : -1);
         }
         if (sortBy === "price") {
           return (getCardPrice(a.cardName) - getCardPrice(b.cardName)) * (sortDirection === "asc" ? 1 : -1);
@@ -465,7 +465,7 @@ export function MoxfieldDeckEditor({
     if (sideboardCards.length > 0) {
       const sortedSideboard = [...sideboardCards].sort((a, b) => {
         if (sortBy === "cmc") {
-          return (parseManaValue(a.manaCost) - parseManaValue(b.manaCost)) * (sortDirection === "asc" ? 1 : -1);
+          return (parseManaValue(a.manaCost, a.typeLine) - parseManaValue(b.manaCost, b.typeLine)) * (sortDirection === "asc" ? 1 : -1);
         }
         if (sortBy === "price") {
           return (getCardPrice(a.cardName) - getCardPrice(b.cardName)) * (sortDirection === "asc" ? 1 : -1);

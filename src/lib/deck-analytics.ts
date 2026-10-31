@@ -1,5 +1,6 @@
 import type { DeckCardWithOwnership } from "@/lib/schemas";
 import { getCardCategory, isBasicLand } from "@/lib/card-utils";
+import { extractCmc } from "@/lib/sorting";
 
 export interface ManaCurveBucket {
   cmc: string; // "0", "1", "2", "3", "4", "5", "6", "7+"
@@ -77,25 +78,9 @@ export interface KarstenColorRecommendation {
   toughestCost: string;
 }
 
-export function parseManaValue(manaCost?: string | null): number {
-  if (!manaCost) return 0;
-  const matches = manaCost.match(/\{([^}]+)\}/g);
-  if (!matches) return 0;
-
-  let cmc = 0;
-  for (const m of matches) {
-    const symbol = m.replace(/[{}]/g, "").toUpperCase();
-    const num = parseInt(symbol, 10);
-    if (!isNaN(num)) {
-      cmc += num;
-    } else if (symbol === "X" || symbol === "Y" || symbol === "Z") {
-      cmc += 0;
-    } else {
-      // Split / Phyrexian / Hybrid like W/U or 2/W or G/P count as 1
-      cmc += 1;
-    }
-  }
-  return cmc;
+/** Mana value of a card; see `extractCmc` for hybrid, half and multi-face costs. */
+export function parseManaValue(manaCost?: string | null, typeLine?: string | null): number {
+  return extractCmc(manaCost, typeLine);
 }
 
 export function getCardColorsFromManaCost(manaCost?: string | null): string[] {
@@ -158,7 +143,7 @@ export function analyzeManaCurve(
       totalLands += qty;
     } else {
       totalNonLands += qty;
-      const cmc = parseManaValue(card.manaCost);
+      const cmc = parseManaValue(card.manaCost, card.typeLine);
       sumCmcNonLands += cmc * qty;
     }
 
@@ -166,11 +151,11 @@ export function analyzeManaCurve(
     if (options.excludeLands && isLand) continue;
     if (options.excludeCommander && card.isCommander) continue;
 
-    const cmc = parseManaValue(card.manaCost);
+    const cmc = parseManaValue(card.manaCost, card.typeLine);
     sumCmcActive += cmc * qty;
     countActive += qty;
 
-    const binIndex = Math.min(7, Math.max(0, cmc));
+    const binIndex = Math.min(7, Math.max(0, Math.floor(cmc)));
     const b = buckets[binIndex];
     b.total += qty;
 
@@ -588,14 +573,14 @@ export function calculateKarstenRecommendations(
       const symbols = card.manaCost.match(/\{([^}]+)\}/g) || [];
       const required = symbols.filter(symbol => symbol.replace(/[{}]/g, "").toUpperCase().includes(c)).length;
       if (!required) continue;
-      const turn = Math.max(1,parseManaValue(card.manaCost));
+      const turn = Math.max(1,Math.ceil(parseManaValue(card.manaCost, card.typeLine)));
       const sample = Math.min(population,7+turn-1);
       let minimum = 0;
       while (minimum<population && calculateHypergeometric(population,minimum,sample,required).atLeast < 90) minimum++;
       if (minimum > recommended) {
         recommended=minimum;toughestCost=card.manaCost;targetTurn=turn;
         // Lands are available immediately; nonlands need a prior turn to be cast.
-        const available=library.filter(source => getCardCategory(source.typeLine,source.cardName)==="lands" || parseManaValue(source.manaCost)<turn);
+        const available=library.filter(source => getCardCategory(source.typeLine,source.cardName)==="lands" || parseManaValue(source.manaCost, source.typeLine)<turn);
         owned=extractPipsAndSources(available,deckColors).sources[c];
       }
     }

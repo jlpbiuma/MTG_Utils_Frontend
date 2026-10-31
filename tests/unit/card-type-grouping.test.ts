@@ -362,3 +362,12 @@ describe("Card Type Categorization & Grouping", () => {
     });
   });
 });
+
+describe("multi-face cards", () => {
+  it("groups by the front face and never treats dual lands as basics", () => {
+    expect(getCardCategory("Battle — Siege // Creature — Phyrexian Dinosaur", "Invasion of Ikoria")).toBe("battles");
+    expect(getCardCategory("Land // Legendary Creature — Demon", "Westvale Abbey")).toBe("lands");
+    expect(isBasicLand("Land — Forest Island", "Tropical Island")).toBe(false);
+    expect(isBasicLand(null, "Mountain Goat")).toBe(false);
+  });
+});

@@ -5,24 +5,32 @@ import { PriceSummary } from "@/lib/pricing";
 export type SortField = "inclusion" | "synergy" | "name" | "price_trend" | "price_subtotal" | "cmc" | "type" | "quantity" | "status" | "requested_decks";
 export type SortDirection = "asc" | "desc";
 
+function symbolManaValue(symbol: string): number {
+  const inner = symbol.trim().toUpperCase();
+  if (inner === "X" || inner === "Y" || inner === "Z") return 0;
+  if (/^\d+$/.test(inner)) return parseInt(inner, 10);
+  if (inner === "½" || inner === "1/2" || (inner.startsWith("H") && inner.length > 1)) return 0.5;
+  // Hybrid symbols cost their most expensive half: {2/W} is 2, {W/U} and
+  // Phyrexian {W/P} / {G/U/P} are 1.
+  if (inner.includes("/")) return Math.max(...inner.split("/").map((part) => (/^\d+$/.test(part) ? parseInt(part, 10) : 1)));
+  return 1;
+}
+
 /**
- * Calculates Converted Mana Cost (CMC / Mana Value) from a mana string like "{2}{U}{B}".
+ * Mana value from a mana string like "{2}{U}{B}". Mirrors the backend.
+ * A combined split cost ("{1}{R} // {1}{U}") adds both halves, as on Scryfall;
+ * Adventure and Omen cards (known from the type line) only count the main half.
  */
-export function extractCmc(manaCost?: string | null): number {
+export function extractCmc(manaCost?: string | null, typeLine?: string | null): number {
   if (!manaCost) return 0;
-  let cmc = 0;
-  const symbols = manaCost.match(/\{([^}]+)\}/g) || [];
-
-  for (const sym of symbols) {
-    const inner = sym.replace(/[{}]/g, "");
-    const num = parseInt(inner, 10);
-    if (!isNaN(num)) {
-      cmc += num;
-    } else if (inner !== "X" && inner !== "Y" && inner !== "Z") {
-      cmc += 1;
-    }
+  let halves = manaCost.split("//");
+  if (halves.length > 1 && typeLine && /adventure|aventura|omen|presagio/i.test(typeLine)) {
+    halves = halves.slice(0, 1);
   }
-
+  let cmc = 0;
+  for (const half of halves) {
+    for (const sym of half.match(/\{([^}]+)\}/g) || []) cmc += symbolManaValue(sym.slice(1, -1));
+  }
   return cmc;
 }
 
@@ -64,8 +72,8 @@ export function sortCards<T extends SortableCard>(
       }
 
       case "cmc": {
-        const cmcA = extractCmc(a.manaCost);
-        const cmcB = extractCmc(b.manaCost);
+        const cmcA = extractCmc(a.manaCost, a.typeLine);
+        const cmcB = extractCmc(b.manaCost, b.typeLine);
         if (cmcA !== cmcB) return multiplier * (cmcA - cmcB);
         return a.cardName.localeCompare(b.cardName);
       }

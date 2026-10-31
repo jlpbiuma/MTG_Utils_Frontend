@@ -17,6 +17,12 @@ export function normalizeCardName(name: string): string {
   return cleaned;
 }
 
+/** Front half of a multi-face value such as "Battle — Siege // Creature". */
+export function frontFace(text?: string | null): string {
+  if (!text) return "";
+  return text.split("//")[0].trim();
+}
+
 export type CardTypeCategory =
   | "commanders"
   | "creatures"
@@ -129,29 +135,24 @@ export function isBasicLand(
       return true;
     }
   }
-  if (cardName) {
-    const norm = normalizeCardName(cardName);
-    if (BASIC_LAND_NAMES.has(norm)) return true;
-    for (const b of Array.from(BASIC_LAND_NAMES)) {
-      if (norm === b || norm.startsWith(`${b} `) || norm.endsWith(` ${b}`)) {
-        return true;
-      }
-    }
-  }
-  return false;
+  // Exact names only: a prefix/suffix match made Tropical Island, Volcanic
+  // Island or Mountain Goat count as always-owned basic lands.
+  return Boolean(cardName) && BASIC_LAND_NAMES.has(normalizeCardName(cardName!));
 }
 
 /**
  * Categorizes an MTG card based on its type_line, with intelligent fallback
  * heuristics based on card name for basic and common lands when type_line is missing.
  * Follows MTG convention where creature types take precedence (e.g. Artifact Creatures -> Criaturas).
+ * Multi-face cards are grouped by their front face, so a battle that transforms
+ * into a creature stays a battle and an MDFC spell // land stays a spell.
  */
 export function getCardCategory(
   typeLine?: string | null,
   cardName?: string | null
 ): CardTypeCategory {
   if (typeLine) {
-    const lower = typeLine.toLowerCase();
+    const lower = frontFace(typeLine).toLowerCase();
 
     // Creature takes precedence for Artifact Creatures / Enchantment Creatures
     if (lower.includes("creature") || lower.includes("criatura")) return "creatures";

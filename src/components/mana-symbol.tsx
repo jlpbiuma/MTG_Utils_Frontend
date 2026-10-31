@@ -94,3 +94,124 @@ export function ManaSymbol({
     </svg>
   );
 }
+
+const COLOR_NAMES_ES: Record<string, string> = {
+  W: "blanco",
+  U: "azul",
+  B: "negro",
+  R: "rojo",
+  G: "verde",
+  C: "incoloro",
+};
+
+/** Splits a hybrid or Phyrexian symbol such as "W/U", "2/W", "B/P" or "G/U/P". */
+export function parseCompositeManaSymbol(
+  symbol: string
+): { parts: string[]; phyrexian: boolean } | null {
+  const clean = symbol.replace(/[{}]/g, "").toUpperCase();
+  if (!clean.includes("/")) return null;
+  const pieces = clean.split("/");
+  const phyrexian = pieces.includes("P");
+  const parts = pieces.filter((part) => part !== "P");
+  const valid = parts.every((part) => part in MANA_SYMBOLS_DATA || /^\d+$/.test(part));
+  const hasColor = parts.some((part) => part in MANA_SYMBOLS_DATA);
+  if (!valid || !hasColor || parts.length > 2 || (!phyrexian && parts.length < 2)) return null;
+  return { parts, phyrexian };
+}
+
+export function compositeManaLabel(symbol: string): string | null {
+  const parsed = parseCompositeManaSymbol(symbol);
+  if (!parsed) return null;
+  const names = parsed.parts.map((part) => COLOR_NAMES_ES[part] ?? part).join("/");
+  if (parsed.phyrexian) return parsed.parts.length > 1 ? `Híbrido pirexiano ${names}` : `Pirexiano ${names}`;
+  return `Híbrido ${names}`;
+}
+
+// Halves of the circle split along the top-right / bottom-left diagonal.
+const TOP_LEFT_HALF = "M14.64 85.36A50 50 0 0 1 85.36 14.64Z";
+const BOTTOM_RIGHT_HALF = "M85.36 14.64A50 50 0 0 1 14.64 85.36Z";
+
+function partBackground(part: string): string {
+  return MANA_SYMBOLS_DATA[part as ManaSymbolKey]?.bg ?? "#CAC5C0";
+}
+
+function PartGlyph({ part, transform }: { part: string; transform: string }) {
+  const data = MANA_SYMBOLS_DATA[part as ManaSymbolKey];
+  if (data) {
+    return <path d={data.d} fill="#0D0F0F" fillRule="evenodd" transform={transform} />;
+  }
+  return (
+    <text
+      x="50"
+      y="50"
+      transform={transform}
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize="72"
+      fontWeight="900"
+      fill="#0D0F0F"
+    >
+      {part}
+    </text>
+  );
+}
+
+/** Phyrexian mana glyph: a vertical stroke through an oval. */
+function PhyrexianGlyph({ transform }: { transform?: string }) {
+  return (
+    <g transform={transform} fill="none" stroke="#0D0F0F" strokeWidth="9" strokeLinecap="round">
+      <ellipse cx="50" cy="52" rx="23" ry="27" />
+      <line x1="50" y1="12" x2="50" y2="90" />
+    </g>
+  );
+}
+
+/**
+ * Hybrid ({W/U}, {2/W}) and Phyrexian ({W/P}, {G/U/P}) mana symbols drawn
+ * from the same vector glyphs as the single-color symbols.
+ */
+export function CompositeManaSymbol({
+  symbol,
+  size,
+  className,
+  ...props
+}: ManaSymbolProps) {
+  const parsed = parseCompositeManaSymbol(symbol);
+  if (!parsed) return null;
+  const [first, second] = parsed.parts;
+
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      xmlns="http://www.w3.org/2000/svg"
+      className={cn(
+        "rounded-full shrink-0 select-none inline-block align-middle shadow-xs",
+        size ? SIZE_CLASSES[size] : "h-full w-full",
+        className
+      )}
+      aria-label={compositeManaLabel(symbol) ?? symbol}
+      role="img"
+      {...props}
+    >
+      {second ? (
+        <>
+          <path d={TOP_LEFT_HALF} fill={partBackground(first)} />
+          <path d={BOTTOM_RIGHT_HALF} fill={partBackground(second)} />
+          {parsed.phyrexian ? (
+            <PhyrexianGlyph transform="translate(20 20) scale(0.6)" />
+          ) : (
+            <>
+              <PartGlyph part={first} transform="translate(6 6) scale(0.5)" />
+              <PartGlyph part={second} transform="translate(44 44) scale(0.5)" />
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <circle cx="50" cy="50" r="50" fill={partBackground(first)} />
+          <PhyrexianGlyph />
+        </>
+      )}
+    </svg>
+  );
+}

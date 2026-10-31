@@ -45,7 +45,7 @@ export function DeckAnalyticsView({ cards, colors, deckId }: DeckAnalyticsViewPr
   }, [cards]);
 
   const commanderCmc = useMemo(() => {
-    return commanderCard ? parseManaValue(commanderCard.manaCost) : 4;
+    return commanderCard ? parseManaValue(commanderCard.manaCost, commanderCard.typeLine) : 4;
   }, [commanderCard]);
 
   // Opening Hand & Interactive Land Slider State
