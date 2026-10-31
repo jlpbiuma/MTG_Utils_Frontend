@@ -322,6 +322,7 @@ export async function signOutUser() {
     cookieStore.delete("mtg_refresh_token");
     cookieStore.delete("mtg_user_id");
     cookieStore.delete("mtg_user_email");
+    cookieStore.delete("mtg_session_checked");
   } catch (error) {
     console.warn("Error signing out:", error);
   }

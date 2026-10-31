@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { READS, type ReadName } from "@/lib/read-registry";
+import { BackendRequestError } from "@/lib/api-client";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ name: s
     // `undefined` is not valid JSON; the client turns null back into it.
     return NextResponse.json({ result: result ?? null });
   } catch (error) {
+    if (error instanceof BackendRequestError && error.status === 401) {
+      return NextResponse.json({ error: "Sesión caducada" }, { status: 401 });
+    }
     console.error(`Read ${name} failed:`, error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Error interno" },

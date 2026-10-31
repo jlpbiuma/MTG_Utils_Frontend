@@ -16,6 +16,10 @@ async function callRead<K extends ReadName>(name: K, args: unknown[]): Promise<A
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ args }),
   });
+  if (res.status === 401 && typeof window !== "undefined") {
+    // The backend rejected the session: clear it and sign in again.
+    window.location.assign("/api/auth/expired");
+  }
   const body = await res.json().catch(() => null);
   if (!res.ok) throw new Error(body?.error || `La lectura ${name} falló (${res.status})`);
   return (body?.result ?? undefined) as Awaited<ReturnType<ReadFn<K>>>;
